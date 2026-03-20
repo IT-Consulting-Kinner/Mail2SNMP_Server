@@ -1,0 +1,213 @@
+@page "/webhook-targets"
+@rendermode InteractiveServer
+@inject IWebhookTargetService WebhookTargetService
+
+<PageTitle>Webhook Targets - Mail2SNMP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Webhook Targets</h3>
+    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add Target</button>
+</div>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
+}
+@if (!string.IsNullOrEmpty(_success))
+{
+    <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
+}
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>Name</th>
+                <th>URL</th>
+                <th>Max Req/Min</th>
+                <th>Active</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_targets != null)
+            {
+                @foreach (var t in _targets)
+                {
+                    <tr>
+                        <td>@t.Name</td>
+                        <td><code class="small">@t.Url</code></td>
+                        <td>@t.MaxRequestsPerMinute</td>
+                        <td><span class="badge @(t.IsActive ? "bg-success" : "bg-secondary")">@(t.IsActive ? "Active" : "Inactive")</span></td>
+                        <td>@t.CreatedUtc.ToString("g")</td>
+                        <td>
+                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(t)">Edit</button>
+                            <button class="btn btn-outline-info btn-sm me-1" @onclick="() => Test(t.Id)">Test</button>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(t.Id)">Delete</button>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (_showForm)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_editing != null ? "Edit" : "Add") Webhook Target</h5>
+                    <button type="button" class="btn-close" @onclick="CloseForm"></button>
+                </div>
+                <EditForm Model="_form" OnValidSubmit="Save">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <ValidationSummary class="text-danger" />
+                        <div class="mb-3">
+                            <label class="form-label">Name</label>
+                            <InputText class="form-control" @bind-Value="_form.Name" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">URL</label>
+                            <InputText class="form-control" @bind-Value="_form.Url" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Headers (JSON)</label>
+                            <InputTextArea class="form-control" rows="3" @bind-Value="_form.Headers" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Payload Template</label>
+                            <InputTextArea class="form-control" rows="4" @bind-Value="_form.PayloadTemplate" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Secret</label>
+                            <InputText class="form-control" type="password" @bind-Value="_form.Secret" />
+                            @if (_editing != null)
+                            {
+                                <small class="text-muted">Leave blank to keep existing secret</small>
+                            }
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Max Requests/Minute</label>
+                            <InputNumber class="form-control" @bind-Value="_form.MaxRequestsPerMinute" />
+                        </div>
+                        <div class="form-check mb-3">
+                            <InputCheckbox class="form-check-input" @bind-Value="_form.IsActive" />
+                            <label class="form-check-label">Active</label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<WebhookTarget>? _targets;
+    private bool _showForm;
+    private WebhookTarget? _editing;
+    private WebhookForm _form = new();
+    private string? _error;
+    private string? _success;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        try { _targets = await WebhookTargetService.GetAllAsync(); }
+        catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+    }
+
+    private void ShowAddForm()
+    {
+        _editing = null;
+        _form = new WebhookForm { MaxRequestsPerMinute = 60, IsActive = true };
+        _showForm = true;
+    }
+
+    private void ShowEditForm(WebhookTarget t)
+    {
+        _editing = t;
+        _form = new WebhookForm
+        {
+            Name = t.Name, Url = t.Url, Headers = t.Headers,
+            PayloadTemplate = t.PayloadTemplate, MaxRequestsPerMinute = t.MaxRequestsPerMinute, IsActive = t.IsActive
+        };
+        _showForm = true;
+    }
+
+    private void CloseForm() { _showForm = false; _editing = null; }
+
+    private async Task Save()
+    {
+        try
+        {
+            if (_editing != null)
+            {
+                _editing.Name = _form.Name; _editing.Url = _form.Url;
+                _editing.Headers = _form.Headers; _editing.PayloadTemplate = _form.PayloadTemplate;
+                _editing.MaxRequestsPerMinute = _form.MaxRequestsPerMinute; _editing.IsActive = _form.IsActive;
+                if (!string.IsNullOrEmpty(_form.Secret)) _editing.EncryptedSecret = _form.Secret;
+                await WebhookTargetService.UpdateAsync(_editing);
+                _success = "Webhook target updated.";
+            }
+            else
+            {
+                var target = new WebhookTarget
+                {
+                    Name = _form.Name, Url = _form.Url, Headers = _form.Headers,
+                    PayloadTemplate = _form.PayloadTemplate, EncryptedSecret = _form.Secret ?? string.Empty,
+                    MaxRequestsPerMinute = _form.MaxRequestsPerMinute, IsActive = _form.IsActive
+                };
+                await WebhookTargetService.CreateAsync(target);
+                _success = "Webhook target created.";
+            }
+            CloseForm();
+            await LoadData();
+        }
+        catch (Exception ex) { _error = $"Failed to save: {ex.Message}"; }
+    }
+
+    private async Task Test(int id)
+    {
+        try
+        {
+            var result = await WebhookTargetService.TestAsync(id);
+            _success = result ? "Webhook test successful!" : "Webhook test failed.";
+            if (!result) _error = "Webhook test failed.";
+        }
+        catch (Exception ex) { _error = $"Test failed: {ex.Message}"; }
+    }
+
+    private async Task Delete(int id)
+    {
+        try { await WebhookTargetService.DeleteAsync(id); _success = "Target deleted."; await LoadData(); }
+        catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
+    }
+
+    private class WebhookForm
+    {
+        [Required(ErrorMessage = "Name is required.")]
+        public string Name { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "URL is required.")]
+        [Url(ErrorMessage = "Please enter a valid URL.")]
+        public string Url { get; set; } = string.Empty;
+
+        public string? Headers { get; set; }
+        public string? PayloadTemplate { get; set; }
+        public string? Secret { get; set; }
+
+        [Range(1, 10000, ErrorMessage = "Max requests per minute must be between 1 and 10,000.")]
+        public int MaxRequestsPerMinute { get; set; } = 60;
+
+        public bool IsActive { get; set; } = true;
+    }
+}

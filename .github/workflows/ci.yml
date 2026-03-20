@@ -1,0 +1,95 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test --no-build --configuration Release --verbosity normal
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-and-test
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "version=${TAG}" >> "$GITHUB_OUTPUT"
+          # Ensure 4-part version for WiX (e.g. 1.2.3 -> 1.2.3.0)
+          IFS='.' read -ra PARTS <<< "$TAG"
+          while [ ${#PARTS[@]} -lt 4 ]; do PARTS+=("0"); done
+          FOUR="${PARTS[0]}.${PARTS[1]}.${PARTS[2]}.${PARTS[3]}"
+          echo "version_four=${FOUR}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Worker
+        run: >
+          dotnet publish src/Mail2SNMP.Worker/Mail2SNMP.Worker.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained false
+          --output ./publish/worker
+
+      - name: Install WiX Toolset
+        run: dotnet tool install --global wix
+
+      - name: Update installer version
+        shell: pwsh
+        run: |
+          $file = "installer/Mail2SNMP.Installer/Package.wxs"
+          $content = Get-Content $file -Raw
+          $content = $content -replace 'Version="1\.0\.0\.0"', "Version=`"${{ steps.version.outputs.version_four }}`""
+          Set-Content $file $content
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          $publishDir = (Resolve-Path "./publish/worker").Path + "\"
+          dotnet build installer/Mail2SNMP.Installer/Mail2SNMP.Installer.wixproj --configuration Release -p:PublishDir=$publishDir
+
+      - name: Find MSI artifact
+        id: msi
+        shell: bash
+        run: |
+          MSI=$(find installer -name "*.msi" | head -1)
+          echo "path=${MSI}" >> "$GITHUB_OUTPUT"
+          echo "name=Mail2SNMP-${{ steps.version.outputs.version }}.msi" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.msi.outputs.path }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

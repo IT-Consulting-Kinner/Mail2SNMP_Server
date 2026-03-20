@@ -1,0 +1,3 @@
+apiRules:
+  - exclude:
+      uidRegex: ^Mail2SNMP\.Tests

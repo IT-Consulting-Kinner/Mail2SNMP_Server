@@ -1,0 +1,40 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "files": ["src/**/*.csproj"],
+          "exclude": ["tests/**"],
+          "src": "."
+        }
+      ],
+      "dest": "docs/api",
+      "filter": "docs/filterConfig.yml",
+      "properties": {
+        "TargetFramework": "net8.0"
+      }
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": ["docs/api/**.yml", "docs/api/index.md"]
+      },
+      {
+        "files": ["docs/articles/**.md", "docs/articles/**/toc.yml", "docs/toc.yml", "docs/index.md"]
+      }
+    ],
+    "resource": [
+      {
+        "files": ["docs/images/**"]
+      }
+    ],
+    "output": "docs/_site",
+    "template": ["default", "modern"],
+    "globalMetadata": {
+      "_appTitle": "Mail2SNMP Server",
+      "_appFooter": "&copy; Adsumus / IT-Consulting Kinner",
+      "_enableSearch": true
+    }
+  }
+}

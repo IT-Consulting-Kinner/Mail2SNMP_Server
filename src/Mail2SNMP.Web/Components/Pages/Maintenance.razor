@@ -1,0 +1,200 @@
+@page "/maintenance"
+@rendermode InteractiveServer
+@inject IMaintenanceWindowService MaintenanceService
+@inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Maintenance Windows - Mail2SNMP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Maintenance Windows</h3>
+    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add Window</button>
+</div>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
+}
+@if (!string.IsNullOrEmpty(_success))
+{
+    <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
+}
+
+<div class="row g-3">
+    @if (_windows != null)
+    {
+        @foreach (var w in _windows.OrderBy(x => x.StartUtc))
+        {
+            var isActive = w.IsActive && w.StartUtc <= DateTime.UtcNow && w.EndUtc >= DateTime.UtcNow;
+            var isPast = w.EndUtc < DateTime.UtcNow;
+            var isFuture = w.StartUtc > DateTime.UtcNow;
+
+            <div class="col-md-6 col-lg-4">
+                <div class="card @(isActive ? "border-warning" : isPast ? "border-secondary" : "border-primary")">
+                    <div class="card-header d-flex justify-content-between align-items-center @(isActive ? "bg-warning text-dark" : isPast ? "bg-secondary text-white" : "bg-primary text-white")">
+                        <strong>@w.Name</strong>
+                        @if (isActive)
+                        {
+                            <span class="badge bg-dark">ACTIVE</span>
+                        }
+                        else if (isPast)
+                        {
+                            <span class="badge bg-light text-dark">Past</span>
+                        }
+                        else if (isFuture)
+                        {
+                            <span class="badge bg-light text-dark">Scheduled</span>
+                        }
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-1"><strong>Start:</strong> @w.StartUtc.ToString("g") UTC</p>
+                        <p class="mb-1"><strong>End:</strong> @w.EndUtc.ToString("g") UTC</p>
+                        <p class="mb-1"><strong>Scope:</strong> @w.Scope</p>
+                        @if (!string.IsNullOrEmpty(w.RecurringCron))
+                        {
+                            <p class="mb-1"><strong>Cron:</strong> <code>@w.RecurringCron</code></p>
+                        }
+                        <p class="mb-1 text-muted small">Created by @w.CreatedBy on @w.CreatedUtc.ToString("g")</p>
+                    </div>
+                    <div class="card-footer text-end">
+                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(w.Id)">Delete</button>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (_windows.Count == 0)
+        {
+            <div class="col-12 text-center text-muted py-4">No maintenance windows configured.</div>
+        }
+    }
+</div>
+
+@if (_showForm)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Maintenance Window</h5>
+                    <button type="button" class="btn-close" @onclick="CloseForm"></button>
+                </div>
+                <EditForm Model="_form" OnValidSubmit="Save">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <ValidationSummary class="text-danger" />
+                        <div class="mb-3">
+                            <label class="form-label">Name</label>
+                            <InputText class="form-control" @bind-Value="_form.Name" />
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col">
+                                <label class="form-label">Start (UTC)</label>
+                                <InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_form.StartUtc" />
+                            </div>
+                            <div class="col">
+                                <label class="form-label">End (UTC)</label>
+                                <InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_form.EndUtc" />
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Scope</label>
+                            <InputText class="form-control" @bind-Value="_form.Scope" />
+                            <small class="text-muted">Use "All" for global or specify job/mailbox IDs</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Recurring Cron (optional)</label>
+                            <InputText class="form-control" @bind-Value="_form.RecurringCron" />
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<MaintenanceWindow>? _windows;
+    private bool _showForm;
+    private MaintenanceForm _form = new();
+    private string? _error;
+    private string? _success;
+    private string _currentUserName = "system";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            _currentUserName = authState.User.Identity?.Name ?? "system";
+        }
+        catch { /* fallback to "system" */ }
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try { _windows = await MaintenanceService.GetAllAsync(); }
+        catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+    }
+
+    private void ShowAddForm()
+    {
+        _form = new MaintenanceForm
+        {
+            StartUtc = DateTime.UtcNow,
+            EndUtc = DateTime.UtcNow.AddHours(2),
+            Scope = "All"
+        };
+        _showForm = true;
+    }
+
+    private void CloseForm() => _showForm = false;
+
+    private async Task Save()
+    {
+        try
+        {
+            var window = new MaintenanceWindow
+            {
+                Name = _form.Name,
+                StartUtc = _form.StartUtc,
+                EndUtc = _form.EndUtc,
+                Scope = _form.Scope,
+                RecurringCron = _form.RecurringCron,
+                CreatedBy = _currentUserName
+            };
+            await MaintenanceService.CreateAsync(window);
+            _success = "Maintenance window created.";
+            CloseForm();
+            await LoadData();
+        }
+        catch (Exception ex) { _error = $"Failed to save: {ex.Message}"; }
+    }
+
+    private async Task Delete(int id)
+    {
+        try { await MaintenanceService.DeleteAsync(id); _success = "Window deleted."; await LoadData(); }
+        catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
+    }
+
+    private class MaintenanceForm
+    {
+        [Required(ErrorMessage = "Name is required.")]
+        public string Name { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Start time is required.")]
+        public DateTime StartUtc { get; set; }
+
+        [Required(ErrorMessage = "End time is required.")]
+        public DateTime EndUtc { get; set; }
+
+        [Required(ErrorMessage = "Scope is required.")]
+        public string Scope { get; set; } = "All";
+
+        public string? RecurringCron { get; set; }
+    }
+}

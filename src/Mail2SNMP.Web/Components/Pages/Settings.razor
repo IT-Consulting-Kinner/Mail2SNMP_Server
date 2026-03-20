@@ -1,0 +1,243 @@
+@page "/settings"
+@rendermode InteractiveServer
+@inject IConfiguration Configuration
+@inject ILicenseProvider LicenseProvider
+@inject IAuditService AuditService
+
+<PageTitle>Settings - Mail2SNMP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="mb-0">Settings</h3>
+    <AuthorizeView Policy="Admin">
+        <Authorized>
+            <button class="btn btn-outline-primary" @onclick="ReloadSettingsAsync" disabled="@_reloading">
+                @if (_reloading)
+                {
+                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                }
+                Reload Configuration
+            </button>
+        </Authorized>
+    </AuthorizeView>
+</div>
+
+@if (_showSqliteWarning)
+{
+    <div class="alert alert-warning" role="alert">
+        <strong>SQLite detected.</strong> SQLite is only suitable for development and demo use.
+        For production, switch to SQL Server by setting <code>Database:Provider</code> to <code>SqlServer</code> in <code>appsettings.json</code>.
+        Health status: <strong>degraded</strong>.
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(_reloadMessage))
+{
+    <div class="alert @_reloadAlertClass alert-dismissible fade show" role="alert">
+        @_reloadMessage
+        <button type="button" class="btn-close" @onclick="() => _reloadMessage = null"></button>
+    </div>
+}
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><strong>Database</strong></div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">Provider</dt>
+                    <dd class="col-sm-7">@_dbProvider</dd>
+                    <dt class="col-sm-5">Connection String</dt>
+                    <dd class="col-sm-7"><code class="small">@_dbConnectionMasked</code></dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><strong>License</strong></div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">Edition</dt>
+                    <dd class="col-sm-7">@_license.Edition</dd>
+                    <dt class="col-sm-5">Customer</dt>
+                    <dd class="col-sm-7">@(string.IsNullOrEmpty(_license.CustomerName) ? "N/A" : _license.CustomerName)</dd>
+                    <dt class="col-sm-5">License ID</dt>
+                    <dd class="col-sm-7 small">@(string.IsNullOrEmpty(_license.LicenseId) ? "N/A" : _license.LicenseId)</dd>
+                    <dt class="col-sm-5">Expires</dt>
+                    <dd class="col-sm-7">@(_license.ExpiresUtc?.ToString("d") ?? "Never")</dd>
+                    <dt class="col-sm-5">Max Mailboxes</dt>
+                    <dd class="col-sm-7">@_license.MaxMailboxes</dd>
+                    <dt class="col-sm-5">Max Jobs</dt>
+                    <dd class="col-sm-7">@_license.MaxJobs</dd>
+                    <dt class="col-sm-5">Max Workers</dt>
+                    <dd class="col-sm-7">@_license.MaxWorkerInstances</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><strong>IMAP Settings</strong></div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">Max Connections</dt>
+                    <dd class="col-sm-7">@_imapMaxConn</dd>
+                    <dt class="col-sm-5">Channel Capacity</dt>
+                    <dd class="col-sm-7">@_imapChannelCap</dd>
+                    <dt class="col-sm-5">Consumer Tasks</dt>
+                    <dd class="col-sm-7">@_imapConsumers</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><strong>Event Settings</strong></div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">Dedup Window</dt>
+                    <dd class="col-sm-7">@_eventDedup min</dd>
+                    <dt class="col-sm-5">Max Events/Hour</dt>
+                    <dd class="col-sm-7">@_eventMaxPerHour</dd>
+                    <dt class="col-sm-5">Max Active</dt>
+                    <dd class="col-sm-7">@_eventMaxActive</dd>
+                    <dt class="col-sm-5">Auto Expire</dt>
+                    <dd class="col-sm-7">@_eventExpireDays days</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><strong>Retention Settings</strong></div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">Processed Mail</dt>
+                    <dd class="col-sm-7">@_retProcessedDays days</dd>
+                    <dt class="col-sm-5">Audit Events</dt>
+                    <dd class="col-sm-7">@_retAuditDays days</dd>
+                    <dt class="col-sm-5">Dead Letters</dt>
+                    <dd class="col-sm-7">@_retDeadLetterDays days</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><strong>Session Settings</strong></div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">Sliding Expiry</dt>
+                    <dd class="col-sm-7">@_sessionSliding min</dd>
+                    <dt class="col-sm-5">Absolute Expiry</dt>
+                    <dd class="col-sm-7">@_sessionAbsolute hrs</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private string _dbProvider = "Sqlite";
+    private string _dbConnectionMasked = "";
+    private LicenseInfo _license = new();
+
+    private int _imapMaxConn, _imapChannelCap, _imapConsumers;
+    private int _eventDedup, _eventMaxPerHour, _eventMaxActive, _eventExpireDays;
+    private int _retProcessedDays, _retAuditDays, _retDeadLetterDays;
+    private int _sessionSliding, _sessionAbsolute;
+
+    private bool _reloading;
+    private bool _showSqliteWarning;
+    private string? _reloadMessage;
+    private string _reloadAlertClass = "alert-success";
+
+    protected override void OnInitialized()
+    {
+        LoadSettings();
+    }
+
+    private void LoadSettings()
+    {
+        // Database
+        _dbProvider = Configuration["Database:Provider"] ?? "Sqlite";
+        var connStr = Configuration["Database:ConnectionString"] ?? "";
+        _dbConnectionMasked = connStr.Length > 20 ? connStr[..20] + "..." : connStr;
+
+        // v5.8: SQLite production warning banner
+        var env = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
+        _showSqliteWarning = _dbProvider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase)
+                             && !env.Equals("Development", StringComparison.OrdinalIgnoreCase);
+
+        // License
+        _license = LicenseProvider.Current;
+
+        // IMAP
+        _imapMaxConn = int.TryParse(Configuration["Imap:MaxConcurrentConnections"], out var v1) ? v1 : 10;
+        _imapChannelCap = int.TryParse(Configuration["Imap:ChannelBoundedCapacity"], out var v2) ? v2 : 20;
+        _imapConsumers = int.TryParse(Configuration["Imap:ConsumerTasks"], out var v3) ? v3 : 5;
+
+        // Events
+        _eventDedup = int.TryParse(Configuration["Events:DefaultDedupWindowMinutes"], out var v4) ? v4 : 30;
+        _eventMaxPerHour = int.TryParse(Configuration["Events:DefaultMaxEventsPerHour"], out var v5) ? v5 : 50;
+        _eventMaxActive = int.TryParse(Configuration["Events:DefaultMaxActiveEvents"], out var v6) ? v6 : 200;
+        _eventExpireDays = int.TryParse(Configuration["Events:AutoExpireDays"], out var v7) ? v7 : 30;
+
+        // Retention
+        _retProcessedDays = int.TryParse(Configuration["Retention:ProcessedMailDays"], out var v8) ? v8 : 30;
+        _retAuditDays = int.TryParse(Configuration["Retention:AuditEventDays"], out var v9) ? v9 : 365;
+        _retDeadLetterDays = int.TryParse(Configuration["Retention:DeadLetterDays"], out var v10) ? v10 : 7;
+
+        // Session
+        _sessionSliding = int.TryParse(Configuration["Session:SlidingExpiryMinutes"], out var v11) ? v11 : 60;
+        _sessionAbsolute = int.TryParse(Configuration["Session:AbsoluteExpiryHours"], out var v12) ? v12 : 8;
+    }
+
+    private async Task ReloadSettingsAsync()
+    {
+        _reloading = true;
+        _reloadMessage = null;
+
+        try
+        {
+            // Re-read appsettings.json and all configuration sources
+            if (Configuration is IConfigurationRoot configRoot)
+                configRoot.Reload();
+
+            // Reload the license from file/environment
+            await LicenseProvider.ReloadAsync();
+
+            // Refresh the displayed values from the reloaded configuration
+            LoadSettings();
+
+            // Audit the reload action
+            var userId = "unknown";
+            if (AuthState is not null)
+            {
+                var authState = await AuthState;
+                userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "unknown";
+            }
+            await AuditService.LogAsync(ActorType.User, userId, "Settings.Reload", "Settings", null, ct: default);
+
+            _reloadAlertClass = "alert-success";
+            _reloadMessage = "Configuration reloaded successfully. Note: Some settings (IMAP connections, channel capacity) require a Worker restart to take effect.";
+        }
+        catch (Exception ex)
+        {
+            _reloadAlertClass = "alert-danger";
+            _reloadMessage = $"Failed to reload configuration: {ex.Message}";
+        }
+        finally
+        {
+            _reloading = false;
+        }
+    }
+}

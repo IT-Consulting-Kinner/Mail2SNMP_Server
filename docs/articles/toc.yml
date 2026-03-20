@@ -1,0 +1,8 @@
+- name: Architecture
+  href: architecture.md
+- name: Installation
+  href: installation.md
+- name: Configuration
+  href: configuration.md
+- name: REST API Usage
+  href: api-usage.md

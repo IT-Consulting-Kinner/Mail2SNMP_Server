@@ -1,0 +1,45 @@
+# .NET build artifacts
+bin/
+obj/
+publish/
+*.nupkg
+*.snupkg
+
+# IDE / Editor
+.vs/
+*.user
+*.suo
+*.cache
+*.DotSettings.user
+.idea/
+
+# WiX Installer output
+*.msi
+*.wixpdb
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+**/logs/
+
+# DocFX generated output
+docs/_site/
+docs/api/
+
+# Sensitive files
+tools/license_signing_key.pem
+
+# Local tooling
+.claude/
+
+# OS junk
+Thumbs.db
+.DS_Store
+
+# Misc
+nul
+filelist.tmp
+Mail2SNMP-Server.zip

@@ -1,0 +1,141 @@
+@page "/"
+@rendermode InteractiveServer
+@inject IMailboxService MailboxService
+@inject IJobService JobService
+@inject IScheduleService ScheduleService
+@inject IEventService EventService
+@inject IDeadLetterService DeadLetterService
+@inject IMaintenanceWindowService MaintenanceService
+@inject ILicenseProvider LicenseProvider
+
+<PageTitle>Dashboard - Mail2SNMP</PageTitle>
+
+<h3 class="mb-4">Dashboard</h3>
+
+@if (_loading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="row g-3">
+        <div class="col-md-4 col-lg-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Active Mailboxes</h6>
+                    <h2 class="card-title mb-0">@_dashboard.ActiveMailboxes</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Active Jobs</h6>
+                    <h2 class="card-title mb-0">@_dashboard.ActiveJobs</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Active Schedules</h6>
+                    <h2 class="card-title mb-0">@_dashboard.ActiveSchedules</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-3">
+            <div class="card border-0 shadow-sm @(_dashboard.OpenEvents > 0 ? "border-warning" : "")">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Open Events</h6>
+                    <h2 class="card-title mb-0 @(_dashboard.OpenEvents > 0 ? "text-warning" : "")">@_dashboard.OpenEvents</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-3">
+            <div class="card border-0 shadow-sm @(_dashboard.PendingDeadLetters > 0 ? "border-danger" : "")">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Pending Dead Letters</h6>
+                    <h2 class="card-title mb-0 @(_dashboard.PendingDeadLetters > 0 ? "text-danger" : "")">@_dashboard.PendingDeadLetters</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">License Edition</h6>
+                    <h2 class="card-title mb-0">@_dashboard.LicenseEdition</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Maintenance</h6>
+                    <h2 class="card-title mb-0 @(_dashboard.MaintenanceActive ? "text-warning" : "text-success")">
+                        @(_dashboard.MaintenanceActive ? "Active" : "None")
+                    </h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">System Health</h6>
+                    <h2 class="card-title mb-0 @(_dashboard.IsHealthy ? "text-success" : "text-danger")">
+                        @(_dashboard.IsHealthy ? "Healthy" : "Degraded")
+                    </h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="alert alert-danger mt-3">@_error</div>
+    }
+}
+
+@code {
+    private DashboardDto _dashboard = new();
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var mailboxes = await MailboxService.GetAllAsync();
+            var jobs = await JobService.GetAllAsync();
+            var schedules = await ScheduleService.GetAllAsync();
+            var events = await EventService.GetAllAsync(EventState.New);
+            var notifiedEvents = await EventService.GetAllAsync(EventState.Notified);
+            var deadLetters = await DeadLetterService.GetAllAsync();
+            var inMaintenance = await MaintenanceService.IsInMaintenanceAsync();
+
+            _dashboard = new DashboardDto
+            {
+                ActiveMailboxes = mailboxes.Count(m => m.IsActive),
+                ActiveJobs = jobs.Count(j => j.IsActive),
+                ActiveSchedules = schedules.Count(s => s.IsActive),
+                OpenEvents = events.Count + notifiedEvents.Count,
+                PendingDeadLetters = deadLetters.Count(d => d.Status == DeadLetterStatus.Pending),
+                MaintenanceActive = inMaintenance,
+                LicenseEdition = LicenseProvider.Current.Edition.ToString(),
+                IsHealthy = true
+            };
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load dashboard: {ex.Message}";
+            _dashboard.IsHealthy = false;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

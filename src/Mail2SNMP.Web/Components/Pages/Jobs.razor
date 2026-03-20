@@ -1,0 +1,369 @@
+@page "/jobs"
+@rendermode InteractiveServer
+@inject IJobService JobService
+@inject IMailboxService MailboxService
+@inject IRuleService RuleService
+@inject ISnmpTargetService SnmpTargetService
+@inject IWebhookTargetService WebhookTargetService
+
+<PageTitle>Jobs - Mail2SNMP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Jobs</h3>
+    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add Job</button>
+</div>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
+}
+@if (!string.IsNullOrEmpty(_success))
+{
+    <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
+}
+
+@if (!string.IsNullOrEmpty(_dryRunResult))
+{
+    <div class="alert alert-info alert-dismissible">
+        <h6>Dry Run Result:</h6>
+        <pre class="mb-0">@_dryRunResult</pre>
+        <button type="button" class="btn-close" @onclick="() => _dryRunResult = null"></button>
+    </div>
+}
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>Name</th>
+                <th>Mailbox</th>
+                <th>Rule</th>
+                <th>Targets</th>
+                <th>Max Events/Hr</th>
+                <th>Dedup (min)</th>
+                <th>Active</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_jobs != null)
+            {
+                @foreach (var job in _jobs)
+                {
+                    <tr>
+                        <td>@job.Name</td>
+                        <td>@(job.Mailbox?.Name ?? $"ID:{job.MailboxId}")</td>
+                        <td>@(job.Rule?.Name ?? $"ID:{job.RuleId}")</td>
+                        <td>
+                            @if (job.JobSnmpTargets.Any())
+                            {
+                                @foreach (var jst in job.JobSnmpTargets)
+                                {
+                                    <a href="/snmp-targets" class="badge bg-info text-decoration-none me-1" title="@jst.SnmpTarget.Host:@jst.SnmpTarget.Port">@jst.SnmpTarget.Name</a>
+                                }
+                            }
+                            @if (job.JobWebhookTargets.Any())
+                            {
+                                @foreach (var jwt in job.JobWebhookTargets)
+                                {
+                                    <a href="/webhook-targets" class="badge bg-primary text-decoration-none me-1" title="@jwt.WebhookTarget.Url">@jwt.WebhookTarget.Name</a>
+                                }
+                            }
+                            @if (!job.JobSnmpTargets.Any() && !job.JobWebhookTargets.Any())
+                            {
+                                <span class="text-muted small">none</span>
+                            }
+                        </td>
+                        <td>@job.MaxEventsPerHour</td>
+                        <td>@job.DedupWindowMinutes</td>
+                        <td><span class="badge @(job.IsActive ? "bg-success" : "bg-secondary")">@(job.IsActive ? "Active" : "Inactive")</span></td>
+                        <td>
+                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(job)">Edit</button>
+                            <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => DryRun(job.Id)">Dry Run</button>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(job.Id)">Delete</button>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (_showForm)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_editing != null ? "Edit" : "Add") Job</h5>
+                    <button type="button" class="btn-close" @onclick="CloseForm"></button>
+                </div>
+                <EditForm Model="_form" OnValidSubmit="SaveJob">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <ValidationSummary class="text-danger" />
+                        <div class="mb-3">
+                            <label class="form-label">Name</label>
+                            <InputText class="form-control" @bind-Value="_form.Name" />
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col">
+                                <label class="form-label">Mailbox</label>
+                                <InputSelect class="form-select" @bind-Value="_form.MailboxId">
+                                    <option value="0">-- Select --</option>
+                                    @if (_mailboxes != null)
+                                    {
+                                        @foreach (var mb in _mailboxes)
+                                        {
+                                            <option value="@mb.Id">@mb.Name</option>
+                                        }
+                                    }
+                                </InputSelect>
+                            </div>
+                            <div class="col">
+                                <label class="form-label">Rule</label>
+                                <InputSelect class="form-select" @bind-Value="_form.RuleId">
+                                    <option value="0">-- Select --</option>
+                                    @if (_rules != null)
+                                    {
+                                        @foreach (var r in _rules)
+                                        {
+                                            <option value="@r.Id">@r.Name</option>
+                                        }
+                                    }
+                                </InputSelect>
+                            </div>
+                        </div>
+
+                        @* SNMP Target Selection *@
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">SNMP Targets</label>
+                            @if (_snmpTargets != null && _snmpTargets.Any(t => t.IsActive))
+                            {
+                                @foreach (var target in _snmpTargets.Where(t => t.IsActive))
+                                {
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" id="snmp-@target.Id"
+                                               checked="@_selectedSnmpIds.Contains(target.Id)"
+                                               @onchange="e => ToggleSnmp(target.Id, (bool)e.Value!)" />
+                                        <label class="form-check-label" for="snmp-@target.Id">
+                                            @target.Name <span class="text-muted small">(@target.Host:@target.Port, @target.Version)</span>
+                                        </label>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="text-muted small">No active SNMP targets. <a href="/snmp-targets">Add one</a></div>
+                            }
+                        </div>
+
+                        @* Webhook Target Selection *@
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Webhook Targets</label>
+                            @if (_webhookTargets != null && _webhookTargets.Any(t => t.IsActive))
+                            {
+                                @foreach (var target in _webhookTargets.Where(t => t.IsActive))
+                                {
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" id="webhook-@target.Id"
+                                               checked="@_selectedWebhookIds.Contains(target.Id)"
+                                               @onchange="e => ToggleWebhook(target.Id, (bool)e.Value!)" />
+                                        <label class="form-check-label" for="webhook-@target.Id">
+                                            @target.Name <span class="text-muted small">(@target.Url)</span>
+                                        </label>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="text-muted small">No active Webhook targets. <a href="/webhook-targets">Add one</a></div>
+                            }
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Trap Template</label>
+                            <InputTextArea class="form-control" rows="3" @bind-Value="_form.TrapTemplate" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Webhook Template</label>
+                            <InputTextArea class="form-control" rows="3" @bind-Value="_form.WebhookTemplate" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">OID Mapping (JSON)</label>
+                            <InputTextArea class="form-control" rows="3" @bind-Value="_form.OidMapping" />
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col">
+                                <label class="form-label">Max Events/Hour</label>
+                                <InputNumber class="form-control" @bind-Value="_form.MaxEventsPerHour" />
+                            </div>
+                            <div class="col">
+                                <label class="form-label">Max Active Events</label>
+                                <InputNumber class="form-control" @bind-Value="_form.MaxActiveEvents" />
+                            </div>
+                            <div class="col">
+                                <label class="form-label">Dedup Window (min)</label>
+                                <InputNumber class="form-control" @bind-Value="_form.DedupWindowMinutes" />
+                            </div>
+                        </div>
+                        <div class="form-check mb-3">
+                            <InputCheckbox class="form-check-input" @bind-Value="_form.IsActive" />
+                            <label class="form-check-label">Active</label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<Job>? _jobs;
+    private IReadOnlyList<Mailbox>? _mailboxes;
+    private IReadOnlyList<Rule>? _rules;
+    private IReadOnlyList<SnmpTarget>? _snmpTargets;
+    private IReadOnlyList<WebhookTarget>? _webhookTargets;
+    private bool _showForm;
+    private Job? _editing;
+    private JobForm _form = new();
+    private string? _error;
+    private string? _success;
+    private string? _dryRunResult;
+    private HashSet<int> _selectedSnmpIds = new();
+    private HashSet<int> _selectedWebhookIds = new();
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        try
+        {
+            _jobs = await JobService.GetAllAsync();
+            _mailboxes = await MailboxService.GetAllAsync();
+            _rules = await RuleService.GetAllAsync();
+            _snmpTargets = await SnmpTargetService.GetAllAsync();
+            _webhookTargets = await WebhookTargetService.GetAllAsync();
+        }
+        catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+    }
+
+    private void ShowAddForm()
+    {
+        _editing = null;
+        _form = new JobForm { MaxEventsPerHour = 50, MaxActiveEvents = 200, DedupWindowMinutes = 30, IsActive = true };
+        _selectedSnmpIds = new();
+        _selectedWebhookIds = new();
+        _showForm = true;
+    }
+
+    private void ShowEditForm(Job j)
+    {
+        _editing = j;
+        _form = new JobForm
+        {
+            Name = j.Name, MailboxId = j.MailboxId, RuleId = j.RuleId,
+            TrapTemplate = j.TrapTemplate, WebhookTemplate = j.WebhookTemplate, OidMapping = j.OidMapping,
+            MaxEventsPerHour = j.MaxEventsPerHour, MaxActiveEvents = j.MaxActiveEvents,
+            DedupWindowMinutes = j.DedupWindowMinutes, IsActive = j.IsActive
+        };
+        _selectedSnmpIds = new HashSet<int>(j.JobSnmpTargets.Select(jst => jst.SnmpTargetId));
+        _selectedWebhookIds = new HashSet<int>(j.JobWebhookTargets.Select(jwt => jwt.WebhookTargetId));
+        _showForm = true;
+    }
+
+    private void CloseForm() { _showForm = false; _editing = null; }
+
+    private void ToggleSnmp(int id, bool isChecked)
+    {
+        if (isChecked) _selectedSnmpIds.Add(id);
+        else _selectedSnmpIds.Remove(id);
+    }
+
+    private void ToggleWebhook(int id, bool isChecked)
+    {
+        if (isChecked) _selectedWebhookIds.Add(id);
+        else _selectedWebhookIds.Remove(id);
+    }
+
+    private async Task SaveJob()
+    {
+        try
+        {
+            if (_editing != null)
+            {
+                _editing.Name = _form.Name; _editing.MailboxId = _form.MailboxId; _editing.RuleId = _form.RuleId;
+                _editing.TrapTemplate = _form.TrapTemplate;
+                _editing.WebhookTemplate = _form.WebhookTemplate; _editing.OidMapping = _form.OidMapping;
+                _editing.MaxEventsPerHour = _form.MaxEventsPerHour; _editing.MaxActiveEvents = _form.MaxActiveEvents;
+                _editing.DedupWindowMinutes = _form.DedupWindowMinutes; _editing.IsActive = _form.IsActive;
+                await JobService.UpdateAsync(_editing);
+                await JobService.UpdateTargetAssignmentsAsync(_editing.Id, _selectedSnmpIds, _selectedWebhookIds);
+                _success = "Job updated.";
+            }
+            else
+            {
+                var job = new Job
+                {
+                    Name = _form.Name, MailboxId = _form.MailboxId, RuleId = _form.RuleId,
+                    TrapTemplate = _form.TrapTemplate,
+                    WebhookTemplate = _form.WebhookTemplate, OidMapping = _form.OidMapping,
+                    MaxEventsPerHour = _form.MaxEventsPerHour, MaxActiveEvents = _form.MaxActiveEvents,
+                    DedupWindowMinutes = _form.DedupWindowMinutes, IsActive = _form.IsActive
+                };
+                var created = await JobService.CreateAsync(job);
+                await JobService.UpdateTargetAssignmentsAsync(created.Id, _selectedSnmpIds, _selectedWebhookIds);
+                _success = "Job created.";
+            }
+            CloseForm();
+            await LoadData();
+        }
+        catch (Exception ex) { _error = $"Failed to save job: {ex.Message}"; }
+    }
+
+    private async Task DryRun(int id)
+    {
+        try
+        {
+            _dryRunResult = await JobService.DryRunAsync(id);
+        }
+        catch (Exception ex) { _error = $"Dry run failed: {ex.Message}"; }
+    }
+
+    private async Task Delete(int id)
+    {
+        try { await JobService.DeleteAsync(id); _success = "Job deleted."; await LoadData(); }
+        catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
+    }
+
+    private class JobForm
+    {
+        [Required(ErrorMessage = "Name is required.")]
+        public string Name { get; set; } = string.Empty;
+
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a mailbox.")]
+        public int MailboxId { get; set; }
+
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a rule.")]
+        public int RuleId { get; set; }
+
+        public string? TrapTemplate { get; set; }
+        public string? WebhookTemplate { get; set; }
+        public string? OidMapping { get; set; }
+
+        [Range(1, 10000, ErrorMessage = "Max events per hour must be between 1 and 10,000.")]
+        public int MaxEventsPerHour { get; set; } = 50;
+
+        [Range(1, 100000, ErrorMessage = "Max active events must be between 1 and 100,000.")]
+        public int MaxActiveEvents { get; set; } = 200;
+
+        [Range(0, 1440, ErrorMessage = "Dedup window must be between 0 and 1440 minutes.")]
+        public int DedupWindowMinutes { get; set; } = 30;
+
+        public bool IsActive { get; set; } = true;
+    }
+}

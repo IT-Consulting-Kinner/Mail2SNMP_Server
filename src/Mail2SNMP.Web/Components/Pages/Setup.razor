@@ -1,0 +1,146 @@
+@page "/setup"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Identity
+@using Mail2SNMP.Models.Entities
+@inject UserManager<AppUser> UserManager
+@inject RoleManager<IdentityRole> RoleManager
+@inject NavigationManager Navigation
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+
+<PageTitle>Initial Setup - Mail2SNMP</PageTitle>
+
+<div class="d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+    <div class="card shadow" style="max-width: 500px; width: 100%;">
+        <div class="card-body p-4">
+            <h3 class="text-center mb-2 fw-bold">Mail2SNMP</h3>
+            <p class="text-center text-muted mb-4">Initial Setup - Create Admin Account</p>
+
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <div class="alert alert-danger">@_error</div>
+            }
+
+            @if (_setupComplete)
+            {
+                <div class="alert alert-success">
+                    Admin account created successfully. You can now <a href="/login">sign in</a>.
+                </div>
+            }
+            else if (_alreadySetup)
+            {
+                <div class="alert alert-info">
+                    Setup has already been completed. <a href="/login">Sign in</a> with your admin account.
+                </div>
+            }
+            else
+            {
+                <EditForm Model="_form" OnValidSubmit="HandleSetup" FormName="setup">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary class="text-danger" />
+
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <InputText class="form-control" @bind-Value="_form.Email" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Display Name</label>
+                        <InputText class="form-control" @bind-Value="_form.DisplayName" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <InputText type="password" class="form-control" @bind-Value="_form.Password" />
+                        <small class="text-muted">Min. 12 characters, uppercase, lowercase, digit, special character</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Confirm Password</label>
+                        <InputText type="password" class="form-control" @bind-Value="_form.ConfirmPassword" />
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100" disabled="@_submitting">
+                        @(_submitting ? "Creating..." : "Create Admin Account")
+                    </button>
+                </EditForm>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private SetupForm _form = new();
+    private string? _error;
+    private bool _setupComplete;
+    private bool _alreadySetup;
+    private bool _submitting;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var adminUsers = await UserManager.GetUsersInRoleAsync("Admin");
+        if (adminUsers.Count > 0)
+            _alreadySetup = true;
+    }
+
+    private async Task HandleSetup()
+    {
+        _error = null;
+        _submitting = true;
+
+        try
+        {
+            // Double-check no admin exists (race condition guard)
+            var existingAdmins = await UserManager.GetUsersInRoleAsync("Admin");
+            if (existingAdmins.Count > 0)
+            {
+                _alreadySetup = true;
+                return;
+            }
+
+            if (_form.Password != _form.ConfirmPassword)
+            {
+                _error = "Passwords do not match.";
+                return;
+            }
+
+            var user = new AppUser
+            {
+                UserName = _form.Email,
+                Email = _form.Email,
+                DisplayName = _form.DisplayName,
+                EmailConfirmed = true
+            };
+
+            var result = await UserManager.CreateAsync(user, _form.Password);
+            if (!result.Succeeded)
+            {
+                _error = string.Join(" ", result.Errors.Select(e => e.Description));
+                return;
+            }
+
+            await UserManager.AddToRoleAsync(user, "Admin");
+            _setupComplete = true;
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private class SetupForm
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.EmailAddress]
+        public string Email { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public string DisplayName { get; set; } = "Administrator";
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MinLength(12)]
+        public string Password { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}

@@ -1,0 +1,293 @@
+@page "/mailboxes"
+@rendermode InteractiveServer
+@inject IMailboxService MailboxService
+
+<PageTitle>Mailboxes - Mail2SNMP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Mailboxes</h3>
+    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add Mailbox</button>
+</div>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger alert-dismissible">
+        @_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(_success))
+{
+    <div class="alert alert-success alert-dismissible">
+        @_success
+        <button type="button" class="btn-close" @onclick="() => _success = null"></button>
+    </div>
+}
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>Name</th>
+                <th>Host</th>
+                <th>Port</th>
+                <th>Username</th>
+                <th>Folder</th>
+                <th>SSL</th>
+                <th>Active</th>
+                <th>Last Checked</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_mailboxes != null)
+            {
+                @foreach (var mb in _mailboxes)
+                {
+                    <tr>
+                        <td>@mb.Name</td>
+                        <td>@mb.Host</td>
+                        <td>@mb.Port</td>
+                        <td>@mb.Username</td>
+                        <td>@mb.Folder</td>
+                        <td><span class="badge @(mb.UseSsl ? "bg-success" : "bg-secondary")">@(mb.UseSsl ? "Yes" : "No")</span></td>
+                        <td><span class="badge @(mb.IsActive ? "bg-success" : "bg-secondary")">@(mb.IsActive ? "Active" : "Inactive")</span></td>
+                        <td>@(mb.LastCheckedUtc?.ToString("g") ?? "Never")</td>
+                        <td>
+                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(mb)">Edit</button>
+                            <button class="btn btn-outline-info btn-sm me-1" @onclick="() => TestConnection(mb.Id)">Test</button>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(mb.Id)">Delete</button>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (_showForm)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_editing != null ? "Edit" : "Add") Mailbox</h5>
+                    <button type="button" class="btn-close" @onclick="CloseForm"></button>
+                </div>
+                <EditForm Model="_form" OnValidSubmit="SaveMailbox">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <ValidationSummary class="text-danger" />
+                        <div class="mb-3">
+                            <label class="form-label">Name</label>
+                            <InputText class="form-control" @bind-Value="_form.Name" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Host</label>
+                            <InputText class="form-control" @bind-Value="_form.Host" />
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col">
+                                <label class="form-label">Port</label>
+                                <InputNumber class="form-control" @bind-Value="_form.Port" />
+                            </div>
+                            <div class="col d-flex align-items-end">
+                                <div class="form-check">
+                                    <InputCheckbox class="form-check-input" @bind-Value="_form.UseSsl" />
+                                    <label class="form-check-label">Use SSL</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Username</label>
+                            <InputText class="form-control" @bind-Value="_form.Username" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Password</label>
+                            <InputText class="form-control" type="password" @bind-Value="_form.Password" />
+                            @if (_editing != null)
+                            {
+                                <small class="text-muted">Leave blank to keep existing password</small>
+                            }
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Folder</label>
+                            <InputText class="form-control" @bind-Value="_form.Folder" />
+                        </div>
+                        <div class="form-check mb-3">
+                            <InputCheckbox class="form-check-input" @bind-Value="_form.IsActive" />
+                            <label class="form-check-label">Active</label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<Mailbox>? _mailboxes;
+    private bool _showForm;
+    private Mailbox? _editing;
+    private MailboxForm _form = new();
+    private string? _error;
+    private string? _success;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            _mailboxes = await MailboxService.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load mailboxes: {ex.Message}";
+        }
+    }
+
+    private void ShowAddForm()
+    {
+        _editing = null;
+        _form = new MailboxForm { Port = 993, UseSsl = true, Folder = "INBOX", IsActive = true, IsEditing = false };
+        _showForm = true;
+    }
+
+    private void ShowEditForm(Mailbox mb)
+    {
+        _editing = mb;
+        _form = new MailboxForm
+        {
+            Name = mb.Name,
+            Host = mb.Host,
+            Port = mb.Port,
+            UseSsl = mb.UseSsl,
+            Username = mb.Username,
+            Folder = mb.Folder,
+            IsActive = mb.IsActive,
+            IsEditing = true
+        };
+        _showForm = true;
+    }
+
+    private void CloseForm()
+    {
+        _showForm = false;
+        _editing = null;
+    }
+
+    private async Task SaveMailbox()
+    {
+        try
+        {
+            if (_editing != null)
+            {
+                _editing.Name = _form.Name;
+                _editing.Host = _form.Host;
+                _editing.Port = _form.Port;
+                _editing.UseSsl = _form.UseSsl;
+                _editing.Username = _form.Username;
+                _editing.Folder = _form.Folder;
+                _editing.IsActive = _form.IsActive;
+                if (!string.IsNullOrEmpty(_form.Password))
+                    _editing.EncryptedPassword = _form.Password;
+                await MailboxService.UpdateAsync(_editing);
+                _success = "Mailbox updated successfully.";
+            }
+            else
+            {
+                var mailbox = new Mailbox
+                {
+                    Name = _form.Name,
+                    Host = _form.Host,
+                    Port = _form.Port,
+                    UseSsl = _form.UseSsl,
+                    Username = _form.Username,
+                    EncryptedPassword = _form.Password ?? string.Empty,
+                    Folder = _form.Folder,
+                    IsActive = _form.IsActive
+                };
+                await MailboxService.CreateAsync(mailbox);
+                _success = "Mailbox created successfully.";
+            }
+
+            CloseForm();
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to save mailbox: {ex.Message}";
+        }
+    }
+
+    private async Task TestConnection(int id)
+    {
+        _success = null;
+        _error = null;
+        try
+        {
+            var result = await MailboxService.TestConnectionAsync(id);
+            _success = result ? "Connection successful!" : "Connection failed.";
+            if (!result) _error = "Connection test failed.";
+        }
+        catch (Exception ex)
+        {
+            _success = null;
+            _error = $"Test failed: {ex.Message}";
+        }
+    }
+
+    private async Task Delete(int id)
+    {
+        try
+        {
+            await MailboxService.DeleteAsync(id);
+            _success = "Mailbox deleted.";
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to delete: {ex.Message}";
+        }
+    }
+
+    private class MailboxForm : IValidatableObject
+    {
+        [Required(ErrorMessage = "Name is required.")]
+        public string Name { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Host is required.")]
+        public string Host { get; set; } = string.Empty;
+
+        [Range(1, 65535, ErrorMessage = "Port must be between 1 and 65535.")]
+        public int Port { get; set; } = 993;
+
+        public bool UseSsl { get; set; } = true;
+
+        [Required(ErrorMessage = "Username is required.")]
+        public string Username { get; set; } = string.Empty;
+
+        public string? Password { get; set; }
+
+        [Required(ErrorMessage = "Folder is required.")]
+        public string Folder { get; set; } = "INBOX";
+
+        public bool IsActive { get; set; } = true;
+        public bool IsEditing { get; set; }
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (!IsEditing && string.IsNullOrWhiteSpace(Password))
+                yield return new ValidationResult("Password is required.", new[] { nameof(Password) });
+        }
+    }
+}

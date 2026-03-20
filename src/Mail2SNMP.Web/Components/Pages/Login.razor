@@ -1,0 +1,61 @@
+@page "/login"
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+@layout Mail2SNMP.Web.Components.Layout.LoginLayout
+
+<PageTitle>Login - Mail2SNMP</PageTitle>
+
+<div class="d-flex justify-content-center align-items-center vh-100 bg-light">
+    <div class="card shadow-sm" style="width: 400px;">
+        <div class="card-body p-4">
+            <h4 class="card-title text-center mb-4">
+                <span class="fw-bold">Mail2SNMP</span>
+            </h4>
+            <p class="text-center text-muted mb-4">Sign in to your account</p>
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="alert alert-danger py-2">@_errorMessage</div>
+            }
+
+            <form method="post" action="/account/login" data-enhance="false">
+                <div class="mb-3">
+                    <label for="email" class="form-label">Email</label>
+                    <input id="email" name="email" type="email" class="form-control"
+                           placeholder="admin@mail2snmp.local" required />
+                </div>
+                <div class="mb-3">
+                    <label for="password" class="form-label">Password</label>
+                    <input id="password" name="password" type="password" class="form-control"
+                           placeholder="Password" required />
+                </div>
+                <div class="form-check mb-3">
+                    <input id="rememberMe" name="rememberMe" type="checkbox" value="true" class="form-check-input" />
+                    <label for="rememberMe" class="form-check-label">Remember me</label>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Sign In</button>
+            </form>
+        </div>
+        <div class="card-footer text-center text-muted small py-2">
+            Mail2SNMP v5.8
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "error")]
+    private string? ErrorCode { get; set; }
+
+    private string? _errorMessage;
+
+    protected override void OnInitialized()
+    {
+        _errorMessage = ErrorCode switch
+        {
+            "invalid" => "Invalid email or password.",
+            "locked" => "Account is locked out. Please try again later.",
+            "missing" => "Please enter email and password.",
+            _ => null
+        };
+    }
+}

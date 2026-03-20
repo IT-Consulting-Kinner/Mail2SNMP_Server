@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Mail2SNMP Server"
+           Manufacturer="Adsumus"
+           Version="1.0.0.0"
+           UpgradeCode="E8F9A1B2-3C4D-5E6F-7A8B-9C0D1E2F3A4B"
+           Compressed="yes"
+           InstallerVersion="500">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Mail2SNMP is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Features -->
+    <Feature Id="ProductFeature" Title="Mail2SNMP Server" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+      <ComponentGroupRef Id="ServiceComponents" />
+    </Feature>
+
+    <!-- Directory Structure -->
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="Mail2SNMP">
+        <Directory Id="LOGSFOLDER" Name="logs" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DATADIRECTORY" Name="Mail2SNMP">
+        <Directory Id="KEYSDIRECTORY" Name="keys" />
+        <Directory Id="DBDIRECTORY" Name="data" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Application Components -->
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="AppSettings" Guid="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
+        <File Id="AppSettingsJson" Source="$(var.PublishDir)\appsettings.json" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Windows Service -->
+    <ComponentGroup Id="ServiceComponents" Directory="INSTALLFOLDER">
+      <Component Id="WorkerService" Guid="B2C3D4E5-F6A7-8901-BCDE-F12345678901">
+        <File Id="WorkerExe" Source="$(var.PublishDir)\Mail2SNMP.Worker.exe" KeyPath="yes" />
+        <ServiceInstall Id="Mail2SnmpWorkerService"
+                        Type="ownProcess"
+                        Name="Mail2SNMP"
+                        DisplayName="Mail2SNMP Worker Service"
+                        Description="Mail2SNMP - Mail to SNMP Trap / Webhook notification service"
+                        Start="auto"
+                        Account="LocalSystem"
+                        ErrorControl="normal" />
+        <ServiceControl Id="StartMail2SnmpService"
+                        Name="Mail2SNMP"
+                        Start="install"
+                        Stop="both"
+                        Remove="uninstall"
+                        Wait="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Custom Actions for Prerequisites -->
+    <Property Id="NETRUNTIME" Value="0" />
+
+    <!-- UI -->
+    <UI>
+      <UIRef Id="WixUI_InstallDir" />
+      <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    </UI>
+
+    <!-- License -->
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+
+  </Package>
+</Wix>

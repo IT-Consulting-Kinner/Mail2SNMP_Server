@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Mail2SNMP.Api/Mail2SNMP.Api.csproj" />
+    <Project Path="src/Mail2SNMP.Cli/Mail2SNMP.Cli.csproj" />
+    <Project Path="src/Mail2SNMP.Core/Mail2SNMP.Core.csproj" />
+    <Project Path="src/Mail2SNMP.Infrastructure/Mail2SNMP.Infrastructure.csproj" />
+    <Project Path="src/Mail2SNMP.Models/Mail2SNMP.Models.csproj" />
+    <Project Path="src/Mail2SNMP.Web/Mail2SNMP.Web.csproj" />
+    <Project Path="src/Mail2SNMP.Worker/Mail2SNMP.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Mail2SNMP.Tests/Mail2SNMP.Tests.csproj" />
+  </Folder>
+</Solution>

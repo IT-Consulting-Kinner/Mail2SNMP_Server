@@ -1,0 +1,122 @@
+@page "/dead-letters"
+@rendermode InteractiveServer
+@inject IDeadLetterService DeadLetterService
+
+<PageTitle>Dead Letters - Mail2SNMP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Dead Letters</h3>
+</div>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
+}
+@if (!string.IsNullOrEmpty(_success))
+{
+    <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
+}
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>Webhook Target</th>
+                <th>Event ID</th>
+                <th>Status</th>
+                <th>Attempts</th>
+                <th>Last Error</th>
+                <th>Created</th>
+                <th>Next Retry</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_entries != null)
+            {
+                @foreach (var entry in _entries)
+                {
+                    <tr>
+                        <td>@entry.Id</td>
+                        <td>@(entry.WebhookTarget?.Name ?? $"ID:{entry.WebhookTargetId}")</td>
+                        <td>@entry.EventId</td>
+                        <td><span class="badge bg-@GetStatusColor(entry.Status)">@entry.Status</span></td>
+                        <td>@entry.AttemptCount</td>
+                        <td class="small text-truncate" style="max-width: 200px;" title="@entry.LastError">@entry.LastError</td>
+                        <td class="small">@entry.CreatedUtc.ToString("g")</td>
+                        <td class="small">@(entry.NextRetryUtc?.ToString("g") ?? "N/A")</td>
+                        <td>
+                            @if (entry.Status == DeadLetterStatus.Pending)
+                            {
+                                <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => Retry(entry.Id)">Retry</button>
+                            }
+                        </td>
+                    </tr>
+                }
+
+                @if (_entries.Count > 0)
+                {
+                    <tr>
+                        <td colspan="9" class="text-end">
+                            <button class="btn btn-warning btn-sm" @onclick="RetryAll">Retry All Pending</button>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+
+    @if (_entries != null && _entries.Count == 0)
+    {
+        <div class="text-center text-muted py-4">No dead letter entries found.</div>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<DeadLetterEntry>? _entries;
+    private string? _error;
+    private string? _success;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        try { _entries = await DeadLetterService.GetAllAsync(); }
+        catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+    }
+
+    private async Task Retry(long id)
+    {
+        try { await DeadLetterService.RetryAsync(id); _success = "Retry queued."; await LoadData(); }
+        catch (Exception ex) { _error = $"Retry failed: {ex.Message}"; }
+    }
+
+    private async Task RetryAll()
+    {
+        try
+        {
+            var webhookIds = _entries?
+                .Where(e => e.Status == DeadLetterStatus.Pending)
+                .Select(e => e.WebhookTargetId)
+                .Distinct()
+                .ToList() ?? new List<int>();
+
+            foreach (var whId in webhookIds)
+            {
+                await DeadLetterService.RetryAllAsync(whId);
+            }
+            _success = "All pending entries queued for retry.";
+            await LoadData();
+        }
+        catch (Exception ex) { _error = $"Retry all failed: {ex.Message}"; }
+    }
+
+    private static string GetStatusColor(DeadLetterStatus s) => s switch
+    {
+        DeadLetterStatus.Pending => "warning",
+        DeadLetterStatus.Locked => "info",
+        DeadLetterStatus.Abandoned => "danger",
+        _ => "secondary"
+    };
+}

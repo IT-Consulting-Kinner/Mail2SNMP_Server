@@ -1,0 +1,294 @@
+@page "/users"
+@rendermode InteractiveServer
+@inject UserManager<AppUser> UserManager
+@inject RoleManager<IdentityRole> RoleManager
+
+<PageTitle>Users - Mail2SNMP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Users</h3>
+    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add User</button>
+</div>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
+}
+@if (!string.IsNullOrEmpty(_success))
+{
+    <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
+}
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>Display Name</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Roles</th>
+                <th>Active</th>
+                <th>Last Login</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_users != null)
+            {
+                @foreach (var u in _users)
+                {
+                    <tr>
+                        <td>@u.User.DisplayName</td>
+                        <td>@u.User.UserName</td>
+                        <td>@u.User.Email</td>
+                        <td>
+                            @foreach (var role in u.Roles)
+                            {
+                                <span class="badge bg-info me-1">@role</span>
+                            }
+                        </td>
+                        <td><span class="badge @(u.User.IsActive ? "bg-success" : "bg-secondary")">@(u.User.IsActive ? "Active" : "Inactive")</span></td>
+                        <td class="small">@(u.User.LastLoginUtc?.ToString("g") ?? "Never")</td>
+                        <td class="small">@u.User.CreatedUtc.ToString("g")</td>
+                        <td>
+                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(u)">Edit</button>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(u.User)">Delete</button>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (_showForm)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_editingUser != null ? "Edit" : "Add") User</h5>
+                    <button type="button" class="btn-close" @onclick="CloseForm"></button>
+                </div>
+                <EditForm Model="_form" OnValidSubmit="SaveUser">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <ValidationSummary class="text-danger" />
+                        <div class="mb-3">
+                            <label class="form-label">Display Name</label>
+                            <InputText class="form-control" @bind-Value="_form.DisplayName" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Username</label>
+                            <InputText class="form-control" @bind-Value="_form.UserName" disabled="@(_editingUser != null)" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <InputText class="form-control" @bind-Value="_form.Email" />
+                        </div>
+                        @if (_editingUser == null)
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Password</label>
+                                <InputText class="form-control" type="password" @bind-Value="_form.Password" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">New Password (leave blank to keep)</label>
+                                <InputText class="form-control" type="password" @bind-Value="_form.Password" />
+                            </div>
+                        }
+                        <div class="mb-3">
+                            <label class="form-label">Role</label>
+                            <InputSelect class="form-select" @bind-Value="_form.Role">
+                                <option value="ReadOnly">ReadOnly</option>
+                                <option value="Operator">Operator</option>
+                                <option value="Admin">Admin</option>
+                            </InputSelect>
+                        </div>
+                        <div class="form-check mb-3">
+                            <InputCheckbox class="form-check-input" @bind-Value="_form.IsActive" />
+                            <label class="form-check-label">Active</label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<UserWithRoles>? _users;
+    private bool _showForm;
+    private AppUser? _editingUser;
+    private UserForm _form = new();
+    private string? _error;
+    private string? _success;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await EnsureRolesExist();
+        await LoadData();
+    }
+
+    private async Task EnsureRolesExist()
+    {
+        foreach (var role in new[] { "Admin", "Operator", "ReadOnly" })
+        {
+            if (!await RoleManager.RoleExistsAsync(role))
+                await RoleManager.CreateAsync(new IdentityRole(role));
+        }
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            var allUsers = UserManager.Users.ToList();
+            _users = new List<UserWithRoles>();
+            foreach (var user in allUsers)
+            {
+                var roles = await UserManager.GetRolesAsync(user);
+                _users.Add(new UserWithRoles { User = user, Roles = roles.ToList() });
+            }
+        }
+        catch (Exception ex) { _error = $"Failed to load users: {ex.Message}"; }
+    }
+
+    private void ShowAddForm()
+    {
+        _editingUser = null;
+        _form = new UserForm { IsActive = true, Role = "ReadOnly", IsEditing = false };
+        _showForm = true;
+    }
+
+    private void ShowEditForm(UserWithRoles u)
+    {
+        _editingUser = u.User;
+        _form = new UserForm
+        {
+            DisplayName = u.User.DisplayName,
+            UserName = u.User.UserName ?? "",
+            Email = u.User.Email ?? "",
+            IsActive = u.User.IsActive,
+            Role = u.Roles.FirstOrDefault() ?? "ReadOnly",
+            IsEditing = true
+        };
+        _showForm = true;
+    }
+
+    private void CloseForm() { _showForm = false; _editingUser = null; }
+
+    private async Task SaveUser()
+    {
+        try
+        {
+            if (_editingUser != null)
+            {
+                _editingUser.DisplayName = _form.DisplayName;
+                _editingUser.Email = _form.Email;
+                _editingUser.IsActive = _form.IsActive;
+
+                var result = await UserManager.UpdateAsync(_editingUser);
+                if (!result.Succeeded)
+                {
+                    _error = string.Join(", ", result.Errors.Select(e => e.Description));
+                    return;
+                }
+
+                if (!string.IsNullOrEmpty(_form.Password))
+                {
+                    var token = await UserManager.GeneratePasswordResetTokenAsync(_editingUser);
+                    var pwResult = await UserManager.ResetPasswordAsync(_editingUser, token, _form.Password);
+                    if (!pwResult.Succeeded)
+                    {
+                        _error = string.Join(", ", pwResult.Errors.Select(e => e.Description));
+                        return;
+                    }
+                }
+
+                // Update role
+                var currentRoles = await UserManager.GetRolesAsync(_editingUser);
+                await UserManager.RemoveFromRolesAsync(_editingUser, currentRoles);
+                await UserManager.AddToRoleAsync(_editingUser, _form.Role);
+
+                _success = "User updated.";
+            }
+            else
+            {
+                var user = new AppUser
+                {
+                    UserName = _form.UserName,
+                    Email = _form.Email,
+                    DisplayName = _form.DisplayName,
+                    IsActive = _form.IsActive
+                };
+
+                var result = await UserManager.CreateAsync(user, _form.Password ?? "");
+                if (!result.Succeeded)
+                {
+                    _error = string.Join(", ", result.Errors.Select(e => e.Description));
+                    return;
+                }
+
+                await UserManager.AddToRoleAsync(user, _form.Role);
+                _success = "User created.";
+            }
+
+            CloseForm();
+            await LoadData();
+        }
+        catch (Exception ex) { _error = $"Failed to save: {ex.Message}"; }
+    }
+
+    private async Task Delete(AppUser user)
+    {
+        try
+        {
+            await UserManager.DeleteAsync(user);
+            _success = "User deleted.";
+            await LoadData();
+        }
+        catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
+    }
+
+    private class UserWithRoles
+    {
+        public AppUser User { get; set; } = null!;
+        public List<string> Roles { get; set; } = new();
+    }
+
+    private class UserForm : IValidatableObject
+    {
+        [Required(ErrorMessage = "Display name is required.")]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Username is required.")]
+        public string UserName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Email is required.")]
+        [EmailAddress(ErrorMessage = "Please enter a valid email address.")]
+        public string Email { get; set; } = string.Empty;
+
+        public string? Password { get; set; }
+
+        [Required(ErrorMessage = "Role is required.")]
+        public string Role { get; set; } = "ReadOnly";
+
+        public bool IsActive { get; set; } = true;
+        public bool IsEditing { get; set; }
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (!IsEditing && string.IsNullOrWhiteSpace(Password))
+                yield return new ValidationResult("Password is required.", new[] { nameof(Password) });
+        }
+    }
+}

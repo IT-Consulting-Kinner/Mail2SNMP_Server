@@ -1,0 +1,197 @@
+@page "/schedules"
+@rendermode InteractiveServer
+@inject IScheduleService ScheduleService
+@inject IJobService JobService
+
+<PageTitle>Schedules - Mail2SNMP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Schedules</h3>
+    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add Schedule</button>
+</div>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
+}
+@if (!string.IsNullOrEmpty(_success))
+{
+    <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
+}
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>Name</th>
+                <th>Job</th>
+                <th>Interval (min)</th>
+                <th>Active</th>
+                <th>Next Run</th>
+                <th>Last Run</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_schedules != null)
+            {
+                @foreach (var s in _schedules)
+                {
+                    <tr>
+                        <td>@s.Name</td>
+                        <td>@(s.Job?.Name ?? $"ID:{s.JobId}")</td>
+                        <td>@s.IntervalMinutes</td>
+                        <td><span class="badge @(s.IsActive ? "bg-success" : "bg-secondary")">@(s.IsActive ? "Active" : "Inactive")</span></td>
+                        <td>@(s.NextRunUtc?.ToString("g") ?? "N/A")</td>
+                        <td>@(s.LastRunUtc?.ToString("g") ?? "Never")</td>
+                        <td>
+                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(s)">Edit</button>
+                            <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => Toggle(s.Id)">Toggle</button>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(s.Id)">Delete</button>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (_showForm)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_editing != null ? "Edit" : "Add") Schedule</h5>
+                    <button type="button" class="btn-close" @onclick="CloseForm"></button>
+                </div>
+                <EditForm Model="_form" OnValidSubmit="Save">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <ValidationSummary class="text-danger" />
+                        <div class="mb-3">
+                            <label class="form-label">Name</label>
+                            <InputText class="form-control" @bind-Value="_form.Name" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Job</label>
+                            <InputSelect class="form-select" @bind-Value="_form.JobId">
+                                <option value="0">-- Select --</option>
+                                @if (_jobs != null)
+                                {
+                                    @foreach (var j in _jobs)
+                                    {
+                                        <option value="@j.Id">@j.Name</option>
+                                    }
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Interval (minutes)</label>
+                            <InputNumber class="form-control" @bind-Value="_form.IntervalMinutes" />
+                        </div>
+                        <div class="form-check mb-3">
+                            <InputCheckbox class="form-check-input" @bind-Value="_form.IsActive" />
+                            <label class="form-check-label">Active</label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<Schedule>? _schedules;
+    private IReadOnlyList<Job>? _jobs;
+    private bool _showForm;
+    private Schedule? _editing;
+    private ScheduleForm _form = new();
+    private string? _error;
+    private string? _success;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        try
+        {
+            _schedules = await ScheduleService.GetAllAsync();
+            _jobs = await JobService.GetAllAsync();
+        }
+        catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+    }
+
+    private void ShowAddForm()
+    {
+        _editing = null;
+        _form = new ScheduleForm { IntervalMinutes = 5, IsActive = true };
+        _showForm = true;
+    }
+
+    private void ShowEditForm(Schedule s)
+    {
+        _editing = s;
+        _form = new ScheduleForm { Name = s.Name, JobId = s.JobId, IntervalMinutes = s.IntervalMinutes, IsActive = s.IsActive };
+        _showForm = true;
+    }
+
+    private void CloseForm() { _showForm = false; _editing = null; }
+
+    private async Task Save()
+    {
+        try
+        {
+            if (_editing != null)
+            {
+                _editing.Name = _form.Name; _editing.JobId = _form.JobId;
+                _editing.IntervalMinutes = _form.IntervalMinutes; _editing.IsActive = _form.IsActive;
+                await ScheduleService.UpdateAsync(_editing);
+                _success = "Schedule updated.";
+            }
+            else
+            {
+                var schedule = new Schedule
+                {
+                    Name = _form.Name, JobId = _form.JobId,
+                    IntervalMinutes = _form.IntervalMinutes, IsActive = _form.IsActive
+                };
+                await ScheduleService.CreateAsync(schedule);
+                _success = "Schedule created.";
+            }
+            CloseForm();
+            await LoadData();
+        }
+        catch (Exception ex) { _error = $"Failed to save: {ex.Message}"; }
+    }
+
+    private async Task Toggle(int id)
+    {
+        try { await ScheduleService.ToggleAsync(id); _success = "Schedule toggled."; await LoadData(); }
+        catch (Exception ex) { _error = $"Failed to toggle: {ex.Message}"; }
+    }
+
+    private async Task Delete(int id)
+    {
+        try { await ScheduleService.DeleteAsync(id); _success = "Schedule deleted."; await LoadData(); }
+        catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
+    }
+
+    private class ScheduleForm
+    {
+        [Required(ErrorMessage = "Name is required.")]
+        public string Name { get; set; } = string.Empty;
+
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a job.")]
+        public int JobId { get; set; }
+
+        [Range(1, 1440, ErrorMessage = "Interval must be between 1 and 1440 minutes.")]
+        public int IntervalMinutes { get; set; } = 5;
+
+        public bool IsActive { get; set; } = true;
+    }
+}

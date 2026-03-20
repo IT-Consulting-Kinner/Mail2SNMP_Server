@@ -1,0 +1,146 @@
+@page "/events"
+@rendermode InteractiveServer
+@inject IEventService EventService
+
+<PageTitle>Events - Mail2SNMP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Events</h3>
+</div>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
+}
+@if (!string.IsNullOrEmpty(_success))
+{
+    <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
+}
+
+<div class="mb-3">
+    <label class="form-label me-2">Filter by State:</label>
+    <div class="btn-group" role="group">
+        <button class="btn btn-sm @(_stateFilter == null ? "btn-primary" : "btn-outline-primary")" @onclick="() => FilterByState(null)">All</button>
+        @foreach (var state in Enum.GetValues<EventState>())
+        {
+            <button class="btn btn-sm @(_stateFilter == state ? "btn-primary" : "btn-outline-primary")" @onclick="() => FilterByState(state)">@state</button>
+        }
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>Job</th>
+                <th>State</th>
+                <th>Severity</th>
+                <th>From</th>
+                <th>Subject</th>
+                <th>Rule</th>
+                <th>Hits</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_events != null)
+            {
+                @foreach (var evt in _events)
+                {
+                    <tr>
+                        <td>@evt.Id</td>
+                        <td>@(evt.Job?.Name ?? $"ID:{evt.JobId}")</td>
+                        <td><span class="badge bg-@GetStateColor(evt.State)">@evt.State</span></td>
+                        <td><span class="badge bg-@GetSeverityColor(evt.Severity)">@evt.Severity</span></td>
+                        <td class="small">@evt.MailFrom</td>
+                        <td class="small">@evt.Subject</td>
+                        <td class="small">@evt.RuleName</td>
+                        <td>@evt.HitCount</td>
+                        <td class="small">@evt.CreatedUtc.ToString("g")</td>
+                        <td>
+                            @if (evt.State == EventState.New || evt.State == EventState.Notified)
+                            {
+                                <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => Acknowledge(evt.Id)">Ack</button>
+                            }
+                            @if (evt.State != EventState.Resolved && evt.State != EventState.Suppressed)
+                            {
+                                <button class="btn btn-outline-success btn-sm me-1" @onclick="() => Resolve(evt.Id)">Resolve</button>
+                            }
+                            @if (evt.State != EventState.Suppressed)
+                            {
+                                <button class="btn btn-outline-secondary btn-sm me-1" @onclick="() => Suppress(evt.Id)">Suppress</button>
+                            }
+                            <button class="btn btn-outline-info btn-sm" @onclick="() => Replay(evt.Id)">Replay</button>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private IReadOnlyList<Event>? _events;
+    private EventState? _stateFilter;
+    private string? _error;
+    private string? _success;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        try { _events = await EventService.GetAllAsync(_stateFilter); }
+        catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+    }
+
+    private async Task FilterByState(EventState? state)
+    {
+        _stateFilter = state;
+        await LoadData();
+    }
+
+    private async Task Acknowledge(long id)
+    {
+        try { await EventService.AcknowledgeAsync(id, "web-user"); _success = "Event acknowledged."; await LoadData(); }
+        catch (Exception ex) { _error = $"Failed: {ex.Message}"; }
+    }
+
+    private async Task Resolve(long id)
+    {
+        try { await EventService.ResolveAsync(id, "web-user"); _success = "Event resolved."; await LoadData(); }
+        catch (Exception ex) { _error = $"Failed: {ex.Message}"; }
+    }
+
+    private async Task Suppress(long id)
+    {
+        try { await EventService.SuppressAsync(id); _success = "Event suppressed."; await LoadData(); }
+        catch (Exception ex) { _error = $"Failed: {ex.Message}"; }
+    }
+
+    private async Task Replay(long id)
+    {
+        try { await EventService.ReplayAsync(id); _success = "Event replayed."; await LoadData(); }
+        catch (Exception ex) { _error = $"Failed: {ex.Message}"; }
+    }
+
+    private static string GetStateColor(EventState s) => s switch
+    {
+        EventState.New => "primary",
+        EventState.Notified => "info",
+        EventState.Acknowledged => "warning",
+        EventState.Resolved => "success",
+        EventState.Suppressed => "secondary",
+        EventState.Expired => "dark",
+        _ => "secondary"
+    };
+
+    private static string GetSeverityColor(Severity s) => s switch
+    {
+        Severity.Critical => "danger",
+        Severity.Error => "danger",
+        Severity.Warning => "warning",
+        _ => "info"
+    };
+}

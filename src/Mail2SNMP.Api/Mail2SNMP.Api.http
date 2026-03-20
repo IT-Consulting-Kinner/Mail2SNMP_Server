@@ -1,0 +1,6 @@
+@Mail2SNMP.Api_HostAddress = http://localhost:5094
+
+GET {{Mail2SNMP.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

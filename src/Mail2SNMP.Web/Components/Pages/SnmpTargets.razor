@@ -1,0 +1,316 @@
+@page "/snmp-targets"
+@rendermode InteractiveServer
+@inject ISnmpTargetService SnmpTargetService
+
+<PageTitle>SNMP Targets - Mail2SNMP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">SNMP Targets</h3>
+    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add Target</button>
+</div>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
+}
+@if (!string.IsNullOrEmpty(_success))
+{
+    <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
+}
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>Name</th>
+                <th>Host</th>
+                <th>Port</th>
+                <th>Version</th>
+                <th>Community / Security</th>
+                <th>Active</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_targets != null)
+            {
+                @foreach (var t in _targets)
+                {
+                    <tr>
+                        <td>@t.Name</td>
+                        <td>@t.Host</td>
+                        <td>@t.Port</td>
+                        <td>@t.Version</td>
+                        <td>
+                            @if (t.Version == SnmpVersion.V3)
+                            {
+                                <span>@t.SecurityName (@t.AuthProtocol/@t.PrivProtocol)</span>
+                            }
+                            else
+                            {
+                                <span>@(string.IsNullOrEmpty(t.CommunityString) ? "N/A" : "***")</span>
+                            }
+                        </td>
+                        <td><span class="badge @(t.IsActive ? "bg-success" : "bg-secondary")">@(t.IsActive ? "Active" : "Inactive")</span></td>
+                        <td>
+                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(t)">Edit</button>
+                            <button class="btn btn-outline-info btn-sm me-1" @onclick="() => Test(t.Id)">Test</button>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(t.Id)">Delete</button>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (_showForm)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_editing != null ? "Edit" : "Add") SNMP Target</h5>
+                    <button type="button" class="btn-close" @onclick="CloseForm"></button>
+                </div>
+                <EditForm Model="_form" OnValidSubmit="Save">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <ValidationSummary class="text-danger" />
+                        <div class="mb-3">
+                            <label class="form-label">Name</label>
+                            <InputText class="form-control" @bind-Value="_form.Name" />
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-8">
+                                <label class="form-label">Host</label>
+                                <InputText class="form-control" @bind-Value="_form.Host" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label">Port</label>
+                                <InputNumber class="form-control" @bind-Value="_form.Port" />
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Version</label>
+                            <InputSelect class="form-select" @bind-Value="_form.Version">
+                                @foreach (var val in Enum.GetValues<SnmpVersion>())
+                                {
+                                    <option value="@val">@val</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        @if (_form.Version == SnmpVersion.V1 || _form.Version == SnmpVersion.V2c)
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Community String</label>
+                                <InputText class="form-control" @bind-Value="_form.CommunityString" />
+                            </div>
+                        }
+
+                        @if (_form.Version == SnmpVersion.V3)
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Security Name</label>
+                                <InputText class="form-control" @bind-Value="_form.SecurityName" />
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col">
+                                    <label class="form-label">Auth Protocol</label>
+                                    <InputSelect class="form-select" @bind-Value="_form.AuthProtocol">
+                                        @foreach (var val in Enum.GetValues<AuthProtocol>())
+                                        {
+                                            <option value="@val">@val</option>
+                                        }
+                                    </InputSelect>
+                                </div>
+                                <div class="col">
+                                    <label class="form-label">Auth Password</label>
+                                    <InputText class="form-control" type="password" @bind-Value="_form.AuthPassword" />
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col">
+                                    <label class="form-label">Privacy Protocol</label>
+                                    <InputSelect class="form-select" @bind-Value="_form.PrivProtocol">
+                                        @foreach (var val in Enum.GetValues<PrivProtocol>())
+                                        {
+                                            <option value="@val">@val</option>
+                                        }
+                                    </InputSelect>
+                                </div>
+                                <div class="col">
+                                    <label class="form-label">Privacy Password</label>
+                                    <InputText class="form-control" type="password" @bind-Value="_form.PrivPassword" />
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Engine ID</label>
+                                <InputText class="form-control" @bind-Value="_form.EngineId" />
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label">Enterprise Trap OID</label>
+                            <InputText class="form-control" @bind-Value="_form.EnterpriseTrapOid" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Max Traps/Minute</label>
+                            <InputNumber class="form-control" @bind-Value="_form.MaxTrapsPerMinute" />
+                        </div>
+                        <div class="form-check mb-3">
+                            <InputCheckbox class="form-check-input" @bind-Value="_form.IsActive" />
+                            <label class="form-check-label">Active</label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<SnmpTarget>? _targets;
+    private bool _showForm;
+    private SnmpTarget? _editing;
+    private SnmpTargetForm _form = new();
+    private string? _error;
+    private string? _success;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        try { _targets = await SnmpTargetService.GetAllAsync(); }
+        catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+    }
+
+    private void ShowAddForm()
+    {
+        _editing = null;
+        _form = new SnmpTargetForm { Port = 162, Version = SnmpVersion.V2c, MaxTrapsPerMinute = 100, IsActive = true, IsEditing = false };
+        _showForm = true;
+    }
+
+    private void ShowEditForm(SnmpTarget t)
+    {
+        _editing = t;
+        _form = new SnmpTargetForm
+        {
+            Name = t.Name, Host = t.Host, Port = t.Port, Version = t.Version,
+            CommunityString = t.CommunityString, SecurityName = t.SecurityName,
+            AuthProtocol = t.AuthProtocol, PrivProtocol = t.PrivProtocol,
+            EngineId = t.EngineId, EnterpriseTrapOid = t.EnterpriseTrapOid,
+            MaxTrapsPerMinute = t.MaxTrapsPerMinute, IsActive = t.IsActive,
+            IsEditing = true
+        };
+        _showForm = true;
+    }
+
+    private void CloseForm() { _showForm = false; _editing = null; }
+
+    private async Task Save()
+    {
+        try
+        {
+            if (_editing != null)
+            {
+                _editing.Name = _form.Name; _editing.Host = _form.Host; _editing.Port = _form.Port;
+                _editing.Version = _form.Version; _editing.CommunityString = _form.CommunityString;
+                _editing.SecurityName = _form.SecurityName; _editing.AuthProtocol = _form.AuthProtocol;
+                _editing.PrivProtocol = _form.PrivProtocol; _editing.EngineId = _form.EngineId;
+                _editing.EnterpriseTrapOid = _form.EnterpriseTrapOid;
+                _editing.MaxTrapsPerMinute = _form.MaxTrapsPerMinute; _editing.IsActive = _form.IsActive;
+                if (!string.IsNullOrEmpty(_form.AuthPassword)) _editing.EncryptedAuthPassword = _form.AuthPassword;
+                if (!string.IsNullOrEmpty(_form.PrivPassword)) _editing.EncryptedPrivPassword = _form.PrivPassword;
+                await SnmpTargetService.UpdateAsync(_editing);
+                _success = "SNMP target updated.";
+            }
+            else
+            {
+                var target = new SnmpTarget
+                {
+                    Name = _form.Name, Host = _form.Host, Port = _form.Port, Version = _form.Version,
+                    CommunityString = _form.CommunityString, SecurityName = _form.SecurityName,
+                    AuthProtocol = _form.AuthProtocol, EncryptedAuthPassword = _form.AuthPassword ?? string.Empty,
+                    PrivProtocol = _form.PrivProtocol, EncryptedPrivPassword = _form.PrivPassword ?? string.Empty,
+                    EngineId = _form.EngineId, EnterpriseTrapOid = _form.EnterpriseTrapOid,
+                    MaxTrapsPerMinute = _form.MaxTrapsPerMinute, IsActive = _form.IsActive
+                };
+                await SnmpTargetService.CreateAsync(target);
+                _success = "SNMP target created.";
+            }
+            CloseForm();
+            await LoadData();
+        }
+        catch (Exception ex) { _error = $"Failed to save: {ex.Message}"; }
+    }
+
+    private async Task Test(int id)
+    {
+        try
+        {
+            var result = await SnmpTargetService.TestAsync(id);
+            _success = result ? "SNMP test successful!" : "SNMP test failed.";
+            if (!result) _error = "SNMP test failed.";
+        }
+        catch (Exception ex) { _error = $"Test failed: {ex.Message}"; }
+    }
+
+    private async Task Delete(int id)
+    {
+        try { await SnmpTargetService.DeleteAsync(id); _success = "Target deleted."; await LoadData(); }
+        catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
+    }
+
+    private class SnmpTargetForm : IValidatableObject
+    {
+        [Required(ErrorMessage = "Name is required.")]
+        public string Name { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Host is required.")]
+        public string Host { get; set; } = string.Empty;
+
+        [Range(1, 65535, ErrorMessage = "Port must be between 1 and 65535.")]
+        public int Port { get; set; } = 162;
+
+        public SnmpVersion Version { get; set; } = SnmpVersion.V2c;
+        public string? CommunityString { get; set; }
+        public string? SecurityName { get; set; }
+        public AuthProtocol AuthProtocol { get; set; }
+        public string? AuthPassword { get; set; }
+        public PrivProtocol PrivProtocol { get; set; }
+        public string? PrivPassword { get; set; }
+        public string? EngineId { get; set; }
+        public string? EnterpriseTrapOid { get; set; }
+
+        [Range(1, 10000, ErrorMessage = "Max traps per minute must be between 1 and 10,000.")]
+        public int MaxTrapsPerMinute { get; set; } = 100;
+
+        public bool IsActive { get; set; } = true;
+        public bool IsEditing { get; set; }
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (Version == SnmpVersion.V1 || Version == SnmpVersion.V2c)
+            {
+                if (string.IsNullOrWhiteSpace(CommunityString))
+                    yield return new ValidationResult("Community string is required for SNMP v1/v2c.", new[] { nameof(CommunityString) });
+            }
+            else if (Version == SnmpVersion.V3)
+            {
+                if (string.IsNullOrWhiteSpace(SecurityName))
+                    yield return new ValidationResult("Security name is required for SNMP v3.", new[] { nameof(SecurityName) });
+                if (AuthProtocol != AuthProtocol.None && !IsEditing && string.IsNullOrWhiteSpace(AuthPassword))
+                    yield return new ValidationResult("Auth password is required when auth protocol is set.", new[] { nameof(AuthPassword) });
+                if (PrivProtocol != PrivProtocol.None && !IsEditing && string.IsNullOrWhiteSpace(PrivPassword))
+                    yield return new ValidationResult("Privacy password is required when privacy protocol is set.", new[] { nameof(PrivPassword) });
+            }
+        }
+    }
+}
