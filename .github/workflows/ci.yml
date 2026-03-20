@@ -76,7 +76,7 @@ jobs:
         shell: pwsh
         run: |
           $publishDir = (Resolve-Path "./publish/worker").Path + "\"
-          dotnet build installer/Mail2SNMP.Installer/Mail2SNMP.Installer.wixproj --configuration Release -p:PublishDir=$publishDir
+          dotnet build installer/Mail2SNMP.Installer/Mail2SNMP.Installer.wixproj --configuration Release -p:DefineConstants="PublishDir=$publishDir"
 
       - name: Find MSI artifact
         id: msi
