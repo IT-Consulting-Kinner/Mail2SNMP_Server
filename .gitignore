@@ -29,8 +29,10 @@ publish/
 docs/_site/
 docs/api/
 
-# Sensitive files
+# Sensitive files & internal tools (must NOT be shipped)
 tools/license_signing_key.pem
+tools/Mail2SNMP_Server_LicGen/
+license.key
 
 # Local tooling
 .claude/
