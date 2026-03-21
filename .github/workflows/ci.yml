@@ -72,11 +72,14 @@ jobs:
           $content = $content -replace 'Version="1\.0\.0\.0"', "Version=`"${{ steps.version.outputs.version_four }}`""
           Set-Content $file $content
 
+      - name: Restore Installer dependencies
+        run: dotnet restore installer/Mail2SNMP.Installer/Mail2SNMP.Installer.wixproj
+
       - name: Build MSI
         shell: pwsh
         run: |
           $publishDir = (Resolve-Path "./publish/worker").Path + "\"
-          dotnet build installer/Mail2SNMP.Installer/Mail2SNMP.Installer.wixproj --configuration Release -p:DefineConstants="PublishDir=$publishDir"
+          dotnet build installer/Mail2SNMP.Installer/Mail2SNMP.Installer.wixproj --no-restore --configuration Release -p:DefineConstants="PublishDir=$publishDir"
 
       - name: Find MSI artifact
         id: msi
