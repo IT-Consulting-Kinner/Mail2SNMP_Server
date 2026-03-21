@@ -36,14 +36,14 @@
       </Directory>
     </StandardDirectory>
 
-    <!-- Application Components -->
+    <!-- Application Files (all publish output) -->
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-      <Component Id="AppSettings" Guid="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
-        <File Id="AppSettingsJson" Source="$(var.PublishDir)\appsettings.json" KeyPath="yes" />
-      </Component>
+      <Files Include="$(var.PublishDir)\**">
+        <Exclude Files="$(var.PublishDir)\Mail2SNMP.Worker.exe" />
+      </Files>
     </ComponentGroup>
 
-    <!-- Windows Service -->
+    <!-- Windows Service (exe + service registration) -->
     <ComponentGroup Id="ServiceComponents" Directory="INSTALLFOLDER">
       <Component Id="WorkerService" Guid="B2C3D4E5-F6A7-8901-BCDE-F12345678901">
         <File Id="WorkerExe" Source="$(var.PublishDir)\Mail2SNMP.Worker.exe" KeyPath="yes" />
