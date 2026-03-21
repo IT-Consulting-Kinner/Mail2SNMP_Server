@@ -230,11 +230,13 @@ M9Cz5iLTLDSyTEQT1Pn/qOf9OersfjgHpVq7tE8UmLA+exGNDeeOjnOXuw1TgTUx
 
     private static string? FindLicenseFile()
     {
+        var licenseDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "IT-Consulting Kinner", "Mail2SNMP_Server", "License");
         var candidates = new[]
         {
-            Path.Combine(AppContext.BaseDirectory, "license.key"),
-            Path.Combine(Directory.GetCurrentDirectory(), "license.key"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Mail2SNMP", "license.key")
+            Path.Combine(licenseDir, "license.key"),
+            Path.Combine(AppContext.BaseDirectory, "license.key")
         };
         return candidates.FirstOrDefault(File.Exists);
     }

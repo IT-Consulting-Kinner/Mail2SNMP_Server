@@ -15,21 +15,24 @@
     <Feature Id="ProductFeature" Title="Mail2SNMP Server" Level="1">
       <ComponentGroupRef Id="ProductComponents" />
       <ComponentGroupRef Id="ServiceComponents" />
+      <ComponentGroupRef Id="DataDirectories" />
     </Feature>
 
     <!-- Directory Structure -->
     <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="COMPANYDIR" Name="IT-Consulting Kinner">
-        <Directory Id="INSTALLFOLDER" Name="Mail2SNMP_Server">
-          <Directory Id="LOGSFOLDER" Name="logs" />
-        </Directory>
+        <Directory Id="INSTALLFOLDER" Name="Mail2SNMP_Server" />
       </Directory>
     </StandardDirectory>
 
     <StandardDirectory Id="CommonAppDataFolder">
-      <Directory Id="DATADIRECTORY" Name="Mail2SNMP">
-        <Directory Id="KEYSDIRECTORY" Name="keys" />
-        <Directory Id="DBDIRECTORY" Name="data" />
+      <Directory Id="DATACOMPANYDIR" Name="IT-Consulting Kinner">
+        <Directory Id="DATADIRECTORY" Name="Mail2SNMP_Server">
+          <Directory Id="KEYSDIRECTORY" Name="Key" />
+          <Directory Id="LICENSEDIRECTORY" Name="License" />
+          <Directory Id="LOGSDIRECTORY" Name="Logs" />
+          <Directory Id="DBDIRECTORY" Name="data" />
+        </Directory>
       </Directory>
     </StandardDirectory>
 
@@ -58,6 +61,22 @@
                         Stop="both"
                         Remove="uninstall"
                         Wait="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Data Directories (ProgramData) -->
+    <ComponentGroup Id="DataDirectories">
+      <Component Id="KeyDir" Directory="KEYSDIRECTORY" Guid="C3D4E5F6-A7B8-9012-CDEF-123456789012">
+        <CreateFolder />
+      </Component>
+      <Component Id="LicenseDir" Directory="LICENSEDIRECTORY" Guid="D4E5F6A7-B8C9-0123-DEFA-234567890123">
+        <CreateFolder />
+      </Component>
+      <Component Id="LogsDir" Directory="LOGSDIRECTORY" Guid="E5F6A7B8-C9D0-1234-EFAB-345678901234">
+        <CreateFolder />
+      </Component>
+      <Component Id="DbDir" Directory="DBDIRECTORY" Guid="F6A7B8C9-D0E1-2345-FABC-456789012345">
+        <CreateFolder />
       </Component>
     </ComponentGroup>
 

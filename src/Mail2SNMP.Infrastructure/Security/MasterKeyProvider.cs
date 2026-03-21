@@ -107,7 +107,7 @@ public static class MasterKeyProvider
         if (OperatingSystem.IsWindows())
         {
             var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-            return Path.Combine(programData, "Mail2SNMP", "keys", "master.key");
+            return Path.Combine(programData, "IT-Consulting Kinner", "Mail2SNMP_Server", "Key", "master.key");
         }
         return "/etc/mail2snmp/keys/master.key";
     }
