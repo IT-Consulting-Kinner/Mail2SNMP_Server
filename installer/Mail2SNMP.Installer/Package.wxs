@@ -19,8 +19,10 @@
 
     <!-- Directory Structure -->
     <StandardDirectory Id="ProgramFiles6432Folder">
-      <Directory Id="INSTALLFOLDER" Name="Mail2SNMP">
-        <Directory Id="LOGSFOLDER" Name="logs" />
+      <Directory Id="COMPANYDIR" Name="IT-Consulting Kinner">
+        <Directory Id="INSTALLFOLDER" Name="Mail2SNMP_Server">
+          <Directory Id="LOGSFOLDER" Name="logs" />
+        </Directory>
       </Directory>
     </StandardDirectory>
 
