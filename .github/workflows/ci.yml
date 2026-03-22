@@ -60,6 +60,8 @@ jobs:
           --runtime win-x64
           --self-contained false
           --output ./publish/worker
+          -p:DebugType=none
+          -p:DebugSymbols=false
 
       - name: Install WiX Toolset
         run: dotnet tool install --global wix
