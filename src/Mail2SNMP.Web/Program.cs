@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Mail2SNMP.Infrastructure.Logging;
 using Prometheus;
 using Serilog;
 
@@ -23,11 +24,11 @@ try
     var builder = WebApplication.CreateBuilder(args);
 
     // Serilog
-    builder.Host.UseSerilog((context, services, configuration) => configuration
-        .ReadFrom.Configuration(context.Configuration)
-        .ReadFrom.Services(services)
-        .Enrich.FromLogContext()
-        .WriteTo.Console());
+    builder.Host.UseSerilog((context, services, configuration) =>
+    {
+        SerilogConfigurator.Configure(configuration, context.Configuration);
+        configuration.ReadFrom.Services(services);
+    });
 
     // Infrastructure (DbContext, services, channels, encryption, license)
     builder.Services.AddMail2SnmpInfrastructure(builder.Configuration);

@@ -1,4 +1,5 @@
 using Mail2SNMP.Infrastructure;
+using Mail2SNMP.Infrastructure.Logging;
 using Mail2SNMP.Worker;
 using Serilog;
 
@@ -12,8 +13,8 @@ try
 
     var builder = Host.CreateApplicationBuilder(args);
 
-    builder.Services.AddSerilog(config => config
-        .ReadFrom.Configuration(builder.Configuration));
+    builder.Services.AddSerilog(config =>
+        SerilogConfigurator.Configure(config, builder.Configuration));
 
     builder.Services.AddWindowsService(options =>
     {

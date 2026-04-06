@@ -47,8 +47,18 @@ public class DatabaseSettings
     public bool MultiSubnetFailover { get; set; } = false;
 
     /// <summary>
+    /// Connection establishment timeout in seconds (maps to "Connect Timeout"). Default 30.
+    /// </summary>
+    public int ConnectTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Per-command execution timeout in seconds applied to the EF Core DbContext. Default 30.
+    /// </summary>
+    public int CommandTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>
     /// Additional raw connection string options appended verbatim
-    /// (e.g. "ApplicationIntent=ReadOnly;Connect Timeout=30").
+    /// (e.g. "ApplicationIntent=ReadOnly").
     /// </summary>
     public string? AdditionalOptions { get; set; }
 
@@ -84,6 +94,7 @@ public class DatabaseSettings
             }
             if (MultiSubnetFailover)
                 parts.Add("MultiSubnetFailover=True");
+            parts.Add($"Connect Timeout={ConnectTimeoutSeconds}");
             if (!string.IsNullOrWhiteSpace(AdditionalOptions))
                 parts.Add(AdditionalOptions.TrimEnd(';'));
 
@@ -184,6 +195,37 @@ public class MetricsSettings
 public class HostingSettings
 {
     public bool AllInOne { get; set; }
+}
+
+/// <summary>
+/// Simplified, admin-friendly logging configuration. Replaces the verbose Serilog
+/// JSON section. The host configures Serilog programmatically from these fields.
+/// </summary>
+public class LoggingSettings
+{
+    /// <summary>Minimum log level: Verbose, Debug, Information, Warning, Error, Fatal.</summary>
+    public string MinimumLevel { get; set; } = "Information";
+
+    /// <summary>When true, logs are written to the console.</summary>
+    public bool ConsoleEnabled { get; set; } = true;
+
+    /// <summary>When true, logs are written to a rolling file.</summary>
+    public bool FileEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Log file path. Supports %ProgramData% and other Windows environment variables.
+    /// The "-.log" suffix triggers daily rolling (e.g. "mail2snmp-worker-20260101.log").
+    /// </summary>
+    public string FilePath { get; set; } = "%ProgramData%/IT-Consulting Kinner/Mail2SNMP_Server/Logs/mail2snmp-.log";
+
+    /// <summary>How many days of log files to keep before deletion. Default 30.</summary>
+    public int RetainedFileCountLimit { get; set; } = 30;
+
+    /// <summary>Maximum size per log file before rolling, in megabytes. Default 50.</summary>
+    public int FileSizeLimitMB { get; set; } = 50;
+
+    /// <summary>Rolling interval: Hour, Day, Month, Year, Infinite. Default Day.</summary>
+    public string RollingInterval { get; set; } = "Day";
 }
 
 /// <summary>

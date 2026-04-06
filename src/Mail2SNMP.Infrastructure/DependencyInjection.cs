@@ -31,9 +31,11 @@ public static class DependencyInjection
         services.AddDbContext<Mail2SnmpDbContext>((sp, options) =>
         {
             if (dbSettings.Provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
-                options.UseSqlServer(effectiveConnectionString);
+                options.UseSqlServer(effectiveConnectionString,
+                    sql => sql.CommandTimeout(dbSettings.CommandTimeoutSeconds));
             else
-                options.UseSqlite(effectiveConnectionString);
+                options.UseSqlite(effectiveConnectionString,
+                    sql => sql.CommandTimeout(dbSettings.CommandTimeoutSeconds));
 
             options.AddInterceptors(sp.GetRequiredService<AuditSaveChangesInterceptor>());
         });
