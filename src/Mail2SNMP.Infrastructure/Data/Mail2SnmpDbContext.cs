@@ -28,6 +28,7 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
     public DbSet<JobSnmpTarget> JobSnmpTargets => Set<JobSnmpTarget>();
     public DbSet<JobWebhookTarget> JobWebhookTargets => Set<JobWebhookTarget>();
     public DbSet<Setting> Settings => Set<Setting>();
+    public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
 
     /// <summary>
     /// Configures entity mappings, column constraints, indexes, and relationships for all domain entities.
@@ -52,6 +53,19 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
             e.Property(x => x.Name).HasMaxLength(200).IsRequired();
             e.Property(x => x.Criteria).HasMaxLength(2000).IsRequired();
             e.Property(x => x.RowVersion).IsRowVersion();
+        });
+
+        // G6: API keys for header-based REST authentication
+        builder.Entity<ApiKey>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            e.Property(x => x.KeyHash).HasMaxLength(128).IsRequired();
+            e.Property(x => x.KeyPrefix).HasMaxLength(16).IsRequired();
+            e.Property(x => x.Scopes).HasMaxLength(200).IsRequired();
+            e.Property(x => x.CreatedBy).HasMaxLength(200);
+            e.HasIndex(x => x.KeyHash).IsUnique();
+            e.HasIndex(x => x.KeyPrefix);
         });
 
         builder.Entity<Job>(e =>

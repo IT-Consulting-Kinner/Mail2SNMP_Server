@@ -94,6 +94,20 @@ public class EventService : IEventService
             }
         }
 
+        // G3: Determine effective dedup window. Per-rule override takes precedence
+        // over the global Events:DefaultDedupWindowMinutes setting. job.Rule may be
+        // null if not eager-loaded — in that case we fall back to the legacy behaviour
+        // (no time-based expiry on the dedup entry).
+        int? dedupWindowMinutes = null;
+        if (job?.RuleId is int ruleId)
+        {
+            var rule = await _db.Rules.AsNoTracking()
+                .Where(r => r.Id == ruleId)
+                .Select(r => new { r.DedupWindowMinutes })
+                .FirstOrDefaultAsync(ct);
+            dedupWindowMinutes = rule?.DedupWindowMinutes;
+        }
+
         // Event deduplication: if we have a MessageId, check the EventDedup table.
         // If a dedup entry exists within the job's window, increment HitCount on the
         // existing event instead. The dedup-check + increment must run inside a
@@ -101,12 +115,12 @@ public class EventService : IEventService
         if (!string.IsNullOrEmpty(evt.MessageId))
         {
             var dedupKey = EventDedupKeyGenerator.Generate(evt.MessageId, evt.JobId);
-            return await CreateOrIncrementAsync(evt, dedupKey, ct);
+            return await CreateOrIncrementAsync(evt, dedupKey, dedupWindowMinutes, ct);
         }
 
         // No MessageId — use fallback dedup key based on subject + sender + time
         var fallbackKey = EventDedupKeyGenerator.GenerateFallback(evt.Subject, evt.MailFrom, evt.CreatedUtc, evt.JobId);
-        return await CreateOrIncrementAsync(evt, fallbackKey, ct);
+        return await CreateOrIncrementAsync(evt, fallbackKey, dedupWindowMinutes, ct);
     }
 
     /// <summary>
@@ -116,7 +130,7 @@ public class EventService : IEventService
     /// concurrent producers can never both pass the dedup check and create duplicate
     /// events for the same key.
     /// </summary>
-    private async Task<Event> CreateOrIncrementAsync(Event evt, string dedupKey, CancellationToken ct)
+    private async Task<Event> CreateOrIncrementAsync(Event evt, string dedupKey, int? dedupWindowMinutes, CancellationToken ct)
     {
         // Use the existing transaction if the caller already started one (e.g. integration tests)
         var ownTransaction = _db.Database.CurrentTransaction == null;
@@ -127,6 +141,19 @@ public class EventService : IEventService
         {
             var existingDedup = await _db.EventDedups
                 .FirstOrDefaultAsync(d => d.DedupKeyHash == dedupKey && d.JobId == evt.JobId, ct);
+
+            // G3: if a per-rule dedup window is configured and the existing entry is older
+            // than the window, treat it as expired — the new event should be created fresh.
+            if (existingDedup != null && dedupWindowMinutes is int window && window > 0)
+            {
+                var cutoff = DateTime.UtcNow.AddMinutes(-window);
+                if (existingDedup.FirstSeenUtc < cutoff)
+                {
+                    _db.EventDedups.Remove(existingDedup);
+                    await _db.SaveChangesAsync(ct);
+                    existingDedup = null;
+                }
+            }
 
             if (existingDedup != null)
             {

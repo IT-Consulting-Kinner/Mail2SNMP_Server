@@ -87,6 +87,7 @@ public static class WorkerDependencyInjection
         services.AddHostedService<KeepAliveService>();
         services.AddHostedService<UpdateCheckService>();
         services.AddHostedService<AutoAcknowledgeService>();
+        services.AddHostedService<ImapIdleService>();
 
         return services;
     }

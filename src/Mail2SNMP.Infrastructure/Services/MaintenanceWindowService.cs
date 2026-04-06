@@ -64,28 +64,60 @@ public class MaintenanceWindowService : IMaintenanceWindowService
     {
         var now = DateTime.UtcNow;
 
-        // Quick path: any "All" window currently active
-        var anyAll = await _db.MaintenanceWindows.AnyAsync(m =>
-            m.IsActive && m.StartUtc <= now && m.EndUtc >= now && m.Scope == "All", ct);
-        if (anyAll || !jobId.HasValue)
-            return anyAll;
-
-        // Load active per-scope windows and parse the comma-separated job list in memory
-        // (entity counts are bounded by IsActive, so this is O(active windows)).
-        var candidates = await _db.MaintenanceWindows
-            .Where(m => m.IsActive && m.StartUtc <= now && m.EndUtc >= now && m.Scope != "All")
-            .Select(m => m.Scope)
+        // G4: load every active window once (bounded by IsActive). For each window we
+        // evaluate three modes:
+        //   1. Fixed window: StartUtc <= now <= EndUtc (legacy behaviour).
+        //   2. Recurring window: RecurringCron set — find the most recent cron occurrence
+        //      and treat (occurrence, occurrence + originalDuration) as the active window.
+        // The original duration is taken from EndUtc - StartUtc so the operator only has
+        // to define the duration once via the start/end time pickers.
+        var allActive = await _db.MaintenanceWindows
+            .Where(m => m.IsActive)
             .ToListAsync(ct);
 
-        var target = jobId.Value;
-        foreach (var scope in candidates)
+        bool MatchesScope(string scope)
         {
-            if (string.IsNullOrWhiteSpace(scope))
-                continue;
+            if (string.IsNullOrWhiteSpace(scope) || scope.Equals("All", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (!jobId.HasValue) return false;
+            var target = jobId.Value;
             foreach (var part in scope.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                if (int.TryParse(part, out var id) && id == target) return true;
+            return false;
+        }
+
+        foreach (var w in allActive)
+        {
+            if (!MatchesScope(w.Scope)) continue;
+
+            // 1) fixed window
+            if (w.StartUtc <= now && w.EndUtc >= now)
+                return true;
+
+            // 2) recurring window
+            if (!string.IsNullOrWhiteSpace(w.RecurringCron))
             {
-                if (int.TryParse(part, out var id) && id == target)
-                    return true;
+                try
+                {
+                    var cron = Cronos.CronExpression.Parse(w.RecurringCron);
+                    var duration = w.EndUtc - w.StartUtc;
+                    if (duration <= TimeSpan.Zero) duration = TimeSpan.FromHours(1); // fallback
+                    // GetOccurrences returns all occurrences in [from, to). We look back
+                    // from a window equal to the duration, so a currently-active recurrence
+                    // is captured.
+                    var lookback = now - duration;
+                    var occurrence = cron.GetOccurrences(lookback, now, fromInclusive: true, toInclusive: true)
+                                         .Cast<DateTime?>().LastOrDefault();
+                    if (occurrence is DateTime occ)
+                    {
+                        var winEnd = occ + duration;
+                        if (occ <= now && now <= winEnd) return true;
+                    }
+                }
+                catch (Cronos.CronFormatException)
+                {
+                    // Bad cron expression — ignore this window, do not crash the check.
+                }
             }
         }
         return false;

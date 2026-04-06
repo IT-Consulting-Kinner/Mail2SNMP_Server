@@ -79,6 +79,11 @@ try
         .PostConfigure<Microsoft.AspNetCore.Authentication.Cookies.ITicketStore>((options, store) =>
             options.SessionStore = store);
 
+    // G6: API-Key authentication scheme (header X-Api-Key) — additive to cookie auth.
+    builder.Services.AddAuthentication()
+        .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, Mail2SNMP.Infrastructure.Security.ApiKeyAuthenticationHandler>(
+            Mail2SNMP.Infrastructure.Security.ApiKeyAuthenticationHandler.SchemeName, _ => { });
+
     // OIDC/SSO authentication (Enterprise only — requires license + Oidc config section)
     var oidcSettings = builder.Configuration.GetSection("Oidc").Get<OidcSettings>();
     if (oidcSettings is not null && !string.IsNullOrEmpty(oidcSettings.Authority) && !string.IsNullOrEmpty(oidcSettings.ClientId))
@@ -464,6 +469,7 @@ try
         app.MapLicenseEndpoints();
         app.MapDeadLetterEndpoints();
         app.MapWorkerEndpoints();
+        app.MapBulkExportEndpoints();
         Log.Information("All-in-One: REST API endpoints mapped at /api/v1/*");
     }
 

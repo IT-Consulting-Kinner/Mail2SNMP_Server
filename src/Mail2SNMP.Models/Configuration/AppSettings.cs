@@ -137,6 +137,14 @@ public class ImapSettings
     /// doubles after each crash up to this cap. Default 30.
     /// </summary>
     public int ConsumerRestartMaxBackoffSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// G8: when true, the worker also runs <c>ImapIdleService</c>, which holds a
+    /// persistent IDLE connection per mailbox and pushes new mail into the channel
+    /// the moment the server announces it. Polling is still configured as a safety
+    /// net for the gap between the IDLE drop and reconnect. Default false.
+    /// </summary>
+    public bool UseIdle { get; set; } = false;
 }
 
 /// <summary>

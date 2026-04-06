@@ -157,6 +157,12 @@ else
                             <label class="form-label">Priority</label>
                             <InputNumber class="form-control" @bind-Value="_form.Priority" />
                         </div>
+                        <div class="mb-3">
+                            <label class="form-label">Dedup Window (minutes)</label>
+                            <InputNumber class="form-control" @bind-Value="_form.DedupWindowMinutes" placeholder="leave blank for default" />
+                            <small class="text-muted">G3: per-rule override. 0/empty = use the global Events:DefaultDedupWindowMinutes setting.</small>
+                            <ValidationMessage For="@(() => _form.DedupWindowMinutes)" class="text-danger small" />
+                        </div>
                         <div class="form-check mb-3">
                             <InputCheckbox class="form-check-input" @bind-Value="_form.IsActive" />
                             <label class="form-check-label">Active</label>
@@ -342,7 +348,8 @@ else
         _form = new RuleForm
         {
             Name = r.Name, Field = r.Field, MatchType = r.MatchType,
-            Criteria = r.Criteria, Severity = r.Severity, Priority = r.Priority, IsActive = r.IsActive
+            Criteria = r.Criteria, Severity = r.Severity, Priority = r.Priority, IsActive = r.IsActive,
+            DedupWindowMinutes = r.DedupWindowMinutes
         };
         _showForm = true;
     }
@@ -361,6 +368,7 @@ else
                 _editing.MatchType = _form.MatchType; _editing.Criteria = _form.Criteria;
                 _editing.Severity = _form.Severity; _editing.Priority = _form.Priority;
                 _editing.IsActive = _form.IsActive;
+                _editing.DedupWindowMinutes = _form.DedupWindowMinutes;
                 await RuleService.UpdateAsync(_editing);
                 _success = "Rule updated.";
             }
@@ -369,7 +377,8 @@ else
                 var rule = new Rule
                 {
                     Name = _form.Name, Field = _form.Field, MatchType = _form.MatchType,
-                    Criteria = _form.Criteria, Severity = _form.Severity, Priority = _form.Priority, IsActive = _form.IsActive
+                    Criteria = _form.Criteria, Severity = _form.Severity, Priority = _form.Priority, IsActive = _form.IsActive,
+                    DedupWindowMinutes = _form.DedupWindowMinutes
                 };
                 await RuleService.CreateAsync(rule);
                 _success = "Rule created.";
@@ -416,5 +425,9 @@ else
         public Severity Severity { get; set; } = Severity.Warning;
         public int Priority { get; set; }
         public bool IsActive { get; set; } = true;
+
+        // G3: per-rule dedup window override (0/null = use global default).
+        [Range(0, 1440, ErrorMessage = "Dedup window must be between 0 and 1440 minutes.")]
+        public int? DedupWindowMinutes { get; set; }
     }
 }
