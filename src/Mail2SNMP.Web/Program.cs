@@ -196,6 +196,23 @@ try
     // SignalR for live updates
     builder.Services.AddSignalR();
 
+    // Wave A (14): Rate-limit the login endpoint (fixed-window per IP).
+    // 10 attempts/minute/IP — defence in depth on top of Identity's per-account lockout.
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        options.AddPolicy("login", httpContext =>
+            System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 10,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                }));
+    });
+
     // Razor components with interactive server
     builder.Services.AddRazorComponents()
         .AddInteractiveServerComponents();
@@ -268,6 +285,32 @@ try
         app.UseHsts();
     }
 
+    // Wave A (16): Security headers — CSP, X-Frame, X-Content-Type, Referrer, Permissions-Policy.
+    // Blazor Server requires 'unsafe-inline' + 'unsafe-eval' for its bootstrap script + signalR
+    // negotiation; everything else is locked down to 'self'.
+    app.Use(async (ctx, next) =>
+    {
+        var h = ctx.Response.Headers;
+        h["X-Content-Type-Options"] = "nosniff";
+        h["X-Frame-Options"] = "DENY";
+        h["Referrer-Policy"] = "no-referrer";
+        h["Permissions-Policy"] = "geolocation=(), microphone=(), camera=(), payment=()";
+        if (!h.ContainsKey("Content-Security-Policy"))
+        {
+            h["Content-Security-Policy"] =
+                "default-src 'self'; " +
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+                "style-src 'self' 'unsafe-inline'; " +
+                "img-src 'self' data:; " +
+                "font-src 'self' data:; " +
+                "connect-src 'self' ws: wss:; " +
+                "frame-ancestors 'none'; " +
+                "base-uri 'self'; " +
+                "form-action 'self'";
+        }
+        await next();
+    });
+
     // Swagger (available in all environments for API consumers)
     app.UseSwagger();
     app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Mail2SNMP API v1"));
@@ -278,6 +321,9 @@ try
 
     app.UseAuthentication();
     app.UseAuthorization();
+
+    // Wave A (14): Activate the rate limiter for endpoints opted-in via .RequireRateLimiting("login")
+    app.UseRateLimiter();
 
     app.UseSerilogRequestLogging();
 
@@ -293,6 +339,15 @@ try
     // Health check endpoints (anonymous)
     app.MapHealthChecks("/health/ready").AllowAnonymous();
     app.MapHealthChecks("/health/live").AllowAnonymous();
+
+    // Wave A (35): MIB file download endpoint — monitoring tools need the MIB to decode traps.
+    app.MapGet("/mib/Mail2SNMP-MIB.mib", (IWebHostEnvironment env) =>
+    {
+        var path = Path.Combine(env.WebRootPath, "mib", "Mail2SNMP-MIB.mib");
+        return File.Exists(path)
+            ? Results.File(path, "application/octet-stream", "Mail2SNMP-MIB.mib")
+            : Results.NotFound();
+    }).AllowAnonymous();
 
     // Login endpoint (form POST from Login.razor)
     app.MapPost("/account/login", async (
@@ -348,7 +403,7 @@ try
             result: AuditResult.Failure, ipAddress: clientIp, userAgent: clientAgent, ct: default);
 
         return Results.Redirect("/login?error=invalid");
-    }).AllowAnonymous().DisableAntiforgery(); // CSRF mitigated by SameSite=Strict cookie policy
+    }).AllowAnonymous().DisableAntiforgery().RequireRateLimiting("login"); // CSRF mitigated by SameSite=Strict cookie policy
 
     // Logout endpoint
     app.MapPost("/logout", async (HttpContext httpContext, SignInManager<AppUser> signInManager) =>
