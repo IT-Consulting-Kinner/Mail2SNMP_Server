@@ -11,7 +11,7 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Jobs</h3>
-    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add Job</button>
+    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm"><i class="bi bi-plus-circle"></i> Add Job</button>
 </div>
 
 <AutoDismissAlert Type="danger"  @bind-Message="_error" />
@@ -99,9 +99,9 @@ else
                     <td>@job.DedupWindowMinutes</td>
                     <td><span class="badge @(job.IsActive ? "bg-success" : "bg-secondary")">@(job.IsActive ? "Active" : "Inactive")</span></td>
                     <td>
-                        <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(job)" disabled="@_busy">Edit</button>
-                        <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => DryRun(job.Id)" disabled="@_busy">Dry Run</button>
-                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(job.Id)" disabled="@_busy">Delete</button>
+                        <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(job)" disabled="@_busy"><i class="bi bi-pencil"></i> Edit</button>
+                        <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => DryRun(job.Id)" disabled="@_busy"><i class="bi bi-play-circle"></i> Dry Run</button>
+                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(job.Id)" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
                     </td>
                 </tr>
             }
@@ -122,118 +122,139 @@ else
                 <EditForm Model="_form" OnValidSubmit="SaveJob">
                     <DataAnnotationsValidator />
                     <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label">Name</label>
-                            <InputText class="form-control" @bind-Value="_form.Name" />
-                            <ValidationMessage For="@(() => _form.Name)" class="text-danger small" />
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col">
-                                <label class="form-label">Mailbox</label>
-                                <InputSelect class="form-select" @bind-Value="_form.MailboxId">
-                                    <option value="0">-- Select --</option>
-                                    @if (_mailboxes != null)
-                                    {
-                                        @foreach (var mb in _mailboxes)
+                        @* L6: tabbed layout for the job form *@
+                        <ul class="nav nav-tabs mb-3" role="tablist">
+                            <li class="nav-item"><button type="button" class="nav-link @(_activeTab == "basic" ? "active" : "")" @onclick='() => _activeTab = "basic"'><i class="bi bi-info-circle"></i> Basic</button></li>
+                            <li class="nav-item"><button type="button" class="nav-link @(_activeTab == "targets" ? "active" : "")" @onclick='() => _activeTab = "targets"'><i class="bi bi-broadcast"></i> Targets <span class="badge bg-secondary">@(_selectedSnmpIds.Count + _selectedWebhookIds.Count)</span></button></li>
+                            <li class="nav-item"><button type="button" class="nav-link @(_activeTab == "templates" ? "active" : "")" @onclick='() => _activeTab = "templates"'><i class="bi bi-file-earmark-code"></i> Templates</button></li>
+                            <li class="nav-item"><button type="button" class="nav-link @(_activeTab == "advanced" ? "active" : "")" @onclick='() => _activeTab = "advanced"'><i class="bi bi-sliders"></i> Advanced</button></li>
+                        </ul>
+
+                        @if (_activeTab == "basic")
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Name</label>
+                                <InputText class="form-control" @bind-Value="_form.Name" />
+                                <ValidationMessage For="@(() => _form.Name)" class="text-danger small" />
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col">
+                                    <label class="form-label">Mailbox</label>
+                                    <InputSelect class="form-select" @bind-Value="_form.MailboxId">
+                                        <option value="0">-- Select --</option>
+                                        @if (_mailboxes != null)
                                         {
-                                            <option value="@mb.Id">@mb.Name</option>
+                                            @foreach (var mb in _mailboxes)
+                                            {
+                                                <option value="@mb.Id">@mb.Name</option>
+                                            }
                                         }
-                                    }
-                                </InputSelect>
-                                <ValidationMessage For="@(() => _form.MailboxId)" class="text-danger small" />
-                            </div>
-                            <div class="col">
-                                <label class="form-label">Rule</label>
-                                <InputSelect class="form-select" @bind-Value="_form.RuleId">
-                                    <option value="0">-- Select --</option>
-                                    @if (_rules != null)
-                                    {
-                                        @foreach (var r in _rules)
+                                    </InputSelect>
+                                    <ValidationMessage For="@(() => _form.MailboxId)" class="text-danger small" />
+                                </div>
+                                <div class="col">
+                                    <label class="form-label">Rule</label>
+                                    <InputSelect class="form-select" @bind-Value="_form.RuleId">
+                                        <option value="0">-- Select --</option>
+                                        @if (_rules != null)
                                         {
-                                            <option value="@r.Id">@r.Name</option>
+                                            @foreach (var r in _rules)
+                                            {
+                                                <option value="@r.Id">@r.Name</option>
+                                            }
                                         }
+                                    </InputSelect>
+                                    <ValidationMessage For="@(() => _form.RuleId)" class="text-danger small" />
+                                </div>
+                            </div>
+                            <div class="form-check mb-3">
+                                <InputCheckbox class="form-check-input" @bind-Value="_form.IsActive" />
+                                <label class="form-check-label">Active</label>
+                            </div>
+                        }
+                        else if (_activeTab == "targets")
+                        {
+                            @* SNMP Target Selection *@
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">SNMP Targets</label>
+                                @if (_snmpTargets != null && _snmpTargets.Any(t => t.IsActive))
+                                {
+                                    @foreach (var target in _snmpTargets.Where(t => t.IsActive))
+                                    {
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input" id="snmp-@target.Id"
+                                                   checked="@_selectedSnmpIds.Contains(target.Id)"
+                                                   @onchange="e => ToggleSnmp(target.Id, (bool)e.Value!)" />
+                                            <label class="form-check-label" for="snmp-@target.Id">
+                                                @target.Name <span class="text-muted small">(@target.Host:@target.Port, @target.Version)</span>
+                                            </label>
+                                        </div>
                                     }
-                                </InputSelect>
-                                <ValidationMessage For="@(() => _form.RuleId)" class="text-danger small" />
-                            </div>
-                        </div>
-
-                        @* SNMP Target Selection *@
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">SNMP Targets</label>
-                            @if (_snmpTargets != null && _snmpTargets.Any(t => t.IsActive))
-                            {
-                                @foreach (var target in _snmpTargets.Where(t => t.IsActive))
-                                {
-                                    <div class="form-check">
-                                        <input type="checkbox" class="form-check-input" id="snmp-@target.Id"
-                                               checked="@_selectedSnmpIds.Contains(target.Id)"
-                                               @onchange="e => ToggleSnmp(target.Id, (bool)e.Value!)" />
-                                        <label class="form-check-label" for="snmp-@target.Id">
-                                            @target.Name <span class="text-muted small">(@target.Host:@target.Port, @target.Version)</span>
-                                        </label>
-                                    </div>
                                 }
-                            }
-                            else
-                            {
-                                <div class="text-muted small">No active SNMP targets. <a href="/snmp-targets">Add one</a></div>
-                            }
-                        </div>
-
-                        @* Webhook Target Selection *@
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Webhook Targets</label>
-                            @if (_webhookTargets != null && _webhookTargets.Any(t => t.IsActive))
-                            {
-                                @foreach (var target in _webhookTargets.Where(t => t.IsActive))
+                                else
                                 {
-                                    <div class="form-check">
-                                        <input type="checkbox" class="form-check-input" id="webhook-@target.Id"
-                                               checked="@_selectedWebhookIds.Contains(target.Id)"
-                                               @onchange="e => ToggleWebhook(target.Id, (bool)e.Value!)" />
-                                        <label class="form-check-label" for="webhook-@target.Id">
-                                            @target.Name <span class="text-muted small">(@target.Url)</span>
-                                        </label>
-                                    </div>
+                                    <div class="text-muted small">No active SNMP targets. <a href="/snmp-targets">Add one</a></div>
                                 }
-                            }
-                            else
-                            {
-                                <div class="text-muted small">No active Webhook targets. <a href="/webhook-targets">Add one</a></div>
-                            }
-                        </div>
+                            </div>
 
-                        <div class="mb-3">
-                            <label class="form-label">Trap Template</label>
-                            <InputTextArea class="form-control" rows="3" @bind-Value="_form.TrapTemplate" />
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Webhook Template</label>
-                            <InputTextArea class="form-control" rows="3" @bind-Value="_form.WebhookTemplate" />
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">OID Mapping (JSON)</label>
-                            <InputTextArea class="form-control" rows="3" @bind-Value="_form.OidMapping" />
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col">
-                                <label class="form-label">Max Events/Hour</label>
-                                <InputNumber class="form-control" @bind-Value="_form.MaxEventsPerHour" />
+                            @* Webhook Target Selection *@
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Webhook Targets</label>
+                                @if (_webhookTargets != null && _webhookTargets.Any(t => t.IsActive))
+                                {
+                                    @foreach (var target in _webhookTargets.Where(t => t.IsActive))
+                                    {
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input" id="webhook-@target.Id"
+                                                   checked="@_selectedWebhookIds.Contains(target.Id)"
+                                                   @onchange="e => ToggleWebhook(target.Id, (bool)e.Value!)" />
+                                            <label class="form-check-label" for="webhook-@target.Id">
+                                                @target.Name <span class="text-muted small">(@target.Url)</span>
+                                            </label>
+                                        </div>
+                                    }
+                                }
+                                else
+                                {
+                                    <div class="text-muted small">No active Webhook targets. <a href="/webhook-targets">Add one</a></div>
+                                }
                             </div>
-                            <div class="col">
-                                <label class="form-label">Max Active Events</label>
-                                <InputNumber class="form-control" @bind-Value="_form.MaxActiveEvents" />
+                        }
+                        else if (_activeTab == "templates")
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Trap Template</label>
+                                <InputTextArea class="form-control" rows="4" @bind-Value="_form.TrapTemplate" />
+                                <small class="text-muted">Optional. Use placeholders like {Subject}, {From}, {Severity}.</small>
                             </div>
-                            <div class="col">
-                                <label class="form-label">Dedup Window (min)</label>
-                                <InputNumber class="form-control" @bind-Value="_form.DedupWindowMinutes" />
+                            <div class="mb-3">
+                                <label class="form-label">Webhook Template</label>
+                                <InputTextArea class="form-control" rows="4" @bind-Value="_form.WebhookTemplate" />
+                                <small class="text-muted">Optional JSON template. Default payload is used when empty.</small>
                             </div>
-                        </div>
-                        <div class="form-check mb-3">
-                            <InputCheckbox class="form-check-input" @bind-Value="_form.IsActive" />
-                            <label class="form-check-label">Active</label>
-                        </div>
+                            <div class="mb-3">
+                                <label class="form-label">OID Mapping (JSON)</label>
+                                <InputTextArea class="form-control" rows="4" @bind-Value="_form.OidMapping" />
+                                <small class="text-muted">Optional custom OID mapping for SNMP varbinds.</small>
+                            </div>
+                        }
+                        else if (_activeTab == "advanced")
+                        {
+                            <div class="row mb-3">
+                                <div class="col">
+                                    <label class="form-label">Max Events/Hour</label>
+                                    <InputNumber class="form-control" @bind-Value="_form.MaxEventsPerHour" />
+                                </div>
+                                <div class="col">
+                                    <label class="form-label">Max Active Events</label>
+                                    <InputNumber class="form-control" @bind-Value="_form.MaxActiveEvents" />
+                                </div>
+                                <div class="col">
+                                    <label class="form-label">Dedup Window (min)</label>
+                                    <InputNumber class="form-control" @bind-Value="_form.DedupWindowMinutes" />
+                                </div>
+                            </div>
+                        }
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
@@ -262,6 +283,7 @@ else
     private bool _loading = true;
     private bool _busy;
     private string _searchTerm = string.Empty;
+    private string _activeTab = "basic";
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
@@ -286,6 +308,7 @@ else
         _form = new JobForm { MaxEventsPerHour = 50, MaxActiveEvents = 200, DedupWindowMinutes = 30, IsActive = true };
         _selectedSnmpIds = new();
         _selectedWebhookIds = new();
+        _activeTab = "basic";
         _showForm = true;
     }
 
@@ -301,6 +324,7 @@ else
         };
         _selectedSnmpIds = new HashSet<int>(j.JobSnmpTargets.Select(jst => jst.SnmpTargetId));
         _selectedWebhookIds = new HashSet<int>(j.JobWebhookTargets.Select(jwt => jwt.WebhookTargetId));
+        _activeTab = "basic";
         _showForm = true;
     }
 

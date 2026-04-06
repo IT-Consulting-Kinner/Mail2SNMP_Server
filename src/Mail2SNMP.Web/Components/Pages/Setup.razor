@@ -50,13 +50,42 @@
 
                     <div class="mb-3">
                         <label class="form-label">Password</label>
-                        <InputText type="password" class="form-control" @bind-Value="_form.Password" />
-                        <small class="text-muted">Min. 12 characters, uppercase, lowercase, digit, special character</small>
+                        <InputText type="password" class="form-control" @bind-Value="_form.Password" @bind-Value:event="oninput" />
+                        @* L3: live password strength indicator *@
+                        @{
+                            var hasMinLen = _form.Password.Length >= 12;
+                            var hasUpper = _form.Password.Any(char.IsUpper);
+                            var hasLower = _form.Password.Any(char.IsLower);
+                            var hasDigit = _form.Password.Any(char.IsDigit);
+                            var hasSpecial = _form.Password.Any(c => !char.IsLetterOrDigit(c));
+                            var score = (hasMinLen ? 1 : 0) + (hasUpper ? 1 : 0) + (hasLower ? 1 : 0) + (hasDigit ? 1 : 0) + (hasSpecial ? 1 : 0);
+                            var strengthClass = score switch { 0 or 1 => "bg-danger", 2 or 3 => "bg-warning", 4 => "bg-info", _ => "bg-success" };
+                            var strengthLabel = score switch { 0 => "Empty", 1 or 2 => "Weak", 3 => "Fair", 4 => "Good", _ => "Strong" };
+                        }
+                        <div class="progress mt-2" style="height: 6px;">
+                            <div class="progress-bar @strengthClass" role="progressbar" style="width: @(score * 20)%;"></div>
+                        </div>
+                        <small class="text-muted d-block mt-1">Strength: <strong>@strengthLabel</strong></small>
+                        <ul class="list-unstyled small mt-1 mb-0">
+                            <li class="@(hasMinLen ? "text-success" : "text-muted")"><i class="bi @(hasMinLen ? "bi-check-circle-fill" : "bi-circle")"></i> At least 12 characters</li>
+                            <li class="@(hasUpper ? "text-success" : "text-muted")"><i class="bi @(hasUpper ? "bi-check-circle-fill" : "bi-circle")"></i> Uppercase letter</li>
+                            <li class="@(hasLower ? "text-success" : "text-muted")"><i class="bi @(hasLower ? "bi-check-circle-fill" : "bi-circle")"></i> Lowercase letter</li>
+                            <li class="@(hasDigit ? "text-success" : "text-muted")"><i class="bi @(hasDigit ? "bi-check-circle-fill" : "bi-circle")"></i> Digit</li>
+                            <li class="@(hasSpecial ? "text-success" : "text-muted")"><i class="bi @(hasSpecial ? "bi-check-circle-fill" : "bi-circle")"></i> Special character</li>
+                        </ul>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">Confirm Password</label>
-                        <InputText type="password" class="form-control" @bind-Value="_form.ConfirmPassword" />
+                        <InputText type="password" class="form-control" @bind-Value="_form.ConfirmPassword" @bind-Value:event="oninput" />
+                        @if (!string.IsNullOrEmpty(_form.ConfirmPassword) && _form.Password != _form.ConfirmPassword)
+                        {
+                            <small class="text-danger d-block mt-1"><i class="bi bi-x-circle"></i> Passwords do not match</small>
+                        }
+                        else if (!string.IsNullOrEmpty(_form.ConfirmPassword))
+                        {
+                            <small class="text-success d-block mt-1"><i class="bi bi-check-circle"></i> Passwords match</small>
+                        }
                     </div>
 
                     <button type="submit" class="btn btn-primary w-100" disabled="@_submitting">

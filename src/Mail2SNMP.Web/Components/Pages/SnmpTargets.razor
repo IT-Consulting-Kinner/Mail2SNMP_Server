@@ -7,7 +7,7 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">SNMP Targets</h3>
-    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add Target</button>
+    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm"><i class="bi bi-plus-circle"></i> Add Target</button>
 </div>
 
 <AutoDismissAlert Type="danger"  @bind-Message="_error" />
@@ -36,10 +36,25 @@ else
         : _targets.Where(t =>
             (t.Name?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
             (t.Host?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))).ToList();
+    @if (_selected.Count > 0)
+    {
+        <div class="alert alert-secondary d-flex align-items-center py-2 mb-2">
+            <span class="me-3"><strong>@_selected.Count</strong> selected</span>
+            <button class="btn btn-sm btn-outline-success me-1" @onclick="BulkActivate" disabled="@_busy"><i class="bi bi-check-circle"></i> Activate</button>
+            <button class="btn btn-sm btn-outline-secondary me-1" @onclick="BulkDeactivate" disabled="@_busy"><i class="bi bi-pause-circle"></i> Deactivate</button>
+            <button class="btn btn-sm btn-outline-danger me-1" @onclick="BulkDelete" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
+            <button class="btn btn-sm btn-outline-secondary ms-auto" @onclick="() => _selected.Clear()">Clear selection</button>
+        </div>
+    }
 <div class="table-responsive">
     <table class="table table-striped table-hover">
         <thead class="table-dark">
             <tr>
+                <th style="width:30px;">
+                    <input type="checkbox" class="form-check-input"
+                           checked="@(_selected.Count == filtered.Count && filtered.Count > 0)"
+                           @onchange="e => ToggleSelectAll((bool)e.Value!, filtered)" />
+                </th>
                 <th>Name</th>
                 <th>Host</th>
                 <th>Port</th>
@@ -52,11 +67,14 @@ else
         <tbody>
             @if (filtered.Count == 0)
             {
-                <tr><td colspan="7" class="text-center text-muted py-3">No targets match the search term.</td></tr>
+                <tr><td colspan="8" class="text-center text-muted py-3">No targets match the search term.</td></tr>
             }
             @foreach (var t in filtered)
             {
                 <tr>
+                    <td><input type="checkbox" class="form-check-input"
+                               checked="@_selected.Contains(t.Id)"
+                               @onchange="e => ToggleSelect(t.Id, (bool)e.Value!)" /></td>
                     <td>@t.Name</td>
                     <td>@t.Host</td>
                     <td>@t.Port</td>
@@ -73,9 +91,9 @@ else
                     </td>
                     <td><span class="badge @(t.IsActive ? "bg-success" : "bg-secondary")">@(t.IsActive ? "Active" : "Inactive")</span></td>
                     <td>
-                        <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(t)" disabled="@_busy">Edit</button>
-                        <button class="btn btn-outline-info btn-sm me-1" @onclick="() => Test(t.Id)" disabled="@_busy">Test</button>
-                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(t.Id)" disabled="@_busy">Delete</button>
+                        <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(t)" disabled="@_busy"><i class="bi bi-pencil"></i> Edit</button>
+                        <button class="btn btn-outline-info btn-sm me-1" @onclick="() => Test(t.Id)" disabled="@_busy"><i class="bi bi-flask"></i> Test</button>
+                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(t.Id)" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
                     </td>
                 </tr>
             }
@@ -215,6 +233,62 @@ else
     private bool _loading = true;
     private bool _busy;
     private string _searchTerm = string.Empty;
+    private HashSet<int> _selected = new();
+
+    private void ToggleSelect(int id, bool isChecked)
+    {
+        if (isChecked) _selected.Add(id); else _selected.Remove(id);
+    }
+
+    private void ToggleSelectAll(bool isChecked, IEnumerable<SnmpTarget> visible)
+    {
+        _selected.Clear();
+        if (isChecked) foreach (var x in visible) _selected.Add(x.Id);
+    }
+
+    private async Task BulkActivate() => await BulkSetActive(true);
+    private async Task BulkDeactivate() => await BulkSetActive(false);
+
+    private async Task BulkSetActive(bool active)
+    {
+        if (_busy || _selected.Count == 0) return;
+        _busy = true;
+        try
+        {
+            foreach (var id in _selected.ToList())
+            {
+                var x = await SnmpTargetService.GetByIdAsync(id);
+                if (x != null && x.IsActive != active) { x.IsActive = active; await SnmpTargetService.UpdateAsync(x); }
+            }
+            _success = $"{_selected.Count} targets {(active ? "activated" : "deactivated")}.";
+            _selected.Clear();
+            await LoadData();
+        }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "bulk-updating targets"); }
+        finally { _busy = false; }
+    }
+
+    private async Task BulkDelete()
+    {
+        if (_busy || _selected.Count == 0) return;
+        if (!await JS.InvokeAsync<bool>("confirm", $"Delete {_selected.Count} SNMP target(s)? This cannot be undone."))
+            return;
+        _busy = true;
+        var failed = 0;
+        try
+        {
+            foreach (var id in _selected.ToList())
+            {
+                try { await SnmpTargetService.DeleteAsync(id); }
+                catch { failed++; }
+            }
+            if (failed > 0) _error = $"{failed} target(s) could not be deleted (still in use).";
+            else _success = $"{_selected.Count} target(s) deleted.";
+            _selected.Clear();
+            await LoadData();
+        }
+        finally { _busy = false; }
+    }
 
     protected override async Task OnInitializedAsync() => await LoadData();
 

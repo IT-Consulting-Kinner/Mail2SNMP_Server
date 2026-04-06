@@ -54,7 +54,7 @@ else
                     <td>
                         @if (entry.Status == DeadLetterStatus.Pending)
                         {
-                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => Retry(entry.Id)" disabled="@_busy">Retry</button>
+                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => Retry(entry.Id)" disabled="@_busy"><i class="bi bi-arrow-clockwise"></i> Retry</button>
                         }
                     </td>
                 </tr>

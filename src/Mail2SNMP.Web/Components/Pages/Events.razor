@@ -66,17 +66,17 @@ else
                     <td>
                         @if (evt.State == EventState.New || evt.State == EventState.Notified)
                         {
-                            <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => Acknowledge(evt.Id)" disabled="@_busy">Ack</button>
+                            <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => Acknowledge(evt.Id)" disabled="@_busy"><i class="bi bi-check"></i> Ack</button>
                         }
                         @if (evt.State != EventState.Resolved && evt.State != EventState.Suppressed)
                         {
-                            <button class="btn btn-outline-success btn-sm me-1" @onclick="() => Resolve(evt.Id)" disabled="@_busy">Resolve</button>
+                            <button class="btn btn-outline-success btn-sm me-1" @onclick="() => Resolve(evt.Id)" disabled="@_busy"><i class="bi bi-check2-all"></i> Resolve</button>
                         }
                         @if (evt.State != EventState.Suppressed)
                         {
-                            <button class="btn btn-outline-secondary btn-sm me-1" @onclick="() => Suppress(evt.Id)" disabled="@_busy">Suppress</button>
+                            <button class="btn btn-outline-secondary btn-sm me-1" @onclick="() => Suppress(evt.Id)" disabled="@_busy"><i class="bi bi-volume-mute"></i> Suppress</button>
                         }
-                        <button class="btn btn-outline-info btn-sm" @onclick="() => Replay(evt.Id)" disabled="@_busy">Replay</button>
+                        <button class="btn btn-outline-info btn-sm" @onclick="() => Replay(evt.Id)" disabled="@_busy"><i class="bi bi-arrow-clockwise"></i> Replay</button>
                     </td>
                 </tr>
             }

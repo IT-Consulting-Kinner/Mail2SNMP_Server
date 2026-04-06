@@ -134,6 +134,77 @@ else
         </div>
     }
 
+    @* L5: Trend charts — events per day (last 14 days) and top jobs by event count *@
+    <div class="row mt-4 g-3">
+        <div class="col-md-7">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-3 text-muted">Events — Last 14 days</h6>
+                    @if (_eventsTrend.Count == 0 || _eventsTrend.All(p => p.Count == 0))
+                    {
+                        <p class="text-muted small mb-0">No events recorded yet.</p>
+                    }
+                    else
+                    {
+                        var maxCount = Math.Max(1, _eventsTrend.Max(p => p.Count));
+                        <svg width="100%" height="120" viewBox="0 0 700 120" preserveAspectRatio="none" class="d-block">
+                            @{
+                                var barWidth = 700.0 / _eventsTrend.Count;
+                                var idx = 0;
+                            }
+                            @foreach (var p in _eventsTrend)
+                            {
+                                var h = (int)((p.Count / (double)maxCount) * 100);
+                                var x = idx * barWidth + 2;
+                                var y = 110 - h;
+                                <rect x="@x.ToString(System.Globalization.CultureInfo.InvariantCulture)" y="@y" width="@((barWidth - 4).ToString(System.Globalization.CultureInfo.InvariantCulture))" height="@h" fill="#0d6efd" rx="2">
+                                    <title>@p.Date.ToString("yyyy-MM-dd"): @p.Count events</title>
+                                </rect>
+                                idx++;
+                            }
+                            <line x1="0" y1="110" x2="700" y2="110" stroke="#dee2e6" stroke-width="1" />
+                        </svg>
+                        <div class="d-flex justify-content-between small text-muted mt-1">
+                            <span>@_eventsTrend.First().Date.ToString("MM-dd")</span>
+                            <span>Total: @_eventsTrend.Sum(p => p.Count) events</span>
+                            <span>@_eventsTrend.Last().Date.ToString("MM-dd")</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-md-5">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-3 text-muted">Top jobs by events (30 days)</h6>
+                    @if (_topJobs.Count == 0)
+                    {
+                        <p class="text-muted small mb-0">No job activity yet.</p>
+                    }
+                    else
+                    {
+                        var maxJobCount = Math.Max(1, _topJobs.Max(j => j.Count));
+                        <ul class="list-unstyled mb-0">
+                            @foreach (var j in _topJobs)
+                            {
+                                var pct = (int)((j.Count / (double)maxJobCount) * 100);
+                                <li class="mb-2">
+                                    <div class="d-flex justify-content-between small">
+                                        <span class="text-truncate me-2">@j.Name</span>
+                                        <strong>@j.Count</strong>
+                                    </div>
+                                    <div class="progress" style="height: 6px;">
+                                        <div class="progress-bar bg-info" style="width: @pct%;"></div>
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="row mt-4">
         <div class="col-12">
             <div class="card border-0 shadow-sm">
@@ -176,6 +247,11 @@ else
     private bool _updateAvailable = false;
     private LicenseInfo? _license;
     private double _channelOverflow;
+    private List<EventTrendPoint> _eventsTrend = new();
+    private List<TopJobItem> _topJobs = new();
+
+    private record EventTrendPoint(DateTime Date, int Count);
+    private record TopJobItem(string Name, int Count);
 
     protected override async Task OnInitializedAsync()
     {
@@ -205,6 +281,29 @@ else
             // M3: read the in-process Prometheus counter so the dashboard surfaces
             // saturation events even when the Prometheus endpoint is disabled.
             _channelOverflow = Mail2SnmpMetrics.ChannelOverflow.Value;
+
+            // L5: build the 14-day events-per-day trend and top-5 jobs by event count.
+            var since14 = DateTime.UtcNow.Date.AddDays(-13);
+            var since30 = DateTime.UtcNow.Date.AddDays(-29);
+            var byDay = await Db.Events.AsNoTracking()
+                .Where(e => e.CreatedUtc >= since14)
+                .GroupBy(e => e.CreatedUtc.Date)
+                .Select(g => new { Date = g.Key, Count = g.Count() })
+                .ToListAsync();
+            _eventsTrend = Enumerable.Range(0, 14)
+                .Select(i => since14.AddDays(i))
+                .Select(d => new EventTrendPoint(d, byDay.FirstOrDefault(x => x.Date == d)?.Count ?? 0))
+                .ToList();
+            _topJobs = (await Db.Events.AsNoTracking()
+                .Where(e => e.CreatedUtc >= since30)
+                .Include(e => e.Job)
+                .GroupBy(e => new { e.JobId, JobName = e.Job.Name })
+                .Select(g => new { g.Key.JobName, Count = g.Count() })
+                .OrderByDescending(g => g.Count)
+                .Take(5)
+                .ToListAsync())
+                .Select(x => new TopJobItem(x.JobName ?? "(deleted)", x.Count))
+                .ToList();
 
             // Load version + update info
             _currentVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";

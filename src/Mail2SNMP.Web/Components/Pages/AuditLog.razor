@@ -40,18 +40,19 @@ else
 {
     var totalPages = (int)Math.Ceiling(_events.Count / (double)_pageSize);
     var paged = _events.Skip((_currentPage - 1) * _pageSize).Take(_pageSize).ToList();
+@* L2: Mobile-responsive table — secondary columns are hidden below md/lg breakpoints. *@
 <div class="table-responsive">
     <table class="table table-striped table-hover table-sm">
         <thead class="table-dark">
             <tr>
                 <th>Timestamp</th>
-                <th>Actor</th>
-                <th>Type</th>
+                <th class="d-none d-md-table-cell">Actor</th>
+                <th class="d-none d-lg-table-cell">Type</th>
                 <th>Action</th>
-                <th>Target</th>
+                <th class="d-none d-md-table-cell">Target</th>
                 <th>Result</th>
-                <th>Details</th>
-                <th>IP</th>
+                <th class="d-none d-xl-table-cell">Details</th>
+                <th class="d-none d-lg-table-cell">IP</th>
             </tr>
         </thead>
         <tbody>
@@ -59,13 +60,13 @@ else
             {
                 <tr>
                     <td class="small">@evt.TimestampUtc.ToString("g")</td>
-                    <td class="small">@evt.ActorId</td>
-                    <td><span class="badge bg-secondary">@evt.ActorType</span></td>
+                    <td class="small d-none d-md-table-cell">@evt.ActorId</td>
+                    <td class="d-none d-lg-table-cell"><span class="badge bg-secondary">@evt.ActorType</span></td>
                     <td>@evt.Action</td>
-                    <td class="small">@evt.TargetType @evt.TargetId</td>
+                    <td class="small d-none d-md-table-cell">@evt.TargetType @evt.TargetId</td>
                     <td><span class="badge bg-@GetResultColor(evt.Result)">@evt.Result</span></td>
-                    <td class="small text-truncate" style="max-width: 200px;" title="@evt.Details">@evt.Details</td>
-                    <td class="small">@evt.IpAddress</td>
+                    <td class="small text-truncate d-none d-xl-table-cell" style="max-width: 200px;" title="@evt.Details">@evt.Details</td>
+                    <td class="small d-none d-lg-table-cell">@evt.IpAddress</td>
                 </tr>
             }
         </tbody>

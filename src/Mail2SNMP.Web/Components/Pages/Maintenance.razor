@@ -9,7 +9,7 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Maintenance Windows</h3>
-    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add Window</button>
+    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm"><i class="bi bi-plus-circle"></i> Add Window</button>
 </div>
 
 <AutoDismissAlert Type="danger"  @bind-Message="_error" />
@@ -58,7 +58,7 @@ else
                         <p class="mb-1 text-muted small">Created by @w.CreatedBy on @w.CreatedUtc.ToString("g")</p>
                     </div>
                     <div class="card-footer text-end">
-                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(w.Id)" disabled="@_busy">Delete</button>
+                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(w.Id)" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
                     </div>
                 </div>
             </div>
