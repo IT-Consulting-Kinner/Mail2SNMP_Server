@@ -116,22 +116,32 @@ public class MailboxService : IMailboxService
 
             await client.ConnectAsync(mailbox.Host, mailbox.Port, sslOptions, timeoutCts.Token);
 
-            // Decrypt password
+            // Decrypt password — fail fast on master key mismatch.
+            // Falling back to the encrypted ciphertext as the password would silently
+            // mask a real configuration problem (wrong master key) as an "auth failed"
+            // and is a security/diagnostics anti-pattern.
             string password;
             try
             {
                 password = _credentialEncryptor.Decrypt(mailbox.EncryptedPassword);
             }
-            catch
+            catch (Exception decryptEx)
             {
-                _logger.LogWarning("Failed to decrypt password for mailbox {Name}. Testing with raw value.", mailbox.Name);
-                password = mailbox.EncryptedPassword;
+                _logger.LogError(decryptEx,
+                    "Failed to decrypt password for mailbox {Name}. " +
+                    "This indicates a master key mismatch. Re-enter the password via the Web UI " +
+                    "or restore the correct master.key file.", mailbox.Name);
+                throw new InvalidOperationException(
+                    $"Cannot test mailbox '{mailbox.Name}': stored password could not be decrypted. " +
+                    "The master key may have changed. Re-enter the password and try again.",
+                    decryptEx);
             }
 
             await client.AuthenticateAsync(mailbox.Username, password, timeoutCts.Token);
 
             _logger.LogInformation("IMAP connection test successful for mailbox {Name}", mailbox.Name);
-            await client.DisconnectAsync(true, CancellationToken.None);
+            // Pass the caller's token so a service shutdown does not block on disconnect.
+            await client.DisconnectAsync(true, ct);
             return true;
         }
         catch (Exception ex)

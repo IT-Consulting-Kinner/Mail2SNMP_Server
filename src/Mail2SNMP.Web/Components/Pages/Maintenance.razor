@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @inject IMaintenanceWindowService MaintenanceService
 @inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JS
 
 <PageTitle>Maintenance Windows - Mail2SNMP</PageTitle>
 
@@ -177,6 +178,10 @@
 
     private async Task Delete(int id)
     {
+        var w = _windows?.FirstOrDefault(x => x.Id == id);
+        var name = w?.Name ?? $"#{id}";
+        if (!await JS.InvokeAsync<bool>("confirm", $"Delete maintenance window '{name}'? This cannot be undone."))
+            return;
         try { await MaintenanceService.DeleteAsync(id); _success = "Window deleted."; await LoadData(); }
         catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
     }

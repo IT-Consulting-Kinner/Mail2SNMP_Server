@@ -243,7 +243,29 @@ public class SnmpNotificationChannel : INotificationChannel
         IPAddress ipAddress;
         if (!IPAddress.TryParse(target.Host, out ipAddress!))
         {
-            ipAddress = Dns.GetHostEntry(target.Host).AddressList[0];
+            // Resolve hostname → IPv4 (preferred) or first available address.
+            // Wrapped in try/catch so that an unreachable DNS server or invalid hostname
+            // does not crash the worker thread; the failure is logged and the trap is dropped.
+            try
+            {
+                var addresses = Dns.GetHostAddresses(target.Host);
+                if (addresses.Length == 0)
+                {
+                    _logger.LogWarning(
+                        "DNS lookup for SNMP target {Name} ({Host}) returned no addresses. Trap dropped.",
+                        target.Name, target.Host);
+                    return Task.CompletedTask;
+                }
+                ipAddress = addresses.FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                            ?? addresses[0];
+            }
+            catch (Exception dnsEx)
+            {
+                _logger.LogError(dnsEx,
+                    "DNS lookup failed for SNMP target {Name} ({Host}): {Message}. Trap dropped.",
+                    target.Name, target.Host, dnsEx.Message);
+                return Task.CompletedTask;
+            }
         }
         var endpoint = new IPEndPoint(ipAddress, target.Port);
 

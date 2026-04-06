@@ -1,6 +1,7 @@
 @page "/webhook-targets"
 @rendermode InteractiveServer
 @inject IWebhookTargetService WebhookTargetService
+@inject IJSRuntime JS
 
 <PageTitle>Webhook Targets - Mail2SNMP</PageTitle>
 
@@ -188,6 +189,10 @@
 
     private async Task Delete(int id)
     {
+        var t = _targets?.FirstOrDefault(x => x.Id == id);
+        var name = t?.Name ?? $"#{id}";
+        if (!await JS.InvokeAsync<bool>("confirm", $"Delete webhook target '{name}'? This cannot be undone."))
+            return;
         try { await WebhookTargetService.DeleteAsync(id); _success = "Target deleted."; await LoadData(); }
         catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
     }

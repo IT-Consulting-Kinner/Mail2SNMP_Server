@@ -104,6 +104,9 @@ public class JobService : IJobService
 
     /// <summary>
     /// Updates the SNMP and Webhook target assignments for a job, replacing existing entries.
+    /// The remove + insert sequence runs inside an explicit transaction so a partial failure
+    /// (e.g. constraint violation on the second collection) cannot leave the job with a mix
+    /// of old and new assignments.
     /// </summary>
     public async Task UpdateTargetAssignmentsAsync(int jobId, IEnumerable<int> snmpTargetIds, IEnumerable<int> webhookTargetIds, CancellationToken ct = default)
     {
@@ -113,17 +116,35 @@ public class JobService : IJobService
             .FirstOrDefaultAsync(j => j.Id == jobId, ct)
             ?? throw new KeyNotFoundException($"Job {jobId} not found.");
 
-        // Replace SNMP target assignments
-        _db.JobSnmpTargets.RemoveRange(job.JobSnmpTargets);
-        foreach (var targetId in snmpTargetIds.Distinct())
-            _db.JobSnmpTargets.Add(new JobSnmpTarget { JobId = jobId, SnmpTargetId = targetId });
+        var ownTransaction = _db.Database.CurrentTransaction == null;
+        var transaction = ownTransaction
+            ? await _db.Database.BeginTransactionAsync(ct)
+            : null;
+        try
+        {
+            // Replace SNMP target assignments
+            _db.JobSnmpTargets.RemoveRange(job.JobSnmpTargets);
+            foreach (var targetId in snmpTargetIds.Distinct())
+                _db.JobSnmpTargets.Add(new JobSnmpTarget { JobId = jobId, SnmpTargetId = targetId });
 
-        // Replace Webhook target assignments
-        _db.JobWebhookTargets.RemoveRange(job.JobWebhookTargets);
-        foreach (var targetId in webhookTargetIds.Distinct())
-            _db.JobWebhookTargets.Add(new JobWebhookTarget { JobId = jobId, WebhookTargetId = targetId });
+            // Replace Webhook target assignments
+            _db.JobWebhookTargets.RemoveRange(job.JobWebhookTargets);
+            foreach (var targetId in webhookTargetIds.Distinct())
+                _db.JobWebhookTargets.Add(new JobWebhookTarget { JobId = jobId, WebhookTargetId = targetId });
 
-        await _db.SaveChangesAsync(ct);
+            await _db.SaveChangesAsync(ct);
+            if (transaction != null) await transaction.CommitAsync(ct);
+        }
+        catch
+        {
+            if (transaction != null) await transaction.RollbackAsync(ct);
+            throw;
+        }
+        finally
+        {
+            if (transaction != null) await transaction.DisposeAsync();
+        }
+
         await _audit.LogAsync(Models.Enums.ActorType.User, "system", "Job.TargetsUpdated", "Job", jobId.ToString(), ct: ct);
     }
 

@@ -1,6 +1,7 @@
 @page "/rules"
 @rendermode InteractiveServer
 @inject IRuleService RuleService
+@inject IJSRuntime JS
 
 <PageTitle>Rules - Mail2SNMP</PageTitle>
 
@@ -196,6 +197,10 @@
 
     private async Task Delete(int id)
     {
+        var rule = _rules?.FirstOrDefault(r => r.Id == id);
+        var name = rule?.Name ?? $"#{id}";
+        if (!await JS.InvokeAsync<bool>("confirm", $"Delete rule '{name}'? This cannot be undone."))
+            return;
         try { await RuleService.DeleteAsync(id); _success = "Rule deleted."; await LoadData(); }
         catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
     }

@@ -49,12 +49,18 @@ public class DeadLetterRetryService : BackgroundService
             "DeadLetterRetryService starting (Instance={InstanceId}, Poll={PollInterval}s, Batch={BatchSize}, MaxAttempts={MaxAttempts})",
             _instanceId, _pollInterval.TotalSeconds, _batchSize, _maxAttempts);
 
-        // Dead letter auto-retry is an Enterprise-only feature
-        var licenseProvider = _scopeFactory.CreateScope().ServiceProvider.GetRequiredService<Mail2SNMP.Core.Interfaces.ILicenseProvider>();
-        if (!licenseProvider.IsEnterprise())
+        // Dead letter auto-retry is an Enterprise-only feature.
+        // Wrap the scope in a `using` block so it (and any scoped services it resolves) is
+        // disposed immediately after the license check.
+        using (var licenseScope = _scopeFactory.CreateScope())
         {
-            _logger.LogInformation("DeadLetterRetryService disabled — auto-retry requires an Enterprise license");
-            return;
+            var licenseProvider = licenseScope.ServiceProvider
+                .GetRequiredService<Mail2SNMP.Core.Interfaces.ILicenseProvider>();
+            if (!licenseProvider.IsEnterprise())
+            {
+                _logger.LogInformation("DeadLetterRetryService disabled — auto-retry requires an Enterprise license");
+                return;
+            }
         }
 
         // Initial delay to let other services start

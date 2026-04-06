@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @inject IScheduleService ScheduleService
 @inject IJobService JobService
+@inject IJSRuntime JS
 
 <PageTitle>Schedules - Mail2SNMP</PageTitle>
 
@@ -177,6 +178,10 @@
 
     private async Task Delete(int id)
     {
+        var s = _schedules?.FirstOrDefault(x => x.Id == id);
+        var name = s?.Name ?? $"#{id}";
+        if (!await JS.InvokeAsync<bool>("confirm", $"Delete schedule '{name}'? This cannot be undone."))
+            return;
         try { await ScheduleService.DeleteAsync(id); _success = "Schedule deleted."; await LoadData(); }
         catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
     }

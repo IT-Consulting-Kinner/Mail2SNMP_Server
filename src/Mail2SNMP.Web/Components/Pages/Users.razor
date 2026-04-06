@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @inject UserManager<AppUser> UserManager
 @inject RoleManager<IdentityRole> RoleManager
+@inject IJSRuntime JS
 
 <PageTitle>Users - Mail2SNMP</PageTitle>
 
@@ -250,6 +251,9 @@
 
     private async Task Delete(AppUser user)
     {
+        if (!await JS.InvokeAsync<bool>("confirm",
+                $"Delete user '{user.Email ?? user.UserName}'? This cannot be undone."))
+            return;
         try
         {
             await UserManager.DeleteAsync(user);

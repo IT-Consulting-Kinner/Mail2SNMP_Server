@@ -5,6 +5,7 @@
 @inject IRuleService RuleService
 @inject ISnmpTargetService SnmpTargetService
 @inject IWebhookTargetService WebhookTargetService
+@inject IJSRuntime JS
 
 <PageTitle>Jobs - Mail2SNMP</PageTitle>
 
@@ -336,6 +337,10 @@
 
     private async Task Delete(int id)
     {
+        var job = _jobs?.FirstOrDefault(j => j.Id == id);
+        var name = job?.Name ?? $"#{id}";
+        if (!await JS.InvokeAsync<bool>("confirm", $"Delete job '{name}'? This cannot be undone."))
+            return;
         try { await JobService.DeleteAsync(id); _success = "Job deleted."; await LoadData(); }
         catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
     }

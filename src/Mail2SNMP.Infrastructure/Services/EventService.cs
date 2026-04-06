@@ -95,22 +95,48 @@ public class EventService : IEventService
         }
 
         // Event deduplication: if we have a MessageId, check the EventDedup table.
-        // If a dedup entry exists within the job's window, increment HitCount on the existing event instead.
+        // If a dedup entry exists within the job's window, increment HitCount on the
+        // existing event instead. The dedup-check + increment must run inside a
+        // serializable transaction to avoid lost updates under concurrent ingestion.
         if (!string.IsNullOrEmpty(evt.MessageId))
         {
             var dedupKey = EventDedupKeyGenerator.Generate(evt.MessageId, evt.JobId);
+            return await CreateOrIncrementAsync(evt, dedupKey, ct);
+        }
+
+        // No MessageId — use fallback dedup key based on subject + sender + time
+        var fallbackKey = EventDedupKeyGenerator.GenerateFallback(evt.Subject, evt.MailFrom, evt.CreatedUtc, evt.JobId);
+        return await CreateOrIncrementAsync(evt, fallbackKey, ct);
+    }
+
+    /// <summary>
+    /// Atomically checks for an existing dedup entry for <paramref name="dedupKey"/>;
+    /// if found, increments the existing event's HitCount; otherwise inserts the new
+    /// event together with its dedup entry. Wrapped in a Serializable transaction so
+    /// concurrent producers can never both pass the dedup check and create duplicate
+    /// events for the same key.
+    /// </summary>
+    private async Task<Event> CreateOrIncrementAsync(Event evt, string dedupKey, CancellationToken ct)
+    {
+        // Use the existing transaction if the caller already started one (e.g. integration tests)
+        var ownTransaction = _db.Database.CurrentTransaction == null;
+        var transaction = ownTransaction
+            ? await _db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct)
+            : null;
+        try
+        {
             var existingDedup = await _db.EventDedups
                 .FirstOrDefaultAsync(d => d.DedupKeyHash == dedupKey && d.JobId == evt.JobId, ct);
 
             if (existingDedup != null)
             {
-                // Duplicate detected — update the existing event's HitCount
                 var existingEvent = await _db.Events.FindAsync(new object[] { existingDedup.EventId }, ct);
                 if (existingEvent != null)
                 {
                     existingEvent.HitCount++;
                     existingDedup.LastSeenUtc = DateTime.UtcNow;
                     await _db.SaveChangesAsync(ct);
+                    if (transaction != null) await transaction.CommitAsync(ct);
                     _logger.LogInformation(
                         "Duplicate event suppressed for Job {JobId}. Existing Event {EventId} HitCount={HitCount}",
                         evt.JobId, existingEvent.Id, existingEvent.HitCount);
@@ -118,7 +144,7 @@ public class EventService : IEventService
                 }
             }
 
-            // No duplicate: create the event and the dedup entry in a single save
+            // No duplicate — insert the event and dedup entry together.
             _db.Events.Add(evt);
             _db.EventDedups.Add(new EventDedup
             {
@@ -129,40 +155,18 @@ public class EventService : IEventService
                 LastSeenUtc = DateTime.UtcNow
             });
             await _db.SaveChangesAsync(ct);
+            if (transaction != null) await transaction.CommitAsync(ct);
             return evt;
         }
-
-        // No MessageId — use fallback dedup key based on subject + sender + time
-        var fallbackKey = EventDedupKeyGenerator.GenerateFallback(evt.Subject, evt.MailFrom, evt.CreatedUtc, evt.JobId);
-        var existingFallback = await _db.EventDedups
-            .FirstOrDefaultAsync(d => d.DedupKeyHash == fallbackKey && d.JobId == evt.JobId, ct);
-
-        if (existingFallback != null)
+        catch
         {
-            var existingEvent = await _db.Events.FindAsync(new object[] { existingFallback.EventId }, ct);
-            if (existingEvent != null)
-            {
-                existingEvent.HitCount++;
-                existingFallback.LastSeenUtc = DateTime.UtcNow;
-                await _db.SaveChangesAsync(ct);
-                _logger.LogInformation(
-                    "Duplicate event suppressed (fallback key) for Job {JobId}. Existing Event {EventId} HitCount={HitCount}",
-                    evt.JobId, existingEvent.Id, existingEvent.HitCount);
-                return existingEvent;
-            }
+            if (transaction != null) await transaction.RollbackAsync(ct);
+            throw;
         }
-
-        _db.Events.Add(evt);
-        _db.EventDedups.Add(new EventDedup
+        finally
         {
-            DedupKeyHash = fallbackKey,
-            JobId = evt.JobId,
-            Event = evt,
-            FirstSeenUtc = DateTime.UtcNow,
-            LastSeenUtc = DateTime.UtcNow
-        });
-        await _db.SaveChangesAsync(ct);
-        return evt;
+            if (transaction != null) await transaction.DisposeAsync();
+        }
     }
 
     /// <summary>
