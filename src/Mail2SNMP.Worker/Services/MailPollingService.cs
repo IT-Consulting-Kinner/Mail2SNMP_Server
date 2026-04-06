@@ -64,7 +64,10 @@ public class MailPollingService : BackgroundService
         for (int i = 0; i < _consumerCount; i++)
         {
             var consumerId = i;
-            consumers[i] = Task.Run(() => ConsumeAsync(consumerId, stoppingToken), stoppingToken);
+            // Wrap each consumer in a self-restarting supervisor so that an unhandled
+            // exception in the read loop or scope creation does not silently kill the
+            // consumer (which would degrade throughput without any warning).
+            consumers[i] = Task.Run(() => SuperviseConsumerAsync(consumerId, stoppingToken), stoppingToken);
         }
 
         try
@@ -74,6 +77,46 @@ public class MailPollingService : BackgroundService
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
             _logger.LogInformation("MailPollingService shutting down gracefully");
+        }
+    }
+
+    /// <summary>
+    /// Supervisor that restarts a crashed consumer task with a short backoff. Without this
+    /// wrapper, an unhandled exception thrown outside the inner try/catch (e.g. during
+    /// channel read or scope creation) would silently kill the consumer until the entire
+    /// service shuts down.
+    /// </summary>
+    private async Task SuperviseConsumerAsync(int consumerId, CancellationToken ct)
+    {
+        var backoff = TimeSpan.FromSeconds(2);
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await ConsumeAsync(consumerId, ct);
+                // Normal exit (channel closed or cancellation) — stop restarting.
+                return;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Consumer {ConsumerId} crashed with an unhandled exception. Restarting in {Backoff}s.",
+                    consumerId, backoff.TotalSeconds);
+                try
+                {
+                    await Task.Delay(backoff, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                // Mild exponential backoff capped at 30 s.
+                backoff = TimeSpan.FromSeconds(Math.Min(backoff.TotalSeconds * 2, 30));
+            }
         }
     }
 
@@ -384,7 +427,18 @@ public class MailPollingService : BackgroundService
             mailbox.LastError = null;
             await mailboxService.UpdateAsync(mailbox, ct);
 
-            await imapClient.DisconnectAsync(true, CancellationToken.None);
+            // Use a short timeout token derived from the caller so a hanging IMAP server
+            // cannot block the worker shutdown indefinitely.
+            using var disconnectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            disconnectCts.CancelAfter(TimeSpan.FromSeconds(5));
+            try
+            {
+                await imapClient.DisconnectAsync(true, disconnectCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("IMAP disconnect timed out for mailbox {Name}; closing socket.", mailbox.Name);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

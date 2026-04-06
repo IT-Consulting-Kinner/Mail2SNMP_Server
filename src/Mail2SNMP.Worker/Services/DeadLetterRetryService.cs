@@ -124,8 +124,9 @@ public class DeadLetterRetryService : BackgroundService
             .Take(_batchSize)
             .ToListAsync(ct);
 
-        var httpClient = httpClientFactory.CreateClient();
-        httpClient.Timeout = TimeSpan.FromSeconds(30);
+        // Use the named client registered in DI; the factory manages handler lifetime,
+        // so we never create raw HttpClient instances per iteration (avoids socket exhaustion).
+        var httpClient = httpClientFactory.CreateClient("DeadLetterRetry");
 
         foreach (var entry in entries)
         {

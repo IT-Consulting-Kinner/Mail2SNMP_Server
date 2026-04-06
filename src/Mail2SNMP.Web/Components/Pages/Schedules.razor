@@ -20,6 +20,16 @@
     <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
 }
 
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"><span class="visually-hidden">Loading...</span></div></div>
+}
+else if (_schedules == null || _schedules.Count == 0)
+{
+    <div class="alert alert-info">No schedules configured yet. Click <strong>Add Schedule</strong> to create one.</div>
+}
+else
+{
 <div class="table-responsive">
     <table class="table table-striped table-hover">
         <thead class="table-dark">
@@ -34,28 +44,26 @@
             </tr>
         </thead>
         <tbody>
-            @if (_schedules != null)
+            @foreach (var s in _schedules)
             {
-                @foreach (var s in _schedules)
-                {
-                    <tr>
-                        <td>@s.Name</td>
-                        <td>@(s.Job?.Name ?? $"ID:{s.JobId}")</td>
-                        <td>@s.IntervalMinutes</td>
-                        <td><span class="badge @(s.IsActive ? "bg-success" : "bg-secondary")">@(s.IsActive ? "Active" : "Inactive")</span></td>
-                        <td>@(s.NextRunUtc?.ToString("g") ?? "N/A")</td>
-                        <td>@(s.LastRunUtc?.ToString("g") ?? "Never")</td>
-                        <td>
-                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(s)">Edit</button>
-                            <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => Toggle(s.Id)">Toggle</button>
-                            <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(s.Id)">Delete</button>
-                        </td>
-                    </tr>
-                }
+                <tr>
+                    <td>@s.Name</td>
+                    <td>@(s.Job?.Name ?? $"ID:{s.JobId}")</td>
+                    <td>@s.IntervalMinutes</td>
+                    <td><span class="badge @(s.IsActive ? "bg-success" : "bg-secondary")">@(s.IsActive ? "Active" : "Inactive")</span></td>
+                    <td>@(s.NextRunUtc?.ToString("g") ?? "N/A")</td>
+                    <td>@(s.LastRunUtc?.ToString("g") ?? "Never")</td>
+                    <td>
+                        <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(s)" disabled="@_busy">Edit</button>
+                        <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => Toggle(s.Id)" disabled="@_busy">Toggle</button>
+                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(s.Id)" disabled="@_busy">Delete</button>
+                    </td>
+                </tr>
             }
         </tbody>
     </table>
 </div>
+}
 
 @if (_showForm)
 {
@@ -114,17 +122,21 @@
     private ScheduleForm _form = new();
     private string? _error;
     private string? _success;
+    private bool _loading = true;
+    private bool _busy;
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
     private async Task LoadData()
     {
+        _loading = true;
         try
         {
             _schedules = await ScheduleService.GetAllAsync();
             _jobs = await JobService.GetAllAsync();
         }
         catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+        finally { _loading = false; }
     }
 
     private void ShowAddForm()
@@ -145,6 +157,8 @@
 
     private async Task Save()
     {
+        if (_busy) return;
+        _busy = true;
         try
         {
             if (_editing != null)
@@ -168,22 +182,29 @@
             await LoadData();
         }
         catch (Exception ex) { _error = $"Failed to save: {ex.Message}"; }
+        finally { _busy = false; }
     }
 
     private async Task Toggle(int id)
     {
+        if (_busy) return;
+        _busy = true;
         try { await ScheduleService.ToggleAsync(id); _success = "Schedule toggled."; await LoadData(); }
         catch (Exception ex) { _error = $"Failed to toggle: {ex.Message}"; }
+        finally { _busy = false; }
     }
 
     private async Task Delete(int id)
     {
+        if (_busy) return;
         var s = _schedules?.FirstOrDefault(x => x.Id == id);
         var name = s?.Name ?? $"#{id}";
         if (!await JS.InvokeAsync<bool>("confirm", $"Delete schedule '{name}'? This cannot be undone."))
             return;
+        _busy = true;
         try { await ScheduleService.DeleteAsync(id); _success = "Schedule deleted."; await LoadData(); }
         catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
+        finally { _busy = false; }
     }
 
     private class ScheduleForm

@@ -38,7 +38,7 @@ public class ScheduleService : IScheduleService
     {
         _db.Schedules.Add(schedule);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.User, "system", "Schedule.Created", "Schedule", schedule.Id.ToString(), ct: ct);
+        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Schedule.Created", "Schedule", schedule.Id.ToString(), ct: ct);
         return schedule;
     }
 
@@ -54,6 +54,7 @@ public class ScheduleService : IScheduleService
         else
             _db.Schedules.Update(schedule);
         await _db.SaveChangesAsync(ct);
+        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Schedule.Updated", "Schedule", schedule.Id.ToString(), ct: ct);
         return schedule;
     }
 
@@ -66,7 +67,7 @@ public class ScheduleService : IScheduleService
             ?? throw new KeyNotFoundException($"Schedule {id} not found.");
         _db.Schedules.Remove(schedule);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.User, "system", "Schedule.Deleted", "Schedule", id.ToString(), ct: ct);
+        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Schedule.Deleted", "Schedule", id.ToString(), ct: ct);
     }
 
     /// <summary>
@@ -78,7 +79,7 @@ public class ScheduleService : IScheduleService
             ?? throw new KeyNotFoundException($"Schedule {id} not found.");
         schedule.IsActive = !schedule.IsActive;
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.User, "system",
+        await _audit.LogAsync(Models.Enums.ActorType.System, "system",
             schedule.IsActive ? "Schedule.Activated" : "Schedule.Deactivated",
             "Schedule", id.ToString(), ct: ct);
     }

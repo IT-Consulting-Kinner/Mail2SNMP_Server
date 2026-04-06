@@ -39,7 +39,7 @@ public class RuleService : IRuleService
     {
         _db.Rules.Add(rule);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.User, "system", "Rule.Created", "Rule", rule.Id.ToString(), ct: ct);
+        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Rule.Created", "Rule", rule.Id.ToString(), ct: ct);
         return rule;
     }
 
@@ -55,7 +55,7 @@ public class RuleService : IRuleService
         else
             _db.Rules.Update(rule);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.User, "system", "Rule.Updated", "Rule", rule.Id.ToString(), ct: ct);
+        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Rule.Updated", "Rule", rule.Id.ToString(), ct: ct);
         return rule;
     }
 
@@ -74,6 +74,6 @@ public class RuleService : IRuleService
 
         _db.Rules.Remove(rule);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.User, "system", "Rule.Deleted", "Rule", id.ToString(), ct: ct);
+        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Rule.Deleted", "Rule", id.ToString(), ct: ct);
     }
 }

@@ -50,7 +50,7 @@ public class SnmpTargetService : ISnmpTargetService
     {
         _db.SnmpTargets.Add(target);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.User, "system", "SnmpTarget.Created", "SnmpTarget", target.Id.ToString(), ct: ct);
+        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "SnmpTarget.Created", "SnmpTarget", target.Id.ToString(), ct: ct);
         return target;
     }
 
@@ -66,7 +66,7 @@ public class SnmpTargetService : ISnmpTargetService
         else
             _db.SnmpTargets.Update(target);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.User, "system", "SnmpTarget.Updated", "SnmpTarget", target.Id.ToString(), ct: ct);
+        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "SnmpTarget.Updated", "SnmpTarget", target.Id.ToString(), ct: ct);
         return target;
     }
 
@@ -87,7 +87,7 @@ public class SnmpTargetService : ISnmpTargetService
 
         _db.SnmpTargets.Remove(target);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.User, "system", "SnmpTarget.Deleted", "SnmpTarget", id.ToString(), ct: ct);
+        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "SnmpTarget.Deleted", "SnmpTarget", id.ToString(), ct: ct);
     }
 
     /// <summary>

@@ -64,7 +64,7 @@ public class JobService : IJobService
 
         _db.Jobs.Add(job);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.User, "system", "Job.Created", "Job", job.Id.ToString(), ct: ct);
+        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Job.Created", "Job", job.Id.ToString(), ct: ct);
         return job;
     }
 
@@ -80,7 +80,7 @@ public class JobService : IJobService
         else
             _db.Jobs.Update(job);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.User, "system", "Job.Updated", "Job", job.Id.ToString(), ct: ct);
+        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Job.Updated", "Job", job.Id.ToString(), ct: ct);
         return job;
     }
 
@@ -99,7 +99,7 @@ public class JobService : IJobService
 
         _db.Jobs.Remove(job);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.User, "system", "Job.Deleted", "Job", id.ToString(), ct: ct);
+        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Job.Deleted", "Job", id.ToString(), ct: ct);
     }
 
     /// <summary>
@@ -145,7 +145,7 @@ public class JobService : IJobService
             if (transaction != null) await transaction.DisposeAsync();
         }
 
-        await _audit.LogAsync(Models.Enums.ActorType.User, "system", "Job.TargetsUpdated", "Job", jobId.ToString(), ct: ct);
+        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Job.TargetsUpdated", "Job", jobId.ToString(), ct: ct);
     }
 
     /// <summary>

@@ -306,7 +306,7 @@ public class EventService : IEventService
                 await webhookChannel.SendToWebhookTargetAsync(context, jwt.WebhookTarget, ct);
         }
 
-        await _audit.LogAsync(ActorType.User, "system", "Event.Replayed", "Event", id.ToString(), ct: ct);
+        await _audit.LogAsync(ActorType.System, "system", "Event.Replayed", "Event", id.ToString(), ct: ct);
         _logger.LogInformation("Event {EventId} replayed successfully", id);
     }
 }

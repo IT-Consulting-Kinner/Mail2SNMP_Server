@@ -72,6 +72,12 @@ public static class WorkerDependencyInjection
         services.Configure<KeepAliveSettings>(configuration.GetSection("KeepAlive"));
         services.Configure<UpdateCheckSettings>(configuration.GetSection("UpdateCheck"));
 
+        // Named HttpClients for worker background services. Using named clients allows
+        // the IHttpClientFactory to manage handler lifetimes correctly and avoids the
+        // anti-pattern of creating one HttpClient per call (socket exhaustion).
+        services.AddHttpClient("DeadLetterRetry", c => c.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient("UpdateCheck", c => c.Timeout = TimeSpan.FromSeconds(15));
+
         // Hosted services
         services.AddHostedService<HeartbeatService>();
         services.AddHostedService<ScheduleSyncService>();

@@ -26,6 +26,16 @@
     </div>
 }
 
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"><span class="visually-hidden">Loading...</span></div></div>
+}
+else if (_mailboxes == null || _mailboxes.Count == 0)
+{
+    <div class="alert alert-info">No mailboxes configured yet. Click <strong>Add Mailbox</strong> to create one.</div>
+}
+else
+{
 <div class="table-responsive">
     <table class="table table-striped table-hover">
         <thead class="table-dark">
@@ -42,30 +52,28 @@
             </tr>
         </thead>
         <tbody>
-            @if (_mailboxes != null)
+            @foreach (var mb in _mailboxes)
             {
-                @foreach (var mb in _mailboxes)
-                {
-                    <tr>
-                        <td>@mb.Name</td>
-                        <td>@mb.Host</td>
-                        <td>@mb.Port</td>
-                        <td>@mb.Username</td>
-                        <td>@mb.Folder</td>
-                        <td><span class="badge @(mb.UseSsl ? "bg-success" : "bg-secondary")">@(mb.UseSsl ? "Yes" : "No")</span></td>
-                        <td><span class="badge @(mb.IsActive ? "bg-success" : "bg-secondary")">@(mb.IsActive ? "Active" : "Inactive")</span></td>
-                        <td>@(mb.LastCheckedUtc?.ToString("g") ?? "Never")</td>
-                        <td>
-                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(mb)">Edit</button>
-                            <button class="btn btn-outline-info btn-sm me-1" @onclick="() => TestConnection(mb.Id)">Test</button>
-                            <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(mb.Id)">Delete</button>
-                        </td>
-                    </tr>
-                }
+                <tr>
+                    <td>@mb.Name</td>
+                    <td>@mb.Host</td>
+                    <td>@mb.Port</td>
+                    <td>@mb.Username</td>
+                    <td>@mb.Folder</td>
+                    <td><span class="badge @(mb.UseSsl ? "bg-success" : "bg-secondary")">@(mb.UseSsl ? "Yes" : "No")</span></td>
+                    <td><span class="badge @(mb.IsActive ? "bg-success" : "bg-secondary")">@(mb.IsActive ? "Active" : "Inactive")</span></td>
+                    <td>@(mb.LastCheckedUtc?.ToString("g") ?? "Never")</td>
+                    <td>
+                        <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(mb)" disabled="@_busy">Edit</button>
+                        <button class="btn btn-outline-info btn-sm me-1" @onclick="() => TestConnection(mb.Id)" disabled="@_busy">Test</button>
+                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(mb.Id)" disabled="@_busy">Delete</button>
+                    </td>
+                </tr>
             }
         </tbody>
     </table>
 </div>
+}
 
 @if (_showForm)
 {
@@ -138,6 +146,8 @@
     private MailboxForm _form = new();
     private string? _error;
     private string? _success;
+    private bool _loading = true;
+    private bool _busy;
 
     protected override async Task OnInitializedAsync()
     {
@@ -146,6 +156,7 @@
 
     private async Task LoadData()
     {
+        _loading = true;
         try
         {
             _mailboxes = await MailboxService.GetAllAsync();
@@ -153,6 +164,10 @@
         catch (Exception ex)
         {
             _error = $"Failed to load mailboxes: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
         }
     }
 
@@ -188,6 +203,8 @@
 
     private async Task SaveMailbox()
     {
+        if (_busy) return;
+        _busy = true;
         try
         {
             if (_editing != null)
@@ -228,31 +245,44 @@
         {
             _error = $"Failed to save mailbox: {ex.Message}";
         }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private async Task TestConnection(int id)
     {
+        if (_busy) return;
+        _busy = true;
         _success = null;
         _error = null;
         try
         {
             var result = await MailboxService.TestConnectionAsync(id);
-            _success = result ? "Connection successful!" : "Connection failed.";
-            if (!result) _error = "Connection test failed.";
+            if (result)
+                _success = "Connection successful!";
+            else
+                _error = "Connection test failed. Check the worker log for details.";
         }
         catch (Exception ex)
         {
-            _success = null;
             _error = $"Test failed: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 
     private async Task Delete(int id)
     {
+        if (_busy) return;
         var mb = _mailboxes?.FirstOrDefault(m => m.Id == id);
         var name = mb?.Name ?? $"#{id}";
         if (!await JS.InvokeAsync<bool>("confirm", $"Delete mailbox '{name}'? This cannot be undone."))
             return;
+        _busy = true;
         try
         {
             await MailboxService.DeleteAsync(id);
@@ -262,6 +292,10 @@
         catch (Exception ex)
         {
             _error = $"Failed to delete: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 

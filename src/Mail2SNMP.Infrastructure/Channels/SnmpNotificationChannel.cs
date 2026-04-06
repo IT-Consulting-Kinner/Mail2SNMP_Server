@@ -156,15 +156,35 @@ public class SnmpNotificationChannel : INotificationChannel
     }
 
     /// <summary>
-    /// Sends an mail2SNMPEventConfirmedNotification trap (eventID only) to all active SNMP targets.
-    /// Triggered when an event is acknowledged.
+    /// Sends an mail2SNMPEventConfirmedNotification trap (eventID only) to the SNMP targets
+    /// that are assigned to the originating job. Falls back to all active targets only when
+    /// the event cannot be resolved (defensive). Triggered when an event is acknowledged.
     /// </summary>
     public async Task SendEventConfirmedAsync(long eventId, CancellationToken ct = default)
     {
-        var targets = await _db.SnmpTargets.Where(t => t.IsActive).ToListAsync(ct);
-        var trapOid = new ObjectIdentifier(EventConfirmedOid);
+        // Resolve the assigned SNMP targets via the event's job. We deliberately do NOT
+        // broadcast to every active target — only the targets the job was configured for
+        // should be informed about an acknowledge for that event.
+        var assignedTargets = await _db.Events
+            .Where(e => e.Id == eventId)
+            .SelectMany(e => e.Job.JobSnmpTargets)
+            .Where(jst => jst.SnmpTarget.IsActive)
+            .Select(jst => jst.SnmpTarget)
+            .ToListAsync(ct);
 
-        foreach (var target in targets)
+        if (assignedTargets.Count == 0)
+        {
+            _logger.LogWarning(
+                "EventConfirmed trap for event {EventId}: no assigned SNMP targets found. " +
+                "The acknowledge is recorded in the database but no monitoring system was notified.",
+                eventId);
+            return;
+        }
+
+        var trapOid = new ObjectIdentifier(EventConfirmedOid);
+        var failed = 0;
+
+        foreach (var target in assignedTargets)
         {
             try
             {
@@ -177,8 +197,21 @@ public class SnmpNotificationChannel : INotificationChannel
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to send EventConfirmed trap to {Host}:{Port}", target.Host, target.Port);
+                failed++;
+                // H14: SNMP traps have no retry/dead-letter mechanism — log loudly so the
+                // operator can manually re-acknowledge or investigate.
+                _logger.LogError(ex,
+                    "EventConfirmed trap delivery FAILED to {Host}:{Port} for event {EventId}. " +
+                    "This trap will NOT be retried automatically. Verify connectivity to the monitoring system.",
+                    target.Host, target.Port, eventId);
             }
+        }
+
+        if (failed > 0)
+        {
+            _logger.LogWarning(
+                "EventConfirmed for event {EventId}: {Failed} of {Total} target(s) failed.",
+                eventId, failed, assignedTargets.Count);
         }
     }
 

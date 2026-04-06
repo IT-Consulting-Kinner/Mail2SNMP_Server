@@ -19,6 +19,16 @@
     <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
 }
 
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"><span class="visually-hidden">Loading...</span></div></div>
+}
+else if (_targets == null || _targets.Count == 0)
+{
+    <div class="alert alert-info">No SNMP targets configured yet. Click <strong>Add Target</strong> to create one.</div>
+}
+else
+{
 <div class="table-responsive">
     <table class="table table-striped table-hover">
         <thead class="table-dark">
@@ -33,37 +43,35 @@
             </tr>
         </thead>
         <tbody>
-            @if (_targets != null)
+            @foreach (var t in _targets)
             {
-                @foreach (var t in _targets)
-                {
-                    <tr>
-                        <td>@t.Name</td>
-                        <td>@t.Host</td>
-                        <td>@t.Port</td>
-                        <td>@t.Version</td>
-                        <td>
-                            @if (t.Version == SnmpVersion.V3)
-                            {
-                                <span>@t.SecurityName (@t.AuthProtocol/@t.PrivProtocol)</span>
-                            }
-                            else
-                            {
-                                <span>@(string.IsNullOrEmpty(t.CommunityString) ? "N/A" : "***")</span>
-                            }
-                        </td>
-                        <td><span class="badge @(t.IsActive ? "bg-success" : "bg-secondary")">@(t.IsActive ? "Active" : "Inactive")</span></td>
-                        <td>
-                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(t)">Edit</button>
-                            <button class="btn btn-outline-info btn-sm me-1" @onclick="() => Test(t.Id)">Test</button>
-                            <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(t.Id)">Delete</button>
-                        </td>
-                    </tr>
-                }
+                <tr>
+                    <td>@t.Name</td>
+                    <td>@t.Host</td>
+                    <td>@t.Port</td>
+                    <td>@t.Version</td>
+                    <td>
+                        @if (t.Version == SnmpVersion.V3)
+                        {
+                            <span>@t.SecurityName (@t.AuthProtocol/@t.PrivProtocol)</span>
+                        }
+                        else
+                        {
+                            <span>@(string.IsNullOrEmpty(t.CommunityString) ? "N/A" : "***")</span>
+                        }
+                    </td>
+                    <td><span class="badge @(t.IsActive ? "bg-success" : "bg-secondary")">@(t.IsActive ? "Active" : "Inactive")</span></td>
+                    <td>
+                        <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(t)" disabled="@_busy">Edit</button>
+                        <button class="btn btn-outline-info btn-sm me-1" @onclick="() => Test(t.Id)" disabled="@_busy">Test</button>
+                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(t.Id)" disabled="@_busy">Delete</button>
+                    </td>
+                </tr>
             }
         </tbody>
     </table>
 </div>
+}
 
 @if (_showForm)
 {
@@ -187,13 +195,17 @@
     private SnmpTargetForm _form = new();
     private string? _error;
     private string? _success;
+    private bool _loading = true;
+    private bool _busy;
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
     private async Task LoadData()
     {
+        _loading = true;
         try { _targets = await SnmpTargetService.GetAllAsync(); }
         catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+        finally { _loading = false; }
     }
 
     private void ShowAddForm()
@@ -222,6 +234,8 @@
 
     private async Task Save()
     {
+        if (_busy) return;
+        _busy = true;
         try
         {
             if (_editing != null)
@@ -257,27 +271,36 @@
             await LoadData();
         }
         catch (Exception ex) { _error = $"Failed to save: {ex.Message}"; }
+        finally { _busy = false; }
     }
 
     private async Task Test(int id)
     {
+        if (_busy) return;
+        _busy = true;
+        _success = null;
+        _error = null;
         try
         {
             var result = await SnmpTargetService.TestAsync(id);
-            _success = result ? "SNMP test successful!" : "SNMP test failed.";
-            if (!result) _error = "SNMP test failed.";
+            if (result) _success = "SNMP test successful!";
+            else _error = "SNMP test failed. Check the worker log for details.";
         }
         catch (Exception ex) { _error = $"Test failed: {ex.Message}"; }
+        finally { _busy = false; }
     }
 
     private async Task Delete(int id)
     {
+        if (_busy) return;
         var t = _targets?.FirstOrDefault(x => x.Id == id);
         var name = t?.Name ?? $"#{id}";
         if (!await JS.InvokeAsync<bool>("confirm", $"Delete SNMP target '{name}'? This cannot be undone."))
             return;
+        _busy = true;
         try { await SnmpTargetService.DeleteAsync(id); _success = "Target deleted."; await LoadData(); }
         catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
+        finally { _busy = false; }
     }
 
     private class SnmpTargetForm : IValidatableObject

@@ -1,4 +1,5 @@
 @page "/maintenance"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "Operator")]
 @rendermode InteractiveServer
 @inject IMaintenanceWindowService MaintenanceService
 @inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
@@ -20,6 +21,12 @@
     <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
 }
 
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"><span class="visually-hidden">Loading...</span></div></div>
+}
+else
+{
 <div class="row g-3">
     @if (_windows != null)
     {
@@ -57,7 +64,7 @@
                         <p class="mb-1 text-muted small">Created by @w.CreatedBy on @w.CreatedUtc.ToString("g")</p>
                     </div>
                     <div class="card-footer text-end">
-                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(w.Id)">Delete</button>
+                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(w.Id)" disabled="@_busy">Delete</button>
                     </div>
                 </div>
             </div>
@@ -65,10 +72,11 @@
 
         @if (_windows.Count == 0)
         {
-            <div class="col-12 text-center text-muted py-4">No maintenance windows configured.</div>
+            <div class="col-12"><div class="alert alert-info">No maintenance windows configured. Click <strong>Add Window</strong> to schedule one.</div></div>
         }
     }
 </div>
+}
 
 @if (_showForm)
 {
@@ -124,6 +132,8 @@
     private string? _error;
     private string? _success;
     private string _currentUserName = "system";
+    private bool _loading = true;
+    private bool _busy;
 
     protected override async Task OnInitializedAsync()
     {
@@ -138,8 +148,10 @@
 
     private async Task LoadData()
     {
+        _loading = true;
         try { _windows = await MaintenanceService.GetAllAsync(); }
         catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+        finally { _loading = false; }
     }
 
     private void ShowAddForm()
@@ -157,6 +169,8 @@
 
     private async Task Save()
     {
+        if (_busy) return;
+        _busy = true;
         try
         {
             var window = new MaintenanceWindow
@@ -174,16 +188,20 @@
             await LoadData();
         }
         catch (Exception ex) { _error = $"Failed to save: {ex.Message}"; }
+        finally { _busy = false; }
     }
 
     private async Task Delete(int id)
     {
+        if (_busy) return;
         var w = _windows?.FirstOrDefault(x => x.Id == id);
         var name = w?.Name ?? $"#{id}";
         if (!await JS.InvokeAsync<bool>("confirm", $"Delete maintenance window '{name}'? This cannot be undone."))
             return;
+        _busy = true;
         try { await MaintenanceService.DeleteAsync(id); _success = "Window deleted."; await LoadData(); }
         catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
+        finally { _busy = false; }
     }
 
     private class MaintenanceForm

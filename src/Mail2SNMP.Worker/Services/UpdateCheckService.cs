@@ -20,18 +20,19 @@ namespace Mail2SNMP.Worker.Services;
 /// </summary>
 public class UpdateCheckService : BackgroundService
 {
-    private static readonly HttpClient HttpClient = new() { Timeout = TimeSpan.FromSeconds(15) };
-
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly UpdateCheckSettings _settings;
     private readonly ILogger<UpdateCheckService> _logger;
 
     public UpdateCheckService(
         IServiceScopeFactory scopeFactory,
+        IHttpClientFactory httpClientFactory,
         IOptions<UpdateCheckSettings> settings,
         ILogger<UpdateCheckService> logger)
     {
         _scopeFactory = scopeFactory;
+        _httpClientFactory = httpClientFactory;
         _settings = settings.Value;
         _logger = logger;
     }
@@ -63,20 +64,25 @@ public class UpdateCheckService : BackgroundService
             {
                 await Task.Delay(interval, stoppingToken);
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException)
             {
                 break;
             }
         }
     }
 
+    /// <summary>
+    /// Performs a single update-feed check, persists the latest version info, and
+    /// emits an SNMP Update notification trap when applicable based on the configured TrapMode.
+    /// </summary>
     private async Task CheckOnceAsync(CancellationToken ct)
     {
         var current = GetCurrentVersion();
         UpdateFeedResponse? feed;
         try
         {
-            var json = await HttpClient.GetStringAsync(_settings.Url, ct);
+            var http = _httpClientFactory.CreateClient("UpdateCheck");
+            var json = await http.GetStringAsync(_settings.Url, ct);
             feed = JsonSerializer.Deserialize<UpdateFeedResponse>(json);
         }
         catch (Exception ex)

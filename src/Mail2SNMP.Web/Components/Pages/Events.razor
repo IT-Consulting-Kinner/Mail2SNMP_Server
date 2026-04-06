@@ -28,6 +28,18 @@
     </div>
 </div>
 
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"><span class="visually-hidden">Loading...</span></div></div>
+}
+else if (_events == null || _events.Count == 0)
+{
+    <div class="alert alert-info">No events found@(_stateFilter.HasValue ? $" with state '{_stateFilter}'." : ".")</div>
+}
+else
+{
+    var totalPages = (int)Math.Ceiling(_events.Count / (double)_pageSize);
+    var paged = _events.Skip((_currentPage - 1) * _pageSize).Take(_pageSize).ToList();
 <div class="table-responsive">
     <table class="table table-striped table-hover">
         <thead class="table-dark">
@@ -45,54 +57,77 @@
             </tr>
         </thead>
         <tbody>
-            @if (_events != null)
+            @foreach (var evt in paged)
             {
-                @foreach (var evt in _events)
-                {
-                    <tr>
-                        <td>@evt.Id</td>
-                        <td>@(evt.Job?.Name ?? $"ID:{evt.JobId}")</td>
-                        <td><span class="badge bg-@GetStateColor(evt.State)">@evt.State</span></td>
-                        <td><span class="badge bg-@GetSeverityColor(evt.Severity)">@evt.Severity</span></td>
-                        <td class="small">@evt.MailFrom</td>
-                        <td class="small">@evt.Subject</td>
-                        <td class="small">@evt.RuleName</td>
-                        <td>@evt.HitCount</td>
-                        <td class="small">@evt.CreatedUtc.ToString("g")</td>
-                        <td>
-                            @if (evt.State == EventState.New || evt.State == EventState.Notified)
-                            {
-                                <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => Acknowledge(evt.Id)">Ack</button>
-                            }
-                            @if (evt.State != EventState.Resolved && evt.State != EventState.Suppressed)
-                            {
-                                <button class="btn btn-outline-success btn-sm me-1" @onclick="() => Resolve(evt.Id)">Resolve</button>
-                            }
-                            @if (evt.State != EventState.Suppressed)
-                            {
-                                <button class="btn btn-outline-secondary btn-sm me-1" @onclick="() => Suppress(evt.Id)">Suppress</button>
-                            }
-                            <button class="btn btn-outline-info btn-sm" @onclick="() => Replay(evt.Id)">Replay</button>
-                        </td>
-                    </tr>
-                }
+                <tr>
+                    <td>@evt.Id</td>
+                    <td>@(evt.Job?.Name ?? $"ID:{evt.JobId}")</td>
+                    <td><span class="badge bg-@GetStateColor(evt.State)">@evt.State</span></td>
+                    <td><span class="badge bg-@GetSeverityColor(evt.Severity)">@evt.Severity</span></td>
+                    <td class="small">@evt.MailFrom</td>
+                    <td class="small">@evt.Subject</td>
+                    <td class="small">@evt.RuleName</td>
+                    <td>@evt.HitCount</td>
+                    <td class="small">@evt.CreatedUtc.ToString("g")</td>
+                    <td>
+                        @if (evt.State == EventState.New || evt.State == EventState.Notified)
+                        {
+                            <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => Acknowledge(evt.Id)" disabled="@_busy">Ack</button>
+                        }
+                        @if (evt.State != EventState.Resolved && evt.State != EventState.Suppressed)
+                        {
+                            <button class="btn btn-outline-success btn-sm me-1" @onclick="() => Resolve(evt.Id)" disabled="@_busy">Resolve</button>
+                        }
+                        @if (evt.State != EventState.Suppressed)
+                        {
+                            <button class="btn btn-outline-secondary btn-sm me-1" @onclick="() => Suppress(evt.Id)" disabled="@_busy">Suppress</button>
+                        }
+                        <button class="btn btn-outline-info btn-sm" @onclick="() => Replay(evt.Id)" disabled="@_busy">Replay</button>
+                    </td>
+                </tr>
             }
         </tbody>
     </table>
 </div>
+<nav class="d-flex justify-content-between align-items-center">
+    <small class="text-muted">Showing @((_currentPage - 1) * _pageSize + 1)–@Math.Min(_currentPage * _pageSize, _events.Count) of @_events.Count events</small>
+    @if (totalPages > 1)
+    {
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item @(_currentPage == 1 ? "disabled" : "")">
+                <button class="page-link" @onclick="() => _currentPage = Math.Max(1, _currentPage - 1)">Previous</button>
+            </li>
+            <li class="page-item disabled"><span class="page-link">Page @_currentPage of @totalPages</span></li>
+            <li class="page-item @(_currentPage == totalPages ? "disabled" : "")">
+                <button class="page-link" @onclick="() => _currentPage = Math.Min(totalPages, _currentPage + 1)">Next</button>
+            </li>
+        </ul>
+    }
+</nav>
+}
 
 @code {
     private IReadOnlyList<Event>? _events;
     private EventState? _stateFilter;
     private string? _error;
     private string? _success;
+    private bool _loading = true;
+    private bool _busy;
+    private const int _pageSize = 50;
+    private int _currentPage = 1;
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
     private async Task LoadData()
     {
-        try { _events = await EventService.GetAllAsync(_stateFilter); }
+        _loading = true;
+        try
+        {
+            _events = await EventService.GetAllAsync(_stateFilter);
+            _currentPage = 1;
+        }
         catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+        finally { _loading = false; }
     }
 
     private async Task FilterByState(EventState? state)
@@ -103,26 +138,38 @@
 
     private async Task Acknowledge(long id)
     {
+        if (_busy) return;
+        _busy = true;
         try { await EventService.AcknowledgeAsync(id, "web-user"); _success = "Event acknowledged."; await LoadData(); }
         catch (Exception ex) { _error = $"Failed: {ex.Message}"; }
+        finally { _busy = false; }
     }
 
     private async Task Resolve(long id)
     {
+        if (_busy) return;
+        _busy = true;
         try { await EventService.ResolveAsync(id, "web-user"); _success = "Event resolved."; await LoadData(); }
         catch (Exception ex) { _error = $"Failed: {ex.Message}"; }
+        finally { _busy = false; }
     }
 
     private async Task Suppress(long id)
     {
+        if (_busy) return;
+        _busy = true;
         try { await EventService.SuppressAsync(id); _success = "Event suppressed."; await LoadData(); }
         catch (Exception ex) { _error = $"Failed: {ex.Message}"; }
+        finally { _busy = false; }
     }
 
     private async Task Replay(long id)
     {
+        if (_busy) return;
+        _busy = true;
         try { await EventService.ReplayAsync(id); _success = "Event replayed."; await LoadData(); }
         catch (Exception ex) { _error = $"Failed: {ex.Message}"; }
+        finally { _busy = false; }
     }
 
     private static string GetStateColor(EventState s) => s switch
