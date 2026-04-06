@@ -6,7 +6,46 @@ Swagger UI is available at `/swagger` during development.
 
 ## Authentication
 
-Requests must include a valid session cookie (`Mail2SNMP.Auth`). Authenticate via the Web UI or the Identity endpoints.
+There are two supported mechanisms; either is sufficient for any endpoint.
+
+### 1. Session cookie
+
+Browser/UI clients sign in via the Web UI and reuse the resulting `Mail2SNMP.Auth` cookie when calling the API on the same host.
+
+### 2. API Key (`X-Api-Key` header)
+
+Recommended for automation scripts, CI pipelines, and external integrations.
+
+**Create a key:** Web UI → *Settings → API Keys → New key*. The plaintext is shown **exactly once** — copy it immediately. Only the SHA-256 hash is stored.
+
+**Use a key:**
+
+```bash
+curl -H "X-Api-Key: m2s_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+     https://mail2snmp.example.com/api/v1/mailboxes
+```
+
+**Scopes → roles** mapping:
+
+| Scope on key | Effective role(s)              | Can call                     |
+|--------------|--------------------------------|------------------------------|
+| `read`       | ReadOnly                       | GET endpoints                |
+| `write`      | ReadOnly + Operator            | + test, acknowledge, retry   |
+| `admin`      | ReadOnly + Operator + Admin    | All endpoints                |
+
+Multiple scopes can be combined comma-separated, e.g. `read,write`.
+
+**Lifecycle:**
+
+- Keys can be set to expire on a specific date or remain valid indefinitely.
+- Disabling or deleting a key takes effect immediately on the next request.
+- `LastUsedUtc` is updated at most once per 5 minutes per key (debounced) so high-volume callers do not create write storms.
+
+**Security notes:**
+
+- API-key endpoints are subject to the same `Operator`/`Admin` policies as cookie-authenticated requests.
+- Keys are only as secure as where they are stored — treat them like passwords.
+- For deployments behind a reverse proxy, configure `ForwardedHeaders:KnownProxies` so the rate limiter sees the real client IP.
 
 ## Roles
 

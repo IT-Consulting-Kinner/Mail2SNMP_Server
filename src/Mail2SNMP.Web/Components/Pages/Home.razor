@@ -140,7 +140,9 @@ else
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-3 text-muted">Events — Last 14 days</h6>
-                    @if (_eventsTrend.Count == 0 || _eventsTrend.All(p => p.Count == 0))
+                    @* I6: defensive null guard — _eventsTrend is initialised in OnInitializedAsync,
+                       but a render before init completes (transient state) would NRE without this. *@
+                    @if (_eventsTrend == null || _eventsTrend.Count == 0 || _eventsTrend.All(p => p.Count == 0))
                     {
                         <p class="text-muted small mb-0">No events recorded yet.</p>
                     }

@@ -81,6 +81,16 @@ public class MailPollingService : BackgroundService
         }
     }
 
+    // I5: BackgroundService base does not dispose us, so the kernel SemaphoreSlim
+    // handle would leak across hot-reloads or test restarts. Override Dispose to
+    // release it explicitly. Safe to call multiple times — SemaphoreSlim.Dispose
+    // is idempotent.
+    public override void Dispose()
+    {
+        _imapSemaphore.Dispose();
+        base.Dispose();
+    }
+
     /// <summary>
     /// Supervisor that restarts a crashed consumer task with a short backoff. Without this
     /// wrapper, an unhandled exception thrown outside the inner try/catch (e.g. during

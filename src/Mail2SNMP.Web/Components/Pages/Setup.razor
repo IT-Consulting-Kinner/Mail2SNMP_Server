@@ -56,6 +56,9 @@
                         <InputText type="password" class="form-control" maxlength="256"
                                    @bind-Value="_form.Password" @bind-Value:event="oninput" />
                         <ValidationMessage For="@(() => _form.Password)" class="text-danger small" />
+                        @* I11: visible hint so users pasting a >256-char password are not confused
+                           by the silent truncation enforced by maxlength. *@
+                        <small class="text-muted">Maximum length is 256 characters.</small>
                         @* L3: live password strength indicator *@
                         @{
                             var hasMinLen = _form.Password.Length >= 12;

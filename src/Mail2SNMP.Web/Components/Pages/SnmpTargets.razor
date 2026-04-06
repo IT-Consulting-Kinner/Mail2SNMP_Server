@@ -179,6 +179,10 @@ else
                                     <label class="form-label">Auth Password</label>
                                     <InputText class="form-control" type="password" @bind-Value="_form.AuthPassword" />
                                     <ValidationMessage For="@(() => _form.AuthPassword)" class="text-danger small" />
+                                    @if (_editing != null)
+                                    {
+                                        <small class="text-muted">Leave blank to keep the existing password.</small>
+                                    }
                                 </div>
                             </div>
                             <div class="row mb-3">
@@ -196,6 +200,10 @@ else
                                     <label class="form-label">Privacy Password</label>
                                     <InputText class="form-control" type="password" @bind-Value="_form.PrivPassword" />
                                     <ValidationMessage For="@(() => _form.PrivPassword)" class="text-danger small" />
+                                    @if (_editing != null)
+                                    {
+                                        <small class="text-muted">Leave blank to keep the existing password.</small>
+                                    }
                                 </div>
                             </div>
                             <div class="mb-3">
@@ -335,7 +343,14 @@ else
         _showForm = true;
     }
 
-    private void CloseForm() { _showForm = false; _editing = null; }
+    // I3: Reset form state on close so V3 password fields and other inputs cannot
+    // leak across edit dialogs.
+    private void CloseForm()
+    {
+        _showForm = false;
+        _editing = null;
+        _form = new SnmpTargetForm { Port = 162, Version = SnmpVersion.V2c, MaxTrapsPerMinute = 100, IsActive = true, SendKeepAlive = false, IsEditing = false };
+    }
 
     private async Task Save()
     {

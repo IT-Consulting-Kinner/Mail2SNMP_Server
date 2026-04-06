@@ -13,11 +13,17 @@
 
 <div class="mb-3">
     <label class="form-label me-2">Filter by State:</label>
-    <div class="btn-group" role="group">
-        <button class="btn btn-sm @(_stateFilter == null ? "btn-primary" : "btn-outline-primary")" @onclick="() => FilterByState(null)">All</button>
+    @* I12: aria-pressed announces the active filter to screen readers; the visual
+       primary/outline-primary contrast alone is invisible to assistive tech. *@
+    <div class="btn-group" role="group" aria-label="Filter events by state">
+        <button class="btn btn-sm @(_stateFilter == null ? "btn-primary" : "btn-outline-primary")"
+                aria-pressed="@(_stateFilter == null ? "true" : "false")"
+                @onclick="() => FilterByState(null)">All</button>
         @foreach (var state in Enum.GetValues<EventState>())
         {
-            <button class="btn btn-sm @(_stateFilter == state ? "btn-primary" : "btn-outline-primary")" @onclick="() => FilterByState(state)">@state</button>
+            <button class="btn btn-sm @(_stateFilter == state ? "btn-primary" : "btn-outline-primary")"
+                    aria-pressed="@(_stateFilter == state ? "true" : "false")"
+                    @onclick="() => FilterByState(state)">@state</button>
         }
     </div>
 </div>

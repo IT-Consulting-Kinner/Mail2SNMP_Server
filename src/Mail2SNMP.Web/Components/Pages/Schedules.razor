@@ -228,10 +228,12 @@ else
         finally { _loading = false; }
     }
 
+    // I4: Always start with a fully fresh form. The previous version omitted
+    // Name/JobId, so stale values from a prior edit/add could carry over.
     private void ShowAddForm()
     {
         _editing = null;
-        _form = new ScheduleForm { IntervalMinutes = 5, IsActive = true };
+        _form = new ScheduleForm { Name = string.Empty, JobId = 0, IntervalMinutes = 5, IsActive = true };
         _showForm = true;
     }
 
@@ -242,7 +244,13 @@ else
         _showForm = true;
     }
 
-    private void CloseForm() { _showForm = false; _editing = null; }
+    // I4: Reset form on close so the next add/edit starts fresh.
+    private void CloseForm()
+    {
+        _showForm = false;
+        _editing = null;
+        _form = new ScheduleForm { Name = string.Empty, JobId = 0, IntervalMinutes = 5, IsActive = true };
+    }
 
     private async Task Save()
     {

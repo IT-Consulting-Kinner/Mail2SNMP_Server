@@ -78,6 +78,15 @@ try
         .PostConfigure<Microsoft.AspNetCore.Authentication.Cookies.ITicketStore>((options, store) =>
             options.SessionStore = store);
 
+    // I1: Register the X-Api-Key authentication scheme on the REST API.
+    // Without this the entire G6 API-key feature was unreachable for API clients
+    // (the handler is registered in the Web project but the API has its own DI
+    // container, so it must be wired up explicitly here too).
+    builder.Services.AddAuthentication()
+        .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions,
+                   Mail2SNMP.Infrastructure.Security.ApiKeyAuthenticationHandler>(
+            Mail2SNMP.Infrastructure.Security.ApiKeyAuthenticationHandler.SchemeName, _ => { });
+
     // ── OIDC/SSO (Enterprise only) ─────────────────────────────────────────
     var oidcSettings = builder.Configuration.GetSection("Oidc").Get<OidcSettings>();
     if (oidcSettings is not null && !string.IsNullOrEmpty(oidcSettings.Authority) && !string.IsNullOrEmpty(oidcSettings.ClientId))
@@ -160,10 +169,27 @@ try
     }
 
     // ── Authorization Policies ─────────────────────────────────────────────
+    // I1: Allow either the cookie scheme (browser/OIDC) OR the X-Api-Key scheme
+    // to satisfy the policies. Without AddAuthenticationSchemes the policies
+    // would only accept the default scheme and ApiKey requests would 401.
+    var authSchemes = new[]
+    {
+        IdentityConstants.ApplicationScheme,
+        Mail2SNMP.Infrastructure.Security.ApiKeyAuthenticationHandler.SchemeName
+    };
     builder.Services.AddAuthorizationBuilder()
-        .AddPolicy("Admin", policy => policy.RequireRole("Admin"))
-        .AddPolicy("Operator", policy => policy.RequireRole("Admin", "Operator"))
-        .AddPolicy("ReadOnly", policy => policy.RequireRole("Admin", "Operator", "ReadOnly"));
+        .AddPolicy("Admin", policy => policy
+            .AddAuthenticationSchemes(authSchemes)
+            .RequireAuthenticatedUser()
+            .RequireRole("Admin"))
+        .AddPolicy("Operator", policy => policy
+            .AddAuthenticationSchemes(authSchemes)
+            .RequireAuthenticatedUser()
+            .RequireRole("Admin", "Operator"))
+        .AddPolicy("ReadOnly", policy => policy
+            .AddAuthenticationSchemes(authSchemes)
+            .RequireAuthenticatedUser()
+            .RequireRole("Admin", "Operator", "ReadOnly"));
 
     // ── CORS ───────────────────────────────────────────────────────────────
     builder.Services.AddCors(options =>

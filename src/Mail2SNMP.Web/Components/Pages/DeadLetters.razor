@@ -54,7 +54,18 @@ else
                     <td>
                         @if (entry.Status == DeadLetterStatus.Pending)
                         {
-                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => Retry(entry.Id)" disabled="@_busy"><i class="bi bi-arrow-clockwise"></i> Retry</button>
+                            @* I8: show a spinner while a retry is in flight so the user has visible feedback. *@
+                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => Retry(entry.Id)" disabled="@_busy">
+                                @if (_busy)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                }
+                                Retry
+                            </button>
                         }
                     </td>
                 </tr>

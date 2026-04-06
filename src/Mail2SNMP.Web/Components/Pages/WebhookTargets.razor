@@ -133,6 +133,10 @@ else
                             <InputText class="form-control" type="password" @bind-Value="_form.Secret" />
                             @if (_editing != null)
                             {
+                                <small class="text-muted">Leave blank to keep the existing secret.</small>
+                            }
+                            @if (_editing != null)
+                            {
                                 <small class="text-muted">Leave blank to keep existing secret</small>
                             }
                         </div>
@@ -243,15 +247,27 @@ else
     private void ShowEditForm(WebhookTarget t)
     {
         _editing = t;
+        // I2: Always start the edit form with an empty Secret. The plaintext is
+        // never read back from the database (only the encrypted version is stored),
+        // so the field MUST be empty and the UI must say "leave blank to keep" —
+        // otherwise users carry over a stale Secret value from a previous edit.
         _form = new WebhookForm
         {
             Name = t.Name, Url = t.Url, Headers = t.Headers,
-            PayloadTemplate = t.PayloadTemplate, MaxRequestsPerMinute = t.MaxRequestsPerMinute, IsActive = t.IsActive
+            PayloadTemplate = t.PayloadTemplate, MaxRequestsPerMinute = t.MaxRequestsPerMinute, IsActive = t.IsActive,
+            Secret = null
         };
         _showForm = true;
     }
 
-    private void CloseForm() { _showForm = false; _editing = null; }
+    // I2: Reset all form state on close so a stale Secret/Url cannot leak into
+    // the next add or edit dialog.
+    private void CloseForm()
+    {
+        _showForm = false;
+        _editing = null;
+        _form = new WebhookForm { MaxRequestsPerMinute = 60, IsActive = true };
+    }
 
     private async Task Save()
     {
