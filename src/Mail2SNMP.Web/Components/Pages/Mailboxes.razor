@@ -298,10 +298,13 @@ else
         _showForm = true;
     }
 
+    // J2: Reset form state on close so the password field (and every other input)
+    // cannot leak from a previous edit into the next add or edit dialog.
     private void CloseForm()
     {
         _showForm = false;
         _editing = null;
+        _form = new MailboxForm { Port = 993, UseSsl = true, Folder = "INBOX", IsActive = true, IsEditing = false };
     }
 
     private async Task SaveMailbox()

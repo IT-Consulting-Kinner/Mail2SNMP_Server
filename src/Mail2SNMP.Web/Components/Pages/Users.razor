@@ -213,7 +213,14 @@ else
         _showForm = true;
     }
 
-    private void CloseForm() { _showForm = false; _editingUser = null; }
+    // J4: Reset the form on close so the password field (and role/email) cannot
+    // leak across add/edit dialogs.
+    private void CloseForm()
+    {
+        _showForm = false;
+        _editingUser = null;
+        _form = new UserForm { IsActive = true, Role = "ReadOnly", IsEditing = false };
+    }
 
     private async Task SaveUser()
     {

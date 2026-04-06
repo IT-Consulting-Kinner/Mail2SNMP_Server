@@ -40,11 +40,13 @@ else
                         }
                         else if (isPast)
                         {
-                            <span class="badge bg-light text-dark">Past</span>
+                            @* J9: bg-secondary auto-adapts to dark mode via Bootstrap 5.3 CSS vars,
+                               unlike bg-light text-dark which produced poor contrast in dark theme. *@
+                            <span class="badge bg-secondary">Past</span>
                         }
                         else if (isFuture)
                         {
-                            <span class="badge bg-light text-dark">Scheduled</span>
+                            <span class="badge bg-info text-dark">Scheduled</span>
                         }
                     </div>
                     <div class="card-body">

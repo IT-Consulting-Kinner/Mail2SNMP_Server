@@ -28,6 +28,11 @@ public class LicenseValidator : ILicenseProvider
         Features = Array.Empty<string>()
     };
 
+    /// <param name="logger">Logger used for license loading diagnostics and warnings.</param>
+    /// <param name="licenseFilePath">
+    /// Optional explicit path to <c>license.key</c>. When <c>null</c>, the validator
+    /// searches the standard locations (next to the executable, then ProgramData).
+    /// </param>
     /// <param name="allowUnsigned">
     /// When true, unsigned (alg=none) license tokens are accepted with a warning.
     /// Must only be true in Development environments. Production MUST use RS256 (v5.8).

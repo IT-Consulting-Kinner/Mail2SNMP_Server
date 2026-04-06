@@ -87,4 +87,32 @@ public class AesGcmCredentialEncryptor : ICredentialEncryptor
             return false;
         }
     }
+
+    /// <summary>
+    /// J1: Idempotent encrypt. Returns the value unchanged when it already round-trips
+    /// as valid AES-GCM ciphertext under the current master key, otherwise treats it
+    /// as plaintext and encrypts it. Empty/whitespace input returns empty (the entity
+    /// columns are non-nullable, so callers store an empty string to mean "no password
+    /// configured"). This is the single funnel through which UI-supplied credentials
+    /// reach the database.
+    /// </summary>
+    public string EnsureEncrypted(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+
+        // Fast-path: if it already decrypts cleanly under the current key, leave it alone.
+        // We deliberately suppress the LogError that TryDecrypt would emit by inlining
+        // the try/catch — a "failed decrypt" here is the EXPECTED case for plaintext input.
+        try
+        {
+            _ = Decrypt(value);
+            return value;
+        }
+        catch
+        {
+            // Not valid ciphertext for this key — encrypt it as plaintext.
+            return Encrypt(value);
+        }
+    }
 }

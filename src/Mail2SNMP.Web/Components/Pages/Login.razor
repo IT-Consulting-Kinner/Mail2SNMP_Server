@@ -55,6 +55,10 @@
             "invalid" => "Invalid email or password.",
             "locked" => "Account is locked out. Please try again later.",
             "missing" => "Please enter email and password.",
+            // J10: Map the rate-limiter rejection so the user sees a meaningful
+            // message instead of the default 429 page. The login POST handler
+            // appends ?error=ratelimit when the limiter rejects the request.
+            "ratelimit" => "Too many login attempts. Please wait a minute and try again.",
             _ => null
         };
     }

@@ -24,4 +24,13 @@ public interface ICredentialEncryptor
     /// or the data is corrupt, without throwing an exception.
     /// </summary>
     bool TryDecrypt(string ciphertext, out string plaintext);
+
+    /// <summary>
+    /// J1: Idempotent encrypt. If <paramref name="value"/> already decodes as valid
+    /// AES-GCM ciphertext under the current master key it is returned unchanged;
+    /// otherwise it is treated as plaintext and encrypted. Empty/null is returned as
+    /// empty so callers can blindly route untrusted input from the UI through this
+    /// helper without leaking plaintext to the database.
+    /// </summary>
+    string EnsureEncrypted(string? value);
 }

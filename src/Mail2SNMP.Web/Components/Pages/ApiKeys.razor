@@ -82,7 +82,7 @@ else
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Create API Key</h5>
-                    <button type="button" class="btn-close" @onclick="() => _showForm = false"></button>
+                    <button type="button" class="btn-close" @onclick="CloseForm"></button>
                 </div>
                 <div class="modal-body">
                     @* H12: surface validation errors so users see why Create did nothing *@
@@ -108,7 +108,7 @@ else
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-secondary" @onclick="() => _showForm = false">Cancel</button>
+                    <button class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
                     <button class="btn btn-primary" @onclick="Create">Create</button>
                 </div>
             </div>
@@ -155,6 +155,17 @@ else
         _formExpires = null;
         _formError = null;
         _showForm = true;
+    }
+
+    // J3: Single close path that resets every form field, so cancelling and
+    // reopening the create dialog never carries over a stale name/scope/expiry.
+    private void CloseForm()
+    {
+        _showForm = false;
+        _formName = string.Empty;
+        _formScopes = "read";
+        _formExpires = null;
+        _formError = null;
     }
 
     private async Task Create()

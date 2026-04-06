@@ -92,4 +92,54 @@ public class AesGcmCredentialEncryptorTests
         var decrypted = encryptor.Decrypt(encrypted);
         Assert.Equal(plaintext, decrypted);
     }
+
+    // J11: Tests for the J1 idempotent encryption funnel.
+
+    [Fact]
+    public void EnsureEncrypted_PlaintextIsEncrypted()
+    {
+        var encryptor = new AesGcmCredentialEncryptor(GenerateKey(), NullLogger<AesGcmCredentialEncryptor>.Instance);
+        var plaintext = "raw-password-123";
+        var result = encryptor.EnsureEncrypted(plaintext);
+        Assert.NotEqual(plaintext, result);
+        Assert.Equal(plaintext, encryptor.Decrypt(result));
+    }
+
+    [Fact]
+    public void EnsureEncrypted_AlreadyCiphertextIsPassedThrough()
+    {
+        var encryptor = new AesGcmCredentialEncryptor(GenerateKey(), NullLogger<AesGcmCredentialEncryptor>.Instance);
+        var ciphertext = encryptor.Encrypt("hello");
+        var result = encryptor.EnsureEncrypted(ciphertext);
+        // Same ciphertext, no double-encryption.
+        Assert.Equal(ciphertext, result);
+    }
+
+    [Fact]
+    public void EnsureEncrypted_EmptyOrNullReturnsEmpty()
+    {
+        var encryptor = new AesGcmCredentialEncryptor(GenerateKey(), NullLogger<AesGcmCredentialEncryptor>.Instance);
+        Assert.Equal(string.Empty, encryptor.EnsureEncrypted(null));
+        Assert.Equal(string.Empty, encryptor.EnsureEncrypted(string.Empty));
+    }
+
+    [Fact]
+    public void EnsureEncrypted_CiphertextFromDifferentKeyIsReencrypted()
+    {
+        // J1 migrator scenario: ciphertext that doesn't decrypt under the current
+        // master key is treated as plaintext and re-encrypted. This is the same
+        // path that protects users who rotated their master key without going
+        // through the proper rotate-key CLI workflow.
+        var key1 = GenerateKey();
+        var key2 = GenerateKey();
+        var enc1 = new AesGcmCredentialEncryptor(key1, NullLogger<AesGcmCredentialEncryptor>.Instance);
+        var enc2 = new AesGcmCredentialEncryptor(key2, NullLogger<AesGcmCredentialEncryptor>.Instance);
+
+        var ciphertextUnderKey1 = enc1.Encrypt("secret");
+        var result = enc2.EnsureEncrypted(ciphertextUnderKey1);
+
+        // It is now encrypted under key2 (the original ciphertext is the "plaintext").
+        Assert.NotEqual(ciphertextUnderKey1, result);
+        Assert.Equal(ciphertextUnderKey1, enc2.Decrypt(result));
+    }
 }

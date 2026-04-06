@@ -169,14 +169,19 @@ try
     }
 
     // ── Authorization Policies ─────────────────────────────────────────────
-    // I1: Allow either the cookie scheme (browser/OIDC) OR the X-Api-Key scheme
-    // to satisfy the policies. Without AddAuthenticationSchemes the policies
-    // would only accept the default scheme and ApiKey requests would 401.
-    var authSchemes = new[]
+    // I1/J6: Policies must accept every authentication scheme that is actually
+    // wired up. We start with cookie + X-Api-Key, then add "Oidc" only if the
+    // OIDC block above ran. Without J6, OIDC tokens were authenticated by the
+    // OIDC handler but rejected by the policies (403) because the schemes list
+    // was hardcoded.
+    var authSchemesList = new List<string>
     {
         IdentityConstants.ApplicationScheme,
         Mail2SNMP.Infrastructure.Security.ApiKeyAuthenticationHandler.SchemeName
     };
+    if (oidcSettings is not null && !string.IsNullOrEmpty(oidcSettings.Authority) && !string.IsNullOrEmpty(oidcSettings.ClientId))
+        authSchemesList.Add("Oidc");
+    var authSchemes = authSchemesList.ToArray();
     builder.Services.AddAuthorizationBuilder()
         .AddPolicy("Admin", policy => policy
             .AddAuthenticationSchemes(authSchemes)

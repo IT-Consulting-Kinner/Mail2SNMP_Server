@@ -61,6 +61,12 @@ public class MailboxService : IMailboxService
         if (count >= max)
             throw new InvalidOperationException($"Community Edition limit: max {max} mailboxes. Upgrade to Enterprise for unlimited.");
 
+        // J1: Encrypt the password before persisting. The Razor/API layer hands us the
+        // raw plaintext in EncryptedPassword (legacy field name); EnsureEncrypted is the
+        // single funnel that turns it into AES-GCM ciphertext. Idempotent for callers
+        // that already passed ciphertext.
+        mailbox.EncryptedPassword = _credentialEncryptor.EnsureEncrypted(mailbox.EncryptedPassword);
+
         _db.Mailboxes.Add(mailbox);
         await _db.SaveChangesAsync(ct);
         await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Mailbox.Created", "Mailbox", mailbox.Id.ToString(), ct: ct);
@@ -72,6 +78,12 @@ public class MailboxService : IMailboxService
     /// </summary>
     public async Task<Mailbox> UpdateAsync(Mailbox mailbox, CancellationToken ct = default)
     {
+        // J1: Same idempotent encryption funnel as CreateAsync. The Razor edit form
+        // submits an unchanged encrypted password (already ciphertext) when the user
+        // didn't touch the field, or a fresh plaintext when they did — EnsureEncrypted
+        // handles both paths and never double-encrypts.
+        mailbox.EncryptedPassword = _credentialEncryptor.EnsureEncrypted(mailbox.EncryptedPassword);
+
         var existing = _db.ChangeTracker.Entries<Mailbox>()
             .FirstOrDefault(e => e.Entity.Id == mailbox.Id);
         if (existing != null)

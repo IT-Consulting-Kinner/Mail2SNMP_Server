@@ -169,16 +169,33 @@ try
         Log.Information("OIDC/SSO authentication configured (Authority: {Authority})", oidcSettings.Authority);
     }
 
-    // Authorization policies – fallback requires authenticated user on ALL pages
-    builder.Services.AddAuthorization(options =>
+    // J5: Authorization policies must accept BOTH the cookie scheme (for browser/UI)
+    // and the X-Api-Key scheme (for automation calling the API endpoints in All-in-One
+    // mode). The previous version only consulted the default cookie scheme, so API key
+    // requests against /api/v1/* in All-in-One returned 401 even though the handler
+    // was registered. The fallback policy still pulls from the default scheme so Razor
+    // pages keep behaving identically for browser users.
+    var webAuthSchemes = new[]
     {
-        options.AddPolicy("Admin", policy => policy.RequireRole("Admin"));
-        options.AddPolicy("Operator", policy => policy.RequireRole("Admin", "Operator"));
-        options.AddPolicy("ReadOnly", policy => policy.RequireRole("Admin", "Operator", "ReadOnly"));
-        options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        IdentityConstants.ApplicationScheme,
+        Mail2SNMP.Infrastructure.Security.ApiKeyAuthenticationHandler.SchemeName
+    };
+    builder.Services.AddAuthorizationBuilder()
+        .AddPolicy("Admin", policy => policy
+            .AddAuthenticationSchemes(webAuthSchemes)
             .RequireAuthenticatedUser()
-            .Build();
-    });
+            .RequireRole("Admin"))
+        .AddPolicy("Operator", policy => policy
+            .AddAuthenticationSchemes(webAuthSchemes)
+            .RequireAuthenticatedUser()
+            .RequireRole("Admin", "Operator"))
+        .AddPolicy("ReadOnly", policy => policy
+            .AddAuthenticationSchemes(webAuthSchemes)
+            .RequireAuthenticatedUser()
+            .RequireRole("Admin", "Operator", "ReadOnly"))
+        .SetFallbackPolicy(new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .Build());
 
     // Cascading auth state for Blazor components
     builder.Services.AddCascadingAuthenticationState();
@@ -229,6 +246,20 @@ try
     builder.Services.AddRateLimiter(options =>
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        // J10: Redirect rate-limited login posts back to /login with a marker so the
+        // page can show a friendly "Too many attempts" message instead of the bare
+        // 429 page.
+        options.OnRejected = async (context, ct) =>
+        {
+            if (HttpMethods.IsPost(context.HttpContext.Request.Method) &&
+                context.HttpContext.Request.Path.StartsWithSegments("/account/login"))
+            {
+                context.HttpContext.Response.Redirect("/login?error=ratelimit");
+                return;
+            }
+            context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            await context.HttpContext.Response.WriteAsync("Too many requests. Please try again later.", ct);
+        };
         options.AddPolicy("login", httpContext =>
             System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
                 partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",

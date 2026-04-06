@@ -48,6 +48,12 @@ public class SnmpTargetService : ISnmpTargetService
     /// </summary>
     public async Task<SnmpTarget> CreateAsync(SnmpTarget target, CancellationToken ct = default)
     {
+        // J1: Encrypt v3 auth/priv passwords before persisting. EnsureEncrypted is the
+        // single funnel for credential storage and is idempotent — callers that already
+        // pass ciphertext are passed through unchanged.
+        target.EncryptedAuthPassword = _encryptor.EnsureEncrypted(target.EncryptedAuthPassword);
+        target.EncryptedPrivPassword = _encryptor.EnsureEncrypted(target.EncryptedPrivPassword);
+
         _db.SnmpTargets.Add(target);
         await _db.SaveChangesAsync(ct);
         await _audit.LogAsync(Models.Enums.ActorType.System, "system", "SnmpTarget.Created", "SnmpTarget", target.Id.ToString(), ct: ct);
@@ -59,6 +65,10 @@ public class SnmpTargetService : ISnmpTargetService
     /// </summary>
     public async Task<SnmpTarget> UpdateAsync(SnmpTarget target, CancellationToken ct = default)
     {
+        // J1: Same idempotent encryption funnel as CreateAsync.
+        target.EncryptedAuthPassword = _encryptor.EnsureEncrypted(target.EncryptedAuthPassword);
+        target.EncryptedPrivPassword = _encryptor.EnsureEncrypted(target.EncryptedPrivPassword);
+
         var existing = _db.ChangeTracker.Entries<SnmpTarget>()
             .FirstOrDefault(e => e.Entity.Id == target.Id);
         if (existing != null)

@@ -2,6 +2,20 @@
 
 Mail2SNMP is a Windows service that monitors email mailboxes and converts matching messages into SNMP traps and/or webhook notifications. It bridges the gap between email-based alerting systems and modern monitoring infrastructure.
 
+## Features
+
+- **Mail-to-SNMP / Webhook**: regex/contains/equals rules on Subject, Body, Sender match incoming mail and emit SNMP v1/v2c/v3 traps and/or HTTP webhook notifications.
+- **Trap pairing**: every matched event sends an `EventCreated` trap (OID `1.3.6.1.4.1.61376.1.2.0.1`); on acknowledge a paired `EventConfirmed` trap (OID `…0.2`) carries the same event ID so monitoring systems can clear the alert.
+- **IMAP IDLE**: optional real-time mail processing instead of polling (`Imap:UseIdle = true`).
+- **Auto-acknowledge**: events older than `Events:AutoAcknowledgeAfterMinutes` are auto-acknowledged and a paired clear-trap is sent.
+- **Recurring maintenance windows**: cron-driven (`RecurringCron`) maintenance windows suppress notifications during planned outages.
+- **AES-256-GCM credential encryption**: mailbox passwords, SNMP v3 auth/priv passwords and webhook secrets are stored encrypted; master key managed by the OS file system. CLI command `mail2snmp credentials rotate-key` re-encrypts everything atomically.
+- **API key authentication**: `X-Api-Key` header with `read` / `write` / `admin` scopes for automation; manage via Web UI → API Keys.
+- **Health & metrics**: `/health/live`, `/health/ready` and Prometheus metrics on `/metrics`.
+- **OpenTelemetry tracing** (optional, configure `Otel:Enabled`).
+- **Bulk export**: download `mailboxes / rules / jobs / schedules / targets / maintenance windows` as a single JSON bundle (encrypted credentials are intentionally omitted).
+- **Worker leasing**: multi-instance deployments are coordinated by a serializable database lease so only the licensed number of workers polls at once.
+
 ## Architecture
 
 ```

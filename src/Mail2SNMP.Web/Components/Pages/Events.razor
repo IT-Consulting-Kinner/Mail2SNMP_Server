@@ -133,6 +133,10 @@ else
     private async Task FilterByState(EventState? state)
     {
         _stateFilter = state;
+        // J8: Always reset to page 1 when the filter changes — otherwise a user
+        // sitting on page 5 of "All" can hit "Acknowledged" and land on an empty
+        // page because the smaller filtered set has fewer pages.
+        _currentPage = 1;
         await LoadData();
     }
 

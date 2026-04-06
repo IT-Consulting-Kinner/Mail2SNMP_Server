@@ -5,7 +5,7 @@ namespace Mail2SNMP.Core.Interfaces;
 /// <summary>
 /// Manages the dead-letter queue for failed webhook deliveries (Enterprise edition only).
 /// Entries are automatically retried with exponential backoff by the
-/// <see cref="Worker.Services.DeadLetterRetryService"/>.
+/// DeadLetterRetryService background worker (in the Mail2SNMP.Worker project).
 /// </summary>
 public interface IDeadLetterService
 {

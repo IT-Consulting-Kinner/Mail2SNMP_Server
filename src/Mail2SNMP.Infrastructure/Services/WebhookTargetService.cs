@@ -17,13 +17,15 @@ public class WebhookTargetService : IWebhookTargetService
     private readonly Mail2SnmpDbContext _db;
     private readonly IAuditService _audit;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ICredentialEncryptor _encryptor;
     private readonly ILogger<WebhookTargetService> _logger;
 
-    public WebhookTargetService(Mail2SnmpDbContext db, IAuditService audit, IHttpClientFactory httpClientFactory, ILogger<WebhookTargetService> logger)
+    public WebhookTargetService(Mail2SnmpDbContext db, IAuditService audit, IHttpClientFactory httpClientFactory, ICredentialEncryptor encryptor, ILogger<WebhookTargetService> logger)
     {
         _db = db;
         _audit = audit;
         _httpClientFactory = httpClientFactory;
+        _encryptor = encryptor;
         _logger = logger;
     }
 
@@ -44,6 +46,9 @@ public class WebhookTargetService : IWebhookTargetService
     /// </summary>
     public async Task<WebhookTarget> CreateAsync(WebhookTarget target, CancellationToken ct = default)
     {
+        // J1: Encrypt the secret before persisting. EnsureEncrypted is idempotent.
+        target.EncryptedSecret = _encryptor.EnsureEncrypted(target.EncryptedSecret);
+
         _db.WebhookTargets.Add(target);
         await _db.SaveChangesAsync(ct);
         await _audit.LogAsync(Models.Enums.ActorType.System, "system", "WebhookTarget.Created", "WebhookTarget", target.Id.ToString(), ct: ct);
@@ -55,6 +60,9 @@ public class WebhookTargetService : IWebhookTargetService
     /// </summary>
     public async Task<WebhookTarget> UpdateAsync(WebhookTarget target, CancellationToken ct = default)
     {
+        // J1: Same idempotent encryption funnel.
+        target.EncryptedSecret = _encryptor.EnsureEncrypted(target.EncryptedSecret);
+
         var existing = _db.ChangeTracker.Entries<WebhookTarget>()
             .FirstOrDefault(e => e.Entity.Id == target.Id);
         if (existing != null)
