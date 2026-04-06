@@ -27,7 +27,7 @@ public class WebhookNotificationChannel : INotificationChannel
     private readonly TemplateEngine _templateEngine;
     private readonly FloodProtectionService _floodProtection;
     private readonly NotificationDedupCache _dedupCache;
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<WebhookNotificationChannel> _logger;
 
     public string ChannelName => "webhook";
@@ -40,7 +40,7 @@ public class WebhookNotificationChannel : INotificationChannel
         TemplateEngine templateEngine,
         FloodProtectionService floodProtection,
         NotificationDedupCache dedupCache,
-        HttpClient httpClient,
+        IHttpClientFactory httpClientFactory,
         ILogger<WebhookNotificationChannel> logger)
     {
         _db = db;
@@ -50,8 +50,9 @@ public class WebhookNotificationChannel : INotificationChannel
         _templateEngine = templateEngine;
         _floodProtection = floodProtection;
         _dedupCache = dedupCache;
-        _httpClient = httpClient;
-        _httpClient.Timeout = TimeSpan.FromSeconds(30);
+        // T5: use the named "WebhookSend" client registered in DI instead of mutating
+        // an injected HttpClient. The factory handles handler lifetime correctly.
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
@@ -170,7 +171,8 @@ public class WebhookNotificationChannel : INotificationChannel
 
         // N2: dispose the HttpResponseMessage explicitly so the underlying
         // socket is released back to the connection pool immediately.
-        using var response = await _httpClient.PostAsync(target.Url, content, ct);
+        var httpClient = _httpClientFactory.CreateClient("WebhookSend");
+        using var response = await httpClient.PostAsync(target.Url, content, ct);
         response.EnsureSuccessStatusCode();
     }
 

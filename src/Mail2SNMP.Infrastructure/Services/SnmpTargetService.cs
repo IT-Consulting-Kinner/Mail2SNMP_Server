@@ -147,7 +147,7 @@ public class SnmpTargetService : ISnmpTargetService
         IAuthenticationProvider authProvider;
         if (target.AuthProtocol != AuthProtocol.None && !string.IsNullOrEmpty(target.EncryptedAuthPassword))
         {
-            var authPassword = DecryptSafe(target.EncryptedAuthPassword);
+            var authPassword = DecryptCredential(target.EncryptedAuthPassword);
             var authPassPhrase = new OctetString(authPassword);
             authProvider = target.AuthProtocol switch
             {
@@ -167,7 +167,7 @@ public class SnmpTargetService : ISnmpTargetService
         IPrivacyProvider privProvider;
         if (target.PrivProtocol != PrivProtocol.None && !string.IsNullOrEmpty(target.EncryptedPrivPassword))
         {
-            var privPassword = DecryptSafe(target.EncryptedPrivPassword);
+            var privPassword = DecryptCredential(target.EncryptedPrivPassword);
             var privPassPhrase = new OctetString(privPassword);
             privProvider = target.PrivProtocol switch
             {
@@ -190,9 +190,11 @@ public class SnmpTargetService : ISnmpTargetService
             {
                 engineId = new OctetString(ByteTool.Convert(target.EngineId));
             }
-            catch
+            catch (Exception ex) when (ex is FormatException or ArgumentException)
             {
-                _logger.LogWarning("Invalid EngineId format for target {Name}. Using default.", target.Name);
+                // T2: catch only the expected parse errors so unrelated exceptions
+                // (OOM, ThreadAbort, etc.) still propagate as they should.
+                _logger.LogWarning(ex, "Invalid EngineId format for target {Name}. Using default.", target.Name);
                 engineId = new OctetString(new byte[] { 0x80, 0x00, 0x1F, 0x88, 0x80, 0xE9, 0x63, 0x00, 0x00, 0xD6, 0x1F, 0xF4, 0x49 });
             }
         }
@@ -224,16 +226,29 @@ public class SnmpTargetService : ISnmpTargetService
         udpClient.Send(bytes, bytes.Length, endpoint);
     }
 
-    private string DecryptSafe(string encrypted)
+    /// <summary>
+    /// Decrypts a stored SNMP credential. Fails fast on master key mismatch instead of
+    /// silently falling back to the encrypted ciphertext as a "password" — that
+    /// fallback would mask a real configuration problem (wrong master key) as an
+    /// "auth failed" error and is a security/diagnostics anti-pattern. The behaviour
+    /// is now consistent with <c>MailboxService.TestConnectionAsync</c>.
+    /// </summary>
+    private string DecryptCredential(string encrypted)
     {
         try
         {
             return _encryptor.Decrypt(encrypted);
         }
-        catch
+        catch (Exception decryptEx)
         {
-            _logger.LogWarning("Failed to decrypt credential. Using raw value as fallback.");
-            return encrypted;
+            _logger.LogError(decryptEx,
+                "Failed to decrypt SNMP credential. " +
+                "This indicates a master key mismatch. Re-enter the password via the Web UI " +
+                "or restore the correct master.key file.");
+            throw new InvalidOperationException(
+                "Cannot decrypt SNMP credential. The master key may have changed. " +
+                "Re-enter the password and try again.",
+                decryptEx);
         }
     }
 }

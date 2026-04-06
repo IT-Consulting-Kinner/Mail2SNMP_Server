@@ -39,10 +39,15 @@ else
             (m.Name?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
             (m.Host?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
             (m.Username?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))).ToList();
-    @* N1: keep _selected in sync with the visible (filtered) rows so a bulk
-       action can never operate on items the user no longer sees. *@
-    var _visibleIds = filtered.Select(m => m.Id).ToHashSet();
-    _selected.RemoveWhere(id => !_visibleIds.Contains(id));
+    @* N1+T10: keep _selected in sync with the visible (filtered) rows so a bulk
+       action can never operate on items the user no longer sees. The pruning
+       only runs when the search term changes (T10), not on every render. *@
+    if (_searchTerm != _lastSearchTerm)
+    {
+        _lastSearchTerm = _searchTerm;
+        var visibleIds = filtered.Select(m => m.Id).ToHashSet();
+        _selected.RemoveWhere(id => !visibleIds.Contains(id));
+    }
     @* L4: bulk action bar — only visible when at least one row is selected *@
     @if (_selected.Count > 0)
     {
@@ -184,6 +189,7 @@ else
     private bool _loading = true;
     private bool _busy;
     private string _searchTerm = string.Empty;
+    private string? _lastSearchTerm;
     private HashSet<int> _selected = new();
 
     private void ToggleSelect(int id, bool isChecked)

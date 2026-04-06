@@ -55,7 +55,7 @@ public class EventService : IEventService
     /// Returns a single event by its identifier, including the related Job.
     /// </summary>
     public async Task<Event?> GetByIdAsync(long id, CancellationToken ct = default)
-        => await _db.Events.Include(e => e.Job).FirstOrDefaultAsync(e => e.Id == id, ct);
+        => await _db.Events.AsNoTracking().Include(e => e.Job).FirstOrDefaultAsync(e => e.Id == id, ct);
 
     /// <summary>
     /// Creates a new event with deduplication. If a matching MessageId already exists within the

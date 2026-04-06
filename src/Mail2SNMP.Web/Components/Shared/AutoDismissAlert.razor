@@ -5,6 +5,8 @@
     - Shows the bound Message inside a Bootstrap alert.
     - Optional auto-dismiss after AutoDismissSeconds (0 = never).
     - Two-way binds Message back to null when closed (manually or by timer).
+    - T7: tracks disposed state so a delayed timer callback can never call
+      InvokeAsync on a disposed component.
 *@
 
 @if (!string.IsNullOrEmpty(Message))
@@ -33,6 +35,7 @@
 
     private System.Threading.Timer? _timer;
     private string? _lastMessage;
+    private bool _disposed;
 
     protected override void OnParametersSet()
     {
@@ -45,10 +48,23 @@
             _timer?.Dispose();
             _timer = new System.Threading.Timer(async _ =>
             {
-                await InvokeAsync(async () =>
+                // T7: bail out early if the component was disposed while we were
+                // waiting on the timer. Without this check, InvokeAsync would
+                // throw ObjectDisposedException on a disposed Renderer.
+                if (_disposed) return;
+                try
                 {
-                    await Close();
-                });
+                    await InvokeAsync(async () =>
+                    {
+                        if (_disposed) return;
+                        await Close();
+                    });
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Component was disposed between the disposed-check and InvokeAsync —
+                    // safe to swallow because the component is gone anyway.
+                }
             }, null, TimeSpan.FromSeconds(AutoDismissSeconds), Timeout.InfiniteTimeSpan);
         }
     }
@@ -63,5 +79,10 @@
         StateHasChanged();
     }
 
-    public void Dispose() => _timer?.Dispose();
+    public void Dispose()
+    {
+        _disposed = true;
+        _timer?.Dispose();
+        _timer = null;
+    }
 }

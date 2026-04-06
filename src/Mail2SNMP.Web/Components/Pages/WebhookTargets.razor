@@ -36,9 +36,13 @@ else
         : _targets.Where(t =>
             (t.Name?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
             (t.Url?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))).ToList();
-    @* N1: prune selection so bulk actions only ever touch visible rows *@
-    var _visibleIds = filtered.Select(t => t.Id).ToHashSet();
-    _selected.RemoveWhere(id => !_visibleIds.Contains(id));
+    @* N1+T10: prune selection only when the filter changes, not every render *@
+    if (_searchTerm != _lastSearchTerm)
+    {
+        _lastSearchTerm = _searchTerm;
+        var visibleIds = filtered.Select(t => t.Id).ToHashSet();
+        _selected.RemoveWhere(id => !visibleIds.Contains(id));
+    }
     @if (_selected.Count > 0)
     {
         <div class="alert alert-secondary d-flex align-items-center py-2 mb-2">
@@ -161,6 +165,7 @@ else
     private bool _loading = true;
     private bool _busy;
     private string _searchTerm = string.Empty;
+    private string? _lastSearchTerm;
     private HashSet<int> _selected = new();
 
     private void ToggleSelect(int id, bool isChecked)

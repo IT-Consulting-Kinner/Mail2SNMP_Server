@@ -45,7 +45,7 @@ public class JobService : IJobService
     /// Returns a single job by its identifier with Mailbox, Rule, and target assignments included, or <c>null</c> if not found.
     /// </summary>
     public async Task<Job?> GetByIdAsync(int id, CancellationToken ct = default)
-        => await _db.Jobs
+        => await _db.Jobs.AsNoTracking()
             .Include(j => j.Mailbox)
             .Include(j => j.Rule)
             .Include(j => j.JobSnmpTargets).ThenInclude(jst => jst.SnmpTarget)

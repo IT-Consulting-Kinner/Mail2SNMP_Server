@@ -122,8 +122,21 @@ public class UpdateCheckService : BackgroundService
         await UpsertSettingAsync(db, "update.download_link",     feed.DownloadLink ?? "", ct);
         await db.SaveChangesAsync(ct);
 
-        // Decide whether to send a trap based on TrapMode
+        // Decide whether to send a trap based on TrapMode.
+        // T9: validate TrapMode against the known values; warn once per check if it
+        // is not recognised so a typo in appsettings.json is visible in the log.
         var mode = (_settings.TrapMode ?? "UntilUpdated").Trim();
+        if (!mode.Equals("Off", StringComparison.OrdinalIgnoreCase) &&
+            !mode.Equals("Once", StringComparison.OrdinalIgnoreCase) &&
+            !mode.Equals("UntilUpdated", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "UpdateCheck:TrapMode value '{Mode}' is not recognised. " +
+                "Expected one of: Off, Once, UntilUpdated. Falling back to 'UntilUpdated'.",
+                mode);
+            mode = "UntilUpdated";
+        }
+
         if (mode.Equals("Off", StringComparison.OrdinalIgnoreCase))
         {
             return;

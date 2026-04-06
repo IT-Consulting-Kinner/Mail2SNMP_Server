@@ -51,7 +51,10 @@
 
                     <div class="mb-3">
                         <label class="form-label">Password</label>
-                        <InputText type="password" class="form-control" @bind-Value="_form.Password" @bind-Value:event="oninput" />
+                        @* T11: cap password input at 256 characters to prevent UI lag from
+                           pasting very large strings (live strength indicator runs on every keystroke). *@
+                        <InputText type="password" class="form-control" maxlength="256"
+                                   @bind-Value="_form.Password" @bind-Value:event="oninput" />
                         <ValidationMessage For="@(() => _form.Password)" class="text-danger small" />
                         @* L3: live password strength indicator *@
                         @{
@@ -91,7 +94,15 @@
                     </div>
 
                     <button type="submit" class="btn btn-primary w-100" disabled="@_submitting">
-                        @(_submitting ? "Creating..." : "Create Admin Account")
+                        @if (_submitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            <span>Creating...</span>
+                        }
+                        else
+                        {
+                            <span>Create Admin Account</span>
+                        }
                     </button>
                 </EditForm>
             }
@@ -159,7 +170,28 @@
             var allAdmins = await UserManager.GetUsersInRoleAsync("Admin");
             if (allAdmins.Count > 1)
             {
-                await UserManager.DeleteAsync(user);
+                // T8: the rollback delete itself can theoretically fail. If it does,
+                // surface a clear error so the operator knows there are now two
+                // admin users that need to be reconciled manually.
+                try
+                {
+                    var deleteResult = await UserManager.DeleteAsync(user);
+                    if (!deleteResult.Succeeded)
+                    {
+                        _error = "Race condition detected: another admin was created concurrently. " +
+                                 "Rollback of this account FAILED — please open the Users page and " +
+                                 "delete the duplicate admin manually. Errors: " +
+                                 string.Join(" ", deleteResult.Errors.Select(e => e.Description));
+                        return;
+                    }
+                }
+                catch (Exception rollbackEx)
+                {
+                    _error = "Race condition detected: another admin was created concurrently. " +
+                             "Rollback of this account FAILED — please open the Users page and " +
+                             "delete the duplicate admin manually. Reason: " + rollbackEx.Message;
+                    return;
+                }
                 _alreadySetup = true;
                 return;
             }

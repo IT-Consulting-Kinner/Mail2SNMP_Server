@@ -29,9 +29,12 @@ public static class DependencyInjection
         services.Configure<EventSettings>(configuration.GetSection("Events"));
         services.Configure<RetentionSettings>(configuration.GetSection("Retention"));
 
-        // Named HttpClient for webhook test calls (10s timeout) — handler lifetime
-        // managed by IHttpClientFactory so we never create raw HttpClient instances.
+        // Named HttpClients for webhook calls — handler lifetime managed by
+        // IHttpClientFactory so we never create raw HttpClient instances.
+        // - "WebhookTest"  : short timeout for the manual "Test" button (10 s)
+        // - "WebhookSend"  : production timeout for fire-and-forget delivery (30 s)
         services.AddHttpClient("WebhookTest", c => c.Timeout = TimeSpan.FromSeconds(10));
+        services.AddHttpClient("WebhookSend", c => c.Timeout = TimeSpan.FromSeconds(30));
 
         // Database with automatic CRUD audit interceptor (v5.8)
         var dbSettings = configuration.GetSection("Database").Get<DatabaseSettings>() ?? new DatabaseSettings();

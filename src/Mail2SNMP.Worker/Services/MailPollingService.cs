@@ -292,12 +292,18 @@ public class MailPollingService : BackgroundService
             _logger.LogDebug("Connected to IMAP server {Host}:{Port} for mailbox {Name}",
                 mailbox.Host, mailbox.Port, mailbox.Name);
 
+            // T6: Bound the folder open + search to ImapSettings.OperationTimeoutSeconds
+            // (default 60 s). A hung IMAP server can otherwise block the consumer until
+            // the parent stoppingToken fires (which only happens on graceful shutdown).
+            using var opCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            opCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, _imapSettings.OperationTimeoutSeconds)));
+
             // Open the configured folder
-            var folder = await imapClient.GetFolderAsync(mailbox.Folder, ct);
-            await folder.OpenAsync(FolderAccess.ReadWrite, ct);
+            var folder = await imapClient.GetFolderAsync(mailbox.Folder, opCts.Token);
+            await folder.OpenAsync(FolderAccess.ReadWrite, opCts.Token);
 
             // Search for unseen messages
-            var uids = await folder.SearchAsync(SearchQuery.NotSeen, ct);
+            var uids = await folder.SearchAsync(SearchQuery.NotSeen, opCts.Token);
 
             _logger.LogInformation("Found {Count} unseen emails in mailbox {Name}/{Folder}",
                 uids.Count, mailbox.Name, mailbox.Folder);
