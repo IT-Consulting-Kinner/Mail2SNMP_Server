@@ -36,21 +36,23 @@
             {
                 <EditForm Model="_form" OnValidSubmit="HandleSetup" FormName="setup">
                     <DataAnnotationsValidator />
-                    <ValidationSummary class="text-danger" />
 
                     <div class="mb-3">
                         <label class="form-label">Email</label>
                         <InputText class="form-control" @bind-Value="_form.Email" />
+                        <ValidationMessage For="@(() => _form.Email)" class="text-danger small" />
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">Display Name</label>
                         <InputText class="form-control" @bind-Value="_form.DisplayName" />
+                        <ValidationMessage For="@(() => _form.DisplayName)" class="text-danger small" />
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">Password</label>
                         <InputText type="password" class="form-control" @bind-Value="_form.Password" @bind-Value:event="oninput" />
+                        <ValidationMessage For="@(() => _form.Password)" class="text-danger small" />
                         @* L3: live password strength indicator *@
                         @{
                             var hasMinLen = _form.Password.Length >= 12;
@@ -148,6 +150,19 @@
             }
 
             await UserManager.AddToRoleAsync(user, "Admin");
+
+            // N7: post-create race-condition guard. Two concurrent /setup requests
+            // can both pass the initial admin check. After successfully creating
+            // and assigning the role, re-query the admin role and verify we are
+            // the only one. If another admin sneaked in, roll back our user so
+            // exactly one admin remains.
+            var allAdmins = await UserManager.GetUsersInRoleAsync("Admin");
+            if (allAdmins.Count > 1)
+            {
+                await UserManager.DeleteAsync(user);
+                _alreadySetup = true;
+                return;
+            }
             _setupComplete = true;
         }
         finally

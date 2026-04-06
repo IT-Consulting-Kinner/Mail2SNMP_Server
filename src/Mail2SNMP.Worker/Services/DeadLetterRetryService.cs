@@ -151,9 +151,10 @@ public class DeadLetterRetryService : BackgroundService
                     continue;
                 }
 
-                // Retry the webhook delivery
-                var content = new StringContent(entry.PayloadJson, Encoding.UTF8, "application/json");
-                var response = await httpClient.PostAsync(entry.WebhookTarget.Url, content, ct);
+                // Retry the webhook delivery — dispose content + response explicitly
+                // to release sockets and buffers immediately.
+                using var content = new StringContent(entry.PayloadJson, Encoding.UTF8, "application/json");
+                using var response = await httpClient.PostAsync(entry.WebhookTarget.Url, content, ct);
                 response.EnsureSuccessStatusCode();
 
                 // Success: remove the dead letter entry
@@ -186,10 +187,11 @@ public class DeadLetterRetryService : BackgroundService
                 }
                 else
                 {
-                    // Exponential backoff: 15min, 30min, 60min, 120min...
                     // Exponential backoff: base * 2^(attempt-1) — base configurable via DeadLetter:BackoffBaseMinutes.
+                    // N15: reuse the `now` captured at the top of ProcessBatchAsync so all
+                    // entries in the same batch get a consistent NextRetryUtc baseline.
                     var backoff = TimeSpan.FromMinutes(_backoffBaseMinutes * Math.Pow(2, entry.AttemptCount - 1));
-                    entry.NextRetryUtc = DateTime.UtcNow.Add(backoff);
+                    entry.NextRetryUtc = now.Add(backoff);
                     entry.Status = DeadLetterStatus.Pending;
                     _logger.LogWarning(
                         "DeadLetter {Id} retry failed (attempt {Attempt}/{Max}). Next retry at {NextRetry:HH:mm:ss}: {Error}",

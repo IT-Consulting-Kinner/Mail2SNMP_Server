@@ -105,7 +105,9 @@ public class WebhookTargetService : IWebhookTargetService
         };
 
         var json = JsonSerializer.Serialize(testPayload);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        // N2: dispose StringContent and HttpResponseMessage explicitly to release
+        // unmanaged buffers/sockets immediately instead of relying on the GC.
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         // Add custom headers if configured
         if (!string.IsNullOrEmpty(target.Headers))
@@ -125,12 +127,13 @@ public class WebhookTargetService : IWebhookTargetService
             }
         }
 
-        using var httpClient = _httpClientFactory.CreateClient();
-        httpClient.Timeout = TimeSpan.FromSeconds(10);
+        // N3: use the named HttpClient registered in DI ("WebhookTest") instead of creating
+        // a fresh one each call. The factory manages handler lifetime correctly.
+        var httpClient = _httpClientFactory.CreateClient("WebhookTest");
 
         try
         {
-            var response = await httpClient.PostAsync(target.Url, content, ct);
+            using var response = await httpClient.PostAsync(target.Url, content, ct);
             response.EnsureSuccessStatusCode();
             _logger.LogInformation("Webhook test successful for target {Name}: HTTP {StatusCode}", target.Name, (int)response.StatusCode);
             return true;

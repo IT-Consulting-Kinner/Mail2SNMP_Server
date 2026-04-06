@@ -36,6 +36,9 @@ else
         : _targets.Where(t =>
             (t.Name?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
             (t.Host?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))).ToList();
+    @* N1: prune selection so bulk actions only ever touch visible rows *@
+    var _visibleIds = filtered.Select(t => t.Id).ToHashSet();
+    _selected.RemoveWhere(id => !_visibleIds.Contains(id));
     @if (_selected.Count > 0)
     {
         <div class="alert alert-secondary d-flex align-items-center py-2 mb-2">
@@ -166,10 +169,12 @@ else
                                             <option value="@val">@val</option>
                                         }
                                     </InputSelect>
+                                    <ValidationMessage For="@(() => _form.AuthProtocol)" class="text-danger small" />
                                 </div>
                                 <div class="col">
                                     <label class="form-label">Auth Password</label>
                                     <InputText class="form-control" type="password" @bind-Value="_form.AuthPassword" />
+                                    <ValidationMessage For="@(() => _form.AuthPassword)" class="text-danger small" />
                                 </div>
                             </div>
                             <div class="row mb-3">
@@ -181,15 +186,18 @@ else
                                             <option value="@val">@val</option>
                                         }
                                     </InputSelect>
+                                    <ValidationMessage For="@(() => _form.PrivProtocol)" class="text-danger small" />
                                 </div>
                                 <div class="col">
                                     <label class="form-label">Privacy Password</label>
                                     <InputText class="form-control" type="password" @bind-Value="_form.PrivPassword" />
+                                    <ValidationMessage For="@(() => _form.PrivPassword)" class="text-danger small" />
                                 </div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Engine ID</label>
                                 <InputText class="form-control" @bind-Value="_form.EngineId" />
+                                <ValidationMessage For="@(() => _form.EngineId)" class="text-danger small" />
                             </div>
                         }
 

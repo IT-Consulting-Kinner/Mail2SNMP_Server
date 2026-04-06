@@ -125,6 +125,18 @@ public class ImapSettings
     /// IMAP per-operation timeout (search/fetch) in seconds. Default 60.
     /// </summary>
     public int OperationTimeoutSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// Initial backoff (seconds) before restarting a crashed mail-polling consumer
+    /// in <c>MailPollingService.SuperviseConsumerAsync</c>. Default 2.
+    /// </summary>
+    public int ConsumerRestartBackoffSeconds { get; set; } = 2;
+
+    /// <summary>
+    /// Maximum backoff (seconds) between consumer restart attempts. The backoff
+    /// doubles after each crash up to this cap. Default 30.
+    /// </summary>
+    public int ConsumerRestartMaxBackoffSeconds { get; set; } = 30;
 }
 
 /// <summary>

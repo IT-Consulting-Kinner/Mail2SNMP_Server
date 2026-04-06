@@ -36,6 +36,9 @@ else
         : _rules.Where(r =>
             (r.Name?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
             (r.Criteria?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))).ToList();
+    @* N1: prune selection so bulk actions only ever touch visible rows *@
+    var _visibleIds = filtered.Select(r => r.Id).ToHashSet();
+    _selected.RemoveWhere(id => !_visibleIds.Contains(id));
     @if (_selected.Count > 0)
     {
         <div class="alert alert-secondary d-flex align-items-center py-2 mb-2">

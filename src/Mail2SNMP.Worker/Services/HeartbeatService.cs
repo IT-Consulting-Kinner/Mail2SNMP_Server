@@ -63,13 +63,20 @@ public class HeartbeatService : BackgroundService
                 {
                     using var scope = _scopeFactory.CreateScope();
                     var leaseService = scope.ServiceProvider.GetRequiredService<IWorkerLeaseService>();
-                    await leaseService.RenewLeaseAsync(_instanceId, stoppingToken);
+
+                    // N8: Bound the renewal + license check to 15 seconds so a hung
+                    // database or license provider can never block the renew loop
+                    // longer than the lease validity (90s).
+                    using var opCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                    opCts.CancelAfter(TimeSpan.FromSeconds(15));
+
+                    await leaseService.RenewLeaseAsync(_instanceId, opCts.Token);
                     _logger.LogDebug("Lease renewed for instance {InstanceId}", _instanceId);
 
                     // Check if the current license still allows this worker instance.
                     // On downgrade: only the newest (excess) workers stop — the oldest remain.
                     var license = scope.ServiceProvider.GetRequiredService<ILicenseProvider>();
-                    var activeLeases = await leaseService.GetActiveLeasesAsync(stoppingToken);
+                    var activeLeases = await leaseService.GetActiveLeasesAsync(opCts.Token);
                     var maxWorkers = license.GetLimit("maxworkerinstances");
                     if (activeLeases.Count > maxWorkers)
                     {

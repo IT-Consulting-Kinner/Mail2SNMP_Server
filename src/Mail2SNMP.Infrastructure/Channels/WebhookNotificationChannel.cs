@@ -132,7 +132,8 @@ public class WebhookNotificationChannel : INotificationChannel
     {
         var payload = _templateEngine.BuildPayload(context, context.WebhookTemplate ?? target.PayloadTemplate);
         var json = JsonSerializer.Serialize(payload);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        // N2: dispose StringContent explicitly to release its internal buffer.
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         // Add HMAC signature for Enterprise
         if (_license.IsEnterprise() && !string.IsNullOrEmpty(target.EncryptedSecret))
@@ -157,10 +158,19 @@ public class WebhookNotificationChannel : INotificationChannel
                         content.Headers.TryAddWithoutValidation(key, value);
                 }
             }
-            catch { /* ignore invalid headers JSON */ }
+            catch (JsonException ex)
+            {
+                // N4: log the malformed-headers error so the operator notices
+                // misconfigured custom headers instead of silently dropping them.
+                _logger.LogWarning(ex,
+                    "Invalid headers JSON for webhook target {Name}. The default headers will be used.",
+                    target.Name);
+            }
         }
 
-        var response = await _httpClient.PostAsync(target.Url, content, ct);
+        // N2: dispose the HttpResponseMessage explicitly so the underlying
+        // socket is released back to the connection pool immediately.
+        using var response = await _httpClient.PostAsync(target.Url, content, ct);
         response.EnsureSuccessStatusCode();
     }
 

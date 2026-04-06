@@ -119,12 +119,16 @@ else
                     <h5 class="modal-title">@(_editing != null ? "Edit" : "Add") Job</h5>
                     <button type="button" class="btn-close" @onclick="CloseForm"></button>
                 </div>
-                <EditForm Model="_form" OnValidSubmit="SaveJob">
+                <EditForm Model="_form" OnValidSubmit="SaveJob" OnInvalidSubmit="OnInvalidSubmit">
                     <DataAnnotationsValidator />
                     <div class="modal-body">
-                        @* L6: tabbed layout for the job form *@
+                        @* L6: tabbed layout for the job form. N5: tabs that contain
+                           required fields show a red dot when their content is invalid. *@
+                        @{
+                            var basicHasError = string.IsNullOrWhiteSpace(_form.Name) || _form.MailboxId <= 0 || _form.RuleId <= 0;
+                        }
                         <ul class="nav nav-tabs mb-3" role="tablist">
-                            <li class="nav-item"><button type="button" class="nav-link @(_activeTab == "basic" ? "active" : "")" @onclick='() => _activeTab = "basic"'><i class="bi bi-info-circle"></i> Basic</button></li>
+                            <li class="nav-item"><button type="button" class="nav-link @(_activeTab == "basic" ? "active" : "")" @onclick='() => _activeTab = "basic"'><i class="bi bi-info-circle"></i> Basic @if (basicHasError && _validationAttempted) { <span class="badge bg-danger rounded-pill">!</span> }</button></li>
                             <li class="nav-item"><button type="button" class="nav-link @(_activeTab == "targets" ? "active" : "")" @onclick='() => _activeTab = "targets"'><i class="bi bi-broadcast"></i> Targets <span class="badge bg-secondary">@(_selectedSnmpIds.Count + _selectedWebhookIds.Count)</span></button></li>
                             <li class="nav-item"><button type="button" class="nav-link @(_activeTab == "templates" ? "active" : "")" @onclick='() => _activeTab = "templates"'><i class="bi bi-file-earmark-code"></i> Templates</button></li>
                             <li class="nav-item"><button type="button" class="nav-link @(_activeTab == "advanced" ? "active" : "")" @onclick='() => _activeTab = "advanced"'><i class="bi bi-sliders"></i> Advanced</button></li>
@@ -284,6 +288,19 @@ else
     private bool _busy;
     private string _searchTerm = string.Empty;
     private string _activeTab = "basic";
+    private bool _validationAttempted;
+
+    /// <summary>
+    /// N5: when validation fails on submit, jump back to the Basic tab so the
+    /// user immediately sees which required fields are highlighted, and flip
+    /// _validationAttempted so the tab error badges become visible.
+    /// </summary>
+    private void OnInvalidSubmit()
+    {
+        _validationAttempted = true;
+        if (string.IsNullOrWhiteSpace(_form.Name) || _form.MailboxId <= 0 || _form.RuleId <= 0)
+            _activeTab = "basic";
+    }
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
@@ -309,6 +326,8 @@ else
         _selectedSnmpIds = new();
         _selectedWebhookIds = new();
         _activeTab = "basic";
+        _validationAttempted = false;
+        _dryRunResult = null; // N11: clear stale dry-run output from a previous job
         _showForm = true;
     }
 
@@ -325,6 +344,8 @@ else
         _selectedSnmpIds = new HashSet<int>(j.JobSnmpTargets.Select(jst => jst.SnmpTargetId));
         _selectedWebhookIds = new HashSet<int>(j.JobWebhookTargets.Select(jwt => jwt.WebhookTargetId));
         _activeTab = "basic";
+        _validationAttempted = false;
+        _dryRunResult = null; // N11: clear stale dry-run output from a previous job
         _showForm = true;
     }
 

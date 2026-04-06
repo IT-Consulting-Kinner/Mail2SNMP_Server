@@ -383,9 +383,11 @@ public class SnmpNotificationChannel : INotificationChannel
             {
                 engineId = new OctetString(ByteTool.Convert(target.EngineId));
             }
-            catch
+            catch (Exception ex) when (ex is FormatException or ArgumentException)
             {
-                _logger.LogWarning("Invalid EngineId format for target {Name}. Using default.", target.Name);
+                // N19: catch only the expected parse errors, not arbitrary exceptions
+                // (e.g. OutOfMemoryException would still propagate as it should).
+                _logger.LogWarning(ex, "Invalid EngineId format for target {Name}. Using default.", target.Name);
                 engineId = new OctetString(new byte[] { 0x80, 0x00, 0x1F, 0x88, 0x80, 0xE9, 0x63, 0x00, 0x00, 0xD6, 0x1F, 0xF4, 0x49 });
             }
         }

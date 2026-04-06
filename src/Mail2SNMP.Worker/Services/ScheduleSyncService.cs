@@ -46,11 +46,20 @@ public class ScheduleSyncService : BackgroundService
         {
             try
             {
-                await SyncSchedulesAsync(stoppingToken);
+                // N9: bound a single sync iteration to 20 seconds so a slow database
+                // or hung Quartz call cannot stall the loop indefinitely. The next
+                // iteration will simply pick up where this one left off.
+                using var iterationCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                iterationCts.CancelAfter(TimeSpan.FromSeconds(20));
+                await SyncSchedulesAsync(iterationCts.Token);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("Schedule sync iteration timed out after 20s — will retry next interval");
             }
             catch (Exception ex)
             {

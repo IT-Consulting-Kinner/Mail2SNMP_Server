@@ -71,25 +71,29 @@ public class KeepAliveService : BackgroundService
                 // it is implicitly the primary.
                 var leaseService = scope.ServiceProvider.GetRequiredService<IWorkerLeaseService>();
                 var leases = await leaseService.GetActiveLeasesAsync(stoppingToken);
+                var isPrimary = true;
                 if (leases.Count > 0)
                 {
                     var primary = leases
                         .OrderBy(l => l.InstanceId, StringComparer.Ordinal)
                         .First();
-                    if (!string.Equals(primary.InstanceId, _instanceId, StringComparison.Ordinal))
+                    isPrimary = string.Equals(primary.InstanceId, _instanceId, StringComparison.Ordinal);
+                    if (!isPrimary)
                     {
                         _logger.LogDebug(
                             "KeepAlive skipped — this instance ({This}) is not the primary ({Primary}).",
                             _instanceId, primary.InstanceId);
-                        goto WaitForNext;
                     }
                 }
 
-                var channels = scope.ServiceProvider.GetServices<INotificationChannel>();
-                var snmp = channels.FirstOrDefault(c => c.ChannelName == "snmp");
-                if (snmp != null)
+                if (isPrimary)
                 {
-                    await snmp.SendKeepAliveAsync(stoppingToken);
+                    var channels = scope.ServiceProvider.GetServices<INotificationChannel>();
+                    var snmp = channels.FirstOrDefault(c => c.ChannelName == "snmp");
+                    if (snmp != null)
+                    {
+                        await snmp.SendKeepAliveAsync(stoppingToken);
+                    }
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -97,7 +101,6 @@ public class KeepAliveService : BackgroundService
                 _logger.LogError(ex, "KeepAlive iteration failed");
             }
 
-        WaitForNext:
             try
             {
                 await Task.Delay(interval, stoppingToken);

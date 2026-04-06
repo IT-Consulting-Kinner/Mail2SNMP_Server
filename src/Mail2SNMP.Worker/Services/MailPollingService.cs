@@ -89,7 +89,11 @@ public class MailPollingService : BackgroundService
     /// </summary>
     private async Task SuperviseConsumerAsync(int consumerId, CancellationToken ct)
     {
-        var backoff = TimeSpan.FromSeconds(2);
+        // N14: backoff is configurable via Imap:ConsumerRestartBackoffSeconds /
+        // Imap:ConsumerRestartMaxBackoffSeconds in appsettings.json.
+        var initial = TimeSpan.FromSeconds(Math.Max(1, _imapSettings.ConsumerRestartBackoffSeconds));
+        var max = TimeSpan.FromSeconds(Math.Max(initial.TotalSeconds, _imapSettings.ConsumerRestartMaxBackoffSeconds));
+        var backoff = initial;
         while (!ct.IsCancellationRequested)
         {
             try
@@ -115,8 +119,8 @@ public class MailPollingService : BackgroundService
                 {
                     return;
                 }
-                // Mild exponential backoff capped at 30 s.
-                backoff = TimeSpan.FromSeconds(Math.Min(backoff.TotalSeconds * 2, 30));
+                // Mild exponential backoff capped at the configured maximum.
+                backoff = TimeSpan.FromSeconds(Math.Min(backoff.TotalSeconds * 2, max.TotalSeconds));
             }
         }
     }
