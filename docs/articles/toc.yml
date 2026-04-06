@@ -8,5 +8,7 @@
   href: examples.md
 - name: Troubleshooting
   href: troubleshooting.md
+- name: Master Key Rotation
+  href: master-key-rotation.md
 - name: REST API Usage
   href: api-usage.md

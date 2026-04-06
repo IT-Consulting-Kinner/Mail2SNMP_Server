@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-net/master/src/Stryker.Core/Stryker.Core/stryker-schema.json",
+  "stryker-config": {
+    "_comment": "Wave F (33): Mutation testing with Stryker.NET. Run from this directory: dotnet stryker. Requires: dotnet tool install -g dotnet-stryker.",
+    "project": "Mail2SNMP.Tests.csproj",
+    "test-projects": [
+      "Mail2SNMP.Tests.csproj"
+    ],
+    "mutate": [
+      "../../src/Mail2SNMP.Core/**/*.cs",
+      "../../src/Mail2SNMP.Infrastructure/**/*.cs",
+      "!**/Migrations/**/*.cs",
+      "!**/obj/**/*.cs",
+      "!**/bin/**/*.cs"
+    ],
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 50
+    },
+    "reporters": [
+      "html",
+      "progress",
+      "cleartext"
+    ],
+    "concurrency": 4,
+    "language-version": "Latest",
+    "since": {
+      "enabled": false,
+      "target": "main"
+    }
+  }
+}
