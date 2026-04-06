@@ -62,6 +62,10 @@ jobs:
           --output ./publish/worker
           -p:DebugType=none
           -p:DebugSymbols=false
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:AssemblyVersion=${{ steps.version.outputs.version_four }}
+          -p:FileVersion=${{ steps.version.outputs.version_four }}
+          -p:InformationalVersion=${{ steps.version.outputs.version }}
 
       - name: Install WiX Toolset
         run: dotnet tool install --global wix
