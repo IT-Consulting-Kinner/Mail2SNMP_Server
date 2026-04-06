@@ -79,11 +79,6 @@ public static class DependencyInjection
             return encryptor;
         });
 
-        // J1: One-shot startup migrator that re-encrypts any credential rows older
-        // builds left in plaintext (the service-layer encryption funnel was added
-        // in Wave J). Idempotent — does nothing on a clean install.
-        services.AddHostedService<Security.PlaintextCredentialMigrator>();
-
         // License (v5.8: unsigned tokens only accepted in Development via DOTNET_ENVIRONMENT / ASPNETCORE_ENVIRONMENT)
         services.AddSingleton<ILicenseProvider>(sp =>
         {

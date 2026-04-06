@@ -129,3 +129,55 @@ When enabled, Prometheus metrics are exposed at `/metrics`.
 | `MaxEventsPerHour` | Rate limit (default: 50) |
 | `DedupWindowMinutes` | Deduplication window (default: 30) |
 | SNMP/Webhook Targets | Assigned via multi-select |
+
+## Operational Settings
+
+These settings live in `appsettings.json` of each host (Worker / Web / Api).
+
+### IMAP IDLE (real-time mode)
+
+```json
+"Imap": {
+  "UseIdle": true,
+  "IdleRefreshMinutes": 25,
+  "IdleConnectTimeoutSeconds": 10
+}
+```
+
+When `UseIdle = true` the worker holds a long-lived IDLE connection per active mailbox and processes new mail as soon as the server pushes a `CountChanged` notification, instead of waiting for the next scheduled poll. RFC 2177 requires the connection to be cycled at least every 29 minutes; `IdleRefreshMinutes` controls this. Falls back to polling automatically if IDLE is not advertised by the IMAP server.
+
+### Auto-acknowledge
+
+```json
+"Events": {
+  "AutoAcknowledgeAfterMinutes": 10
+}
+```
+
+When set to a positive value, `AutoAcknowledgeService` scans every minute for events in state `New` whose age exceeds the threshold and acknowledges them automatically (actor `System.AutoAck`). This triggers the paired `EventConfirmed` SNMP trap, so monitoring systems can self-clear alerts. Set to `0` (default) to disable.
+
+### Forwarded headers (reverse proxy deployments)
+
+```json
+"ForwardedHeaders": {
+  "KnownProxies": [ "10.0.0.1", "10.0.0.2" ]
+}
+```
+
+When Mail2SNMP runs behind nginx / HAProxy / IIS ARR, list every reverse-proxy IP here so the rate limiter and audit log see the real client IP from `X-Forwarded-For`. Without this, every login attempt looks like it came from the proxy and the per-IP rate limit becomes a global limit.
+
+### OpenTelemetry
+
+```json
+"Otel": {
+  "Enabled": true,
+  "Endpoint": "http://localhost:4317",
+  "ServiceName": "mail2snmp"
+}
+```
+
+Exports ASP.NET Core and HTTP-client traces via OTLP. Requires an OTLP-compatible collector (Jaeger, Tempo, Grafana Agent, OpenTelemetry Collector).
+
+### API Keys
+
+API keys are managed at runtime via the Web UI (Settings → API Keys). No `appsettings.json` configuration is needed. See [api-usage.md](api-usage.md#2-api-key-x-api-key-header) for header format and scope-to-role mapping.

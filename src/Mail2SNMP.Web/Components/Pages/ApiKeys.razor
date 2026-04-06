@@ -84,33 +84,41 @@ else
                     <h5 class="modal-title">Create API Key</h5>
                     <button type="button" class="btn-close" @onclick="CloseForm"></button>
                 </div>
-                <div class="modal-body">
-                    @* H12: surface validation errors so users see why Create did nothing *@
-                    @if (!string.IsNullOrEmpty(_formError))
-                    {
-                        <div class="alert alert-danger py-2 small">@_formError</div>
-                    }
-                    <div class="mb-3">
-                        <label class="form-label">Name</label>
-                        <input class="form-control" @bind="_formName" placeholder="e.g. Grafana scraper" />
+                @* K9: Wrap the create form in an HTML <form> so pressing Enter in
+                   any input submits via the Create button — consistent with every
+                   other modal in the app, which use Blazor's EditForm for the same
+                   purpose. We can't use EditForm here because the inputs are bound
+                   to plain fields rather than a model class. *@
+                <form @onsubmit="Create" @onsubmit:preventDefault="true">
+                    <div class="modal-body">
+                        @* H12: surface validation errors so users see why Create did nothing *@
+                        @if (!string.IsNullOrEmpty(_formError))
+                        {
+                            <div class="alert alert-danger py-2 small">@_formError</div>
+                        }
+                        <div class="mb-3">
+                            <label class="form-label">Name</label>
+                            @* K8: autofocus first input. *@
+                            <input class="form-control" @bind="_formName" placeholder="e.g. Grafana scraper" autofocus />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Scopes</label>
+                            <select class="form-select" @bind="_formScopes">
+                                <option value="read">read (GET only)</option>
+                                <option value="read,write">read,write (GET/POST/PUT/DELETE)</option>
+                                <option value="admin">admin (full access)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Expires (optional)</label>
+                            <input type="date" class="form-control" @bind="_formExpires" />
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Scopes</label>
-                        <select class="form-select" @bind="_formScopes">
-                            <option value="read">read (GET only)</option>
-                            <option value="read,write">read,write (GET/POST/PUT/DELETE)</option>
-                            <option value="admin">admin (full access)</option>
-                        </select>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Create</button>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Expires (optional)</label>
-                        <input type="date" class="form-control" @bind="_formExpires" />
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
-                    <button class="btn btn-primary" @onclick="Create">Create</button>
-                </div>
+                </form>
             </div>
         </div>
     </div>
@@ -157,8 +165,10 @@ else
         _showForm = true;
     }
 
-    // J3: Single close path that resets every form field, so cancelling and
-    // reopening the create dialog never carries over a stale name/scope/expiry.
+    // J3 + K1: Single close path that resets every form field AND clears the
+    // one-time plaintext key. Without K1 the previously-shown key would remain
+    // displayed at the top of the page after the user closed the modal without
+    // clicking "I have saved it" — and would re-appear on every navigation back.
     private void CloseForm()
     {
         _showForm = false;
@@ -166,6 +176,7 @@ else
         _formScopes = "read";
         _formExpires = null;
         _formError = null;
+        _newKeyPlaintext = null;
     }
 
     private async Task Create()

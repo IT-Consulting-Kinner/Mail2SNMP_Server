@@ -68,6 +68,55 @@ public class ServiceTests : IDisposable
             await service.CreateAsync(new Mailbox { Name = "MB4", Host = "host", Username = "u" }));
     }
 
+    // K4: Round-trip integration test for the J1 encryption funnel — proves
+    // that plaintext handed to CreateAsync/UpdateAsync ends up as AES-GCM
+    // ciphertext at rest and decrypts cleanly. The other MailboxService tests
+    // mock the encryptor so they don't catch a regression where the funnel
+    // is removed; this one uses a real AesGcmCredentialEncryptor instance.
+    [Fact]
+    public async Task MailboxService_Create_RoundTripsThroughRealEncryptor()
+    {
+        var key = new byte[32];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(key);
+        var realEncryptor = new Mail2SNMP.Infrastructure.Security.AesGcmCredentialEncryptor(
+            key, NullLogger<Mail2SNMP.Infrastructure.Security.AesGcmCredentialEncryptor>.Instance);
+        var service = new MailboxService(_db, _license, _audit, realEncryptor, Options.Create(new ImapSettings()), NullLogger<MailboxService>.Instance);
+
+        const string plaintext = "MyVerySecretPassword!2026";
+        var mailbox = new Mailbox { Name = "Round", Host = "h", Username = "u", EncryptedPassword = plaintext };
+        await service.CreateAsync(mailbox);
+
+        // Re-fetch from the DB (no tracking) to be sure we read what was actually persisted.
+        _db.ChangeTracker.Clear();
+        var stored = await _db.Mailboxes.AsNoTracking().FirstAsync(m => m.Name == "Round");
+        Assert.NotEqual(plaintext, stored.EncryptedPassword);
+        Assert.True(realEncryptor.TryDecrypt(stored.EncryptedPassword, out var decrypted));
+        Assert.Equal(plaintext, decrypted);
+    }
+
+    [Fact]
+    public async Task MailboxService_Update_PreservesExistingCiphertextWhenUnchanged()
+    {
+        var key = new byte[32];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(key);
+        var realEncryptor = new Mail2SNMP.Infrastructure.Security.AesGcmCredentialEncryptor(
+            key, NullLogger<Mail2SNMP.Infrastructure.Security.AesGcmCredentialEncryptor>.Instance);
+        var service = new MailboxService(_db, _license, _audit, realEncryptor, Options.Create(new ImapSettings()), NullLogger<MailboxService>.Instance);
+
+        var mailbox = new Mailbox { Name = "Stable", Host = "h", Username = "u", EncryptedPassword = "initial-pw" };
+        await service.CreateAsync(mailbox);
+        var encryptedAfterCreate = mailbox.EncryptedPassword;
+
+        // Simulate the Razor "edit without changing the password" path: the entity
+        // still carries the existing ciphertext. EnsureEncrypted must NOT re-encrypt it.
+        mailbox.Host = "new-host";
+        await service.UpdateAsync(mailbox);
+
+        Assert.Equal(encryptedAfterCreate, mailbox.EncryptedPassword);
+        Assert.True(realEncryptor.TryDecrypt(mailbox.EncryptedPassword, out var pt));
+        Assert.Equal("initial-pw", pt);
+    }
+
     [Fact]
     public async Task MailboxService_Delete_ThenCreateNewIsAllowed()
     {

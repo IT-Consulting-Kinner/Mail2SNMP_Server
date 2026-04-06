@@ -118,7 +118,8 @@ else
                     <div class="modal-body">
                         <div class="mb-3">
                             <label class="form-label">Name</label>
-                            <InputText class="form-control" @bind-Value="_form.Name" />
+                            @* K8: autofocus first input. *@
+                            <InputText class="form-control" @bind-Value="_form.Name" autofocus />
                             <ValidationMessage For="@(() => _form.Name)" class="text-danger small" />
                         </div>
                         <div class="mb-3">

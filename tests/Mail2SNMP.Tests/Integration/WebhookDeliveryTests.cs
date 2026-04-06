@@ -118,8 +118,12 @@ public class WebhookDeliveryTests : IDisposable
         await _httpClient.PostAsync(targetUrl, payload);
 
         // Assert: verify content type header was sent
+        // K5: explicit null guard so the test fails with a clear message instead
+        // of the CS8602 NRE warning the compiler emits on the chained call.
         var request = _server.LogEntries.First();
-        Assert.Contains("application/json", request.RequestMessage.Headers["Content-Type"].First());
+        var contentType = request.RequestMessage?.Headers?["Content-Type"];
+        Assert.NotNull(contentType);
+        Assert.Contains("application/json", contentType!.First());
     }
 
     [Fact]

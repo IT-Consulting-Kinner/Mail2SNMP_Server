@@ -368,7 +368,10 @@ public class MailPollingService : BackgroundService
                     if (matched)
                     {
                         matchCount++;
-                        _logger.LogInformation(
+                        // K3: per-mail logging is Debug — Information would explode the log under
+                        // any meaningful mail volume. The end-of-batch summary at the bottom of
+                        // FetchAndProcessEmailsAsync is what operators actually want to see.
+                        _logger.LogDebug(
                             "Rule '{RuleName}' matched email (UID={Uid}, From={From}, Subject={Subject}) in Job {JobId}",
                             rule.Name, uid, from, subject, job.Id);
 
@@ -387,7 +390,7 @@ public class MailPollingService : BackgroundService
 
                         evt = await eventService.CreateAsync(evt, ct);
 
-                        _logger.LogInformation(
+                        _logger.LogDebug(
                             "Event {EventId} created for Job {JobId} (Rule: {RuleName}, Severity: {Severity})",
                             evt.Id, job.Id, rule.Name, evt.Severity);
 
@@ -395,7 +398,7 @@ public class MailPollingService : BackgroundService
                         {
                             // During maintenance: suppress the event, skip notifications
                             await eventService.SuppressAsync(evt.Id, ct);
-                            _logger.LogInformation(
+                            _logger.LogDebug(
                                 "Event {EventId} suppressed during maintenance window for Job {JobId}",
                                 evt.Id, job.Id);
                         }

@@ -31,8 +31,11 @@ else
             var isFuture = w.StartUtc > DateTime.UtcNow;
 
             <div class="col-md-6 col-lg-4">
+                @* K7: Use Bootstrap 5.3 *-subtle / *-emphasis utility classes for the
+                   active and past headers — they auto-adapt to data-bs-theme="dark"
+                   via CSS variables, unlike the hardcoded bg-warning text-dark. *@
                 <div class="card @(isActive ? "border-warning" : isPast ? "border-secondary" : "border-primary")">
-                    <div class="card-header d-flex justify-content-between align-items-center @(isActive ? "bg-warning text-dark" : isPast ? "bg-secondary text-white" : "bg-primary text-white")">
+                    <div class="card-header d-flex justify-content-between align-items-center @(isActive ? "bg-warning-subtle text-warning-emphasis" : isPast ? "bg-secondary-subtle text-secondary-emphasis" : "bg-primary text-white")">
                         <strong>@w.Name</strong>
                         @if (isActive)
                         {

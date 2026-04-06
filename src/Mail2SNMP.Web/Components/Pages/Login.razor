@@ -5,8 +5,10 @@
 
 <PageTitle>Login - Mail2SNMP</PageTitle>
 
-<div class="d-flex justify-content-center align-items-center vh-100 bg-light">
-    <div class="card shadow-sm" style="width: 400px;">
+@* K10: responsive sizing — fixed 400px overflowed on phones; w-100 with a max-width
+   keeps the desktop layout while letting the card shrink on small screens. *@
+<div class="d-flex justify-content-center align-items-center vh-100 bg-light px-3">
+    <div class="card shadow-sm w-100" style="max-width: 400px;">
         <div class="card-body p-4">
             <h4 class="card-title text-center mb-4">
                 <span class="fw-bold">Mail2SNMP</span>
