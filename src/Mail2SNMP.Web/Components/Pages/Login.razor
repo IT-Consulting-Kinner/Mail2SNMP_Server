@@ -23,8 +23,10 @@
             <form method="post" action="/account/login" data-enhance="false">
                 <div class="mb-3">
                     <label for="email" class="form-label">Email</label>
+                    @* L4: autofocus the email field on page load so users can type
+                       immediately. autocomplete="email" lets password managers fill in. *@
                     <input id="email" name="email" type="email" class="form-control"
-                           placeholder="admin@mail2snmp.local" required />
+                           placeholder="admin@mail2snmp.local" autocomplete="email" autofocus required />
                 </div>
                 <div class="mb-3">
                     <label for="password" class="form-label">Password</label>

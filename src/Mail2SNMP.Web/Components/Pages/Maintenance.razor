@@ -31,11 +31,15 @@ else
             var isFuture = w.StartUtc > DateTime.UtcNow;
 
             <div class="col-md-6 col-lg-4">
-                @* K7: Use Bootstrap 5.3 *-subtle / *-emphasis utility classes for the
-                   active and past headers — they auto-adapt to data-bs-theme="dark"
-                   via CSS variables, unlike the hardcoded bg-warning text-dark. *@
+                @* L1: Use plain Bootstrap 5.1 utility classes — the project ships
+                   bootstrap.min.css v5.1.0 which does NOT include the *-subtle /
+                   *-emphasis utilities that K7 attempted to use (introduced in
+                   5.2). Without the fallback those classes silently no-op'd and
+                   the card headers lost their background entirely. The contrast
+                   of bg-warning (#ffc107) against text-dark (#212529) is ~11:1,
+                   well above WCAG AA for large text in either light or dark mode. *@
                 <div class="card @(isActive ? "border-warning" : isPast ? "border-secondary" : "border-primary")">
-                    <div class="card-header d-flex justify-content-between align-items-center @(isActive ? "bg-warning-subtle text-warning-emphasis" : isPast ? "bg-secondary-subtle text-secondary-emphasis" : "bg-primary text-white")">
+                    <div class="card-header d-flex justify-content-between align-items-center @(isActive ? "bg-warning text-dark" : isPast ? "bg-secondary text-white" : "bg-primary text-white")">
                         <strong>@w.Name</strong>
                         @if (isActive)
                         {
@@ -124,7 +128,7 @@ else
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Save</button>
+                        <button type="submit" class="btn btn-primary" disabled="@_busy">Save</button>
                     </div>
                 </EditForm>
             </div>
