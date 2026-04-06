@@ -2,6 +2,7 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "Operator")]
 @rendermode InteractiveServer
 @inject IAuditService AuditService
+@inject IJSRuntime JS
 
 <PageTitle>Audit Log - Mail2SNMP</PageTitle>
 
@@ -24,7 +25,9 @@
     </div>
     <div class="col-md-3 d-flex align-items-end">
         <button class="btn btn-primary btn-sm me-2" @onclick="ApplyFilter">Search</button>
-        <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFilter">Clear</button>
+        <button class="btn btn-outline-secondary btn-sm me-2" @onclick="ClearFilter">Clear</button>
+        @* Wave C (12): export the currently filtered audit set as CSV *@
+        <button class="btn btn-outline-success btn-sm" @onclick="ExportCsv" disabled="@(_events == null || _events.Count == 0)"><i class="bi bi-download"></i> CSV</button>
     </div>
 </div>
 
@@ -132,4 +135,37 @@ else
         AuditResult.Denied => "warning",
         _ => "secondary"
     };
+
+    // Wave C (12): build a CSV string from the currently filtered events and trigger
+    // a browser download via a small JS interop helper.
+    private async Task ExportCsv()
+    {
+        if (_events == null || _events.Count == 0) return;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("TimestampUtc,ActorType,ActorId,Action,TargetType,TargetId,Result,IpAddress,UserAgent,Details");
+        foreach (var e in _events)
+        {
+            sb.Append(e.TimestampUtc.ToString("o")).Append(',')
+              .Append(Csv(e.ActorType.ToString())).Append(',')
+              .Append(Csv(e.ActorId)).Append(',')
+              .Append(Csv(e.Action)).Append(',')
+              .Append(Csv(e.TargetType)).Append(',')
+              .Append(Csv(e.TargetId)).Append(',')
+              .Append(Csv(e.Result.ToString())).Append(',')
+              .Append(Csv(e.IpAddress)).Append(',')
+              .Append(Csv(e.UserAgent)).Append(',')
+              .AppendLine(Csv(e.Details));
+        }
+        var filename = $"audit-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv";
+        await JS.InvokeVoidAsync("mail2snmp.downloadText", filename, "text/csv;charset=utf-8", sb.ToString());
+    }
+
+    // RFC4180-style minimal CSV quoting: escape quotes by doubling, wrap if comma/quote/newline present.
+    private static string Csv(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        var needsQuote = value.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0;
+        var escaped = value.Replace("\"", "\"\"");
+        return needsQuote ? $"\"{escaped}\"" : escaped;
+    }
 }

@@ -1,6 +1,8 @@
 @page "/rules"
 @rendermode InteractiveServer
+@using Mail2SNMP.Core.Services
 @inject IRuleService RuleService
+@inject RuleEvaluator RuleEvaluator
 @inject IJSRuntime JS
 
 <PageTitle>Rules - Mail2SNMP</PageTitle>
@@ -92,6 +94,7 @@ else
                     <td><span class="badge @(rule.IsActive ? "bg-success" : "bg-secondary")">@(rule.IsActive ? "Active" : "Inactive")</span></td>
                     <td>
                         <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(rule)" disabled="@_busy"><i class="bi bi-pencil"></i> Edit</button>
+                        <button class="btn btn-outline-info btn-sm me-1" @onclick="() => ShowTester(rule)" disabled="@_busy"><i class="bi bi-flask"></i> Test</button>
                         <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(rule.Id)" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
                     </td>
                 </tr>
@@ -169,6 +172,51 @@ else
     </div>
 }
 
+@* Wave C (2): Rule tester modal — operators can paste a sample mail and instantly see whether
+   a given rule would match, without sending real mails. *@
+@if (_showTester && _testerRule != null)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-flask"></i> Test Rule: @_testerRule.Name</h5>
+                    <button type="button" class="btn-close" @onclick="CloseTester"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-secondary small mb-3">
+                        <strong>Field:</strong> @_testerRule.Field &nbsp; <strong>Match:</strong> @_testerRule.MatchType &nbsp; <strong>Criteria:</strong> <code>@_testerRule.Criteria</code>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">From</label>
+                        <input class="form-control form-control-sm" @bind="_testFrom" @bind:event="oninput" placeholder="alerts@example.com" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Subject</label>
+                        <input class="form-control form-control-sm" @bind="_testSubject" @bind:event="oninput" placeholder="CRITICAL: Disk full on srv01" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Body</label>
+                        <textarea class="form-control form-control-sm" rows="4" @bind="_testBody" @bind:event="oninput" placeholder="Free space below threshold..."></textarea>
+                    </div>
+                    @if (_testResult != null)
+                    {
+                        <div class="alert @(_testResult.Value ? "alert-success" : "alert-warning") mb-0">
+                            <i class="bi @(_testResult.Value ? "bi-check-circle-fill" : "bi-x-circle-fill")"></i>
+                            <strong>@(_testResult.Value ? "MATCH" : "NO MATCH")</strong>
+                            — this rule @(_testResult.Value ? "would" : "would NOT") trigger an event for the inputs above.
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseTester">Close</button>
+                    <button type="button" class="btn btn-primary" @onclick="RunTest"><i class="bi bi-play-fill"></i> Run Test</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private IReadOnlyList<Rule>? _rules;
     private bool _showForm;
@@ -181,6 +229,40 @@ else
     private string _searchTerm = string.Empty;
     private string? _lastSearchTerm;
     private HashSet<int> _selected = new();
+
+    // Wave C (2): rule tester state
+    private bool _showTester;
+    private Rule? _testerRule;
+    private string _testFrom = string.Empty;
+    private string _testSubject = string.Empty;
+    private string _testBody = string.Empty;
+    private bool? _testResult;
+
+    private void ShowTester(Rule r)
+    {
+        _testerRule = r;
+        _testFrom = string.Empty;
+        _testSubject = string.Empty;
+        _testBody = string.Empty;
+        _testResult = null;
+        _showTester = true;
+    }
+
+    private void CloseTester() { _showTester = false; _testerRule = null; }
+
+    private void RunTest()
+    {
+        if (_testerRule == null) return;
+        try
+        {
+            _testResult = RuleEvaluator.Evaluate(_testerRule, _testFrom, _testSubject, _testBody);
+        }
+        catch (Exception ex)
+        {
+            _error = ErrorMessageFormatter.ToFriendly(ex, "evaluating the rule");
+            _testResult = false;
+        }
+    }
 
     private void ToggleSelect(int id, bool isChecked)
     {
