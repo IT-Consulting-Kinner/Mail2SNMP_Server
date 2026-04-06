@@ -1,12 +1,98 @@
 namespace Mail2SNMP.Models.Configuration;
 
 /// <summary>
-/// Database provider and connection string configuration.
+/// Database provider and connection configuration.
+/// Supports two modes:
+///   1) Structured fields (Server, Port, DatabaseName, Username, Password, ...) — recommended.
+///   2) Raw <see cref="ConnectionString"/> — used as-is when set (takes precedence).
 /// </summary>
 public class DatabaseSettings
 {
+    /// <summary>"Sqlite" or "SqlServer".</summary>
     public string Provider { get; set; } = "Sqlite";
-    public string ConnectionString { get; set; } = "Data Source=mail2snmp.db";
+
+    /// <summary>
+    /// Optional raw ADO.NET connection string. When set, this value is used as-is
+    /// and all structured fields below are ignored. Useful for advanced scenarios.
+    /// </summary>
+    public string? ConnectionString { get; set; }
+
+    // ─── Structured fields (used when ConnectionString is not set) ────────────
+
+    /// <summary>SQL Server hostname or listener name. SqlServer only.</summary>
+    public string? Server { get; set; }
+
+    /// <summary>SQL Server TCP port. Default 1433. SqlServer only.</summary>
+    public int Port { get; set; } = 1433;
+
+    /// <summary>Database name. For SQLite, this is the file path (e.g. "mail2snmp.db").</summary>
+    public string DatabaseName { get; set; } = "mail2snmp.db";
+
+    /// <summary>SQL login username. Ignored when <see cref="IntegratedSecurity"/> is true.</summary>
+    public string? Username { get; set; }
+
+    /// <summary>SQL login password. Ignored when <see cref="IntegratedSecurity"/> is true.</summary>
+    public string? Password { get; set; }
+
+    /// <summary>When true, uses Windows Authentication (Trusted_Connection). SqlServer only.</summary>
+    public bool IntegratedSecurity { get; set; } = false;
+
+    /// <summary>When true, trusts the SQL Server certificate without validation.</summary>
+    public bool TrustServerCertificate { get; set; } = true;
+
+    /// <summary>Enable encrypted connection. Default true.</summary>
+    public bool Encrypt { get; set; } = true;
+
+    /// <summary>Enable failover for AlwaysOn / multi-subnet listeners.</summary>
+    public bool MultiSubnetFailover { get; set; } = false;
+
+    /// <summary>
+    /// Additional raw connection string options appended verbatim
+    /// (e.g. "ApplicationIntent=ReadOnly;Connect Timeout=30").
+    /// </summary>
+    public string? AdditionalOptions { get; set; }
+
+    /// <summary>
+    /// Returns the effective connection string. If <see cref="ConnectionString"/> is set,
+    /// it is returned verbatim. Otherwise the structured fields are assembled.
+    /// </summary>
+    public string GetEffectiveConnectionString()
+    {
+        if (!string.IsNullOrWhiteSpace(ConnectionString))
+            return ConnectionString;
+
+        if (Provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
+        {
+            var server = string.IsNullOrWhiteSpace(Server) ? "localhost" : Server;
+            var serverWithPort = Port == 1433 ? server : $"{server},{Port}";
+
+            var parts = new List<string>
+            {
+                $"Server={serverWithPort}",
+                $"Database={DatabaseName}",
+                $"TrustServerCertificate={TrustServerCertificate}",
+                $"Encrypt={Encrypt}"
+            };
+            if (IntegratedSecurity)
+            {
+                parts.Add("Integrated Security=True");
+            }
+            else
+            {
+                parts.Add($"User Id={Username}");
+                parts.Add($"Password={Password}");
+            }
+            if (MultiSubnetFailover)
+                parts.Add("MultiSubnetFailover=True");
+            if (!string.IsNullOrWhiteSpace(AdditionalOptions))
+                parts.Add(AdditionalOptions.TrimEnd(';'));
+
+            return string.Join(";", parts) + ";";
+        }
+
+        // SQLite — DatabaseName is the file path
+        return $"Data Source={DatabaseName}";
+    }
 }
 
 /// <summary>

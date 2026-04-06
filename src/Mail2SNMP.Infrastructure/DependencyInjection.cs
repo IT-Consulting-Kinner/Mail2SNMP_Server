@@ -26,13 +26,14 @@ public static class DependencyInjection
     {
         // Database with automatic CRUD audit interceptor (v5.8)
         var dbSettings = configuration.GetSection("Database").Get<DatabaseSettings>() ?? new DatabaseSettings();
+        var effectiveConnectionString = dbSettings.GetEffectiveConnectionString();
         services.AddSingleton<AuditSaveChangesInterceptor>();
         services.AddDbContext<Mail2SnmpDbContext>((sp, options) =>
         {
             if (dbSettings.Provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
-                options.UseSqlServer(dbSettings.ConnectionString);
+                options.UseSqlServer(effectiveConnectionString);
             else
-                options.UseSqlite(dbSettings.ConnectionString);
+                options.UseSqlite(effectiveConnectionString);
 
             options.AddInterceptors(sp.GetRequiredService<AuditSaveChangesInterceptor>());
         });

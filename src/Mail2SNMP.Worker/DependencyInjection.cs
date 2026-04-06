@@ -41,6 +41,7 @@ public static class WorkerDependencyInjection
             .GetSection("Database")
             .Get<DatabaseSettings>() ?? new DatabaseSettings();
 
+        var effectiveConnectionString = dbSettings.GetEffectiveConnectionString();
         services.AddQuartz(q =>
         {
             // Use AdoJobStore for SQL Server to enable cluster-safe scheduling.
@@ -50,7 +51,7 @@ public static class WorkerDependencyInjection
                 q.UsePersistentStore(store =>
                 {
                     store.UseProperties = true;
-                    store.UseSqlServer(dbSettings.ConnectionString);
+                    store.UseSqlServer(effectiveConnectionString);
                     store.UseNewtonsoftJsonSerializer();
                     store.PerformSchemaValidation = false;
                 });

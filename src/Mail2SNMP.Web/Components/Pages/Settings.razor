@@ -169,8 +169,18 @@
     {
         // Database
         _dbProvider = Configuration["Database:Provider"] ?? "Sqlite";
-        var connStr = Configuration["Database:ConnectionString"] ?? "";
-        _dbConnectionMasked = connStr.Length > 20 ? connStr[..20] + "..." : connStr;
+        var connStr = Configuration["Database:ConnectionString"];
+        if (string.IsNullOrEmpty(connStr))
+        {
+            // Structured config: build a short summary
+            var server = Configuration["Database:Server"] ?? "localhost";
+            var port = Configuration["Database:Port"] ?? "1433";
+            var dbName = Configuration["Database:DatabaseName"] ?? "mail2snmp.db";
+            connStr = _dbProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase)
+                ? $"{server}:{port}/{dbName}"
+                : dbName;
+        }
+        _dbConnectionMasked = connStr.Length > 40 ? connStr[..40] + "..." : connStr;
 
         // v5.8: SQLite production warning banner
         var env = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
