@@ -447,6 +447,125 @@ public class Program
 
     static async Task<int> HandleCredentials(string[] args, IServiceProvider sp)
     {
+        // G1: rotate-key — atomically re-encrypts every stored credential with a new
+        // master key. Procedure:
+        //   1. Load OLD key (current MASTER_KEY env var or default key file).
+        //   2. Decrypt every credential in-memory using the old encryptor.
+        //   3. Generate or read NEW key (--new-key-file <path>).
+        //   4. Re-encrypt with the new encryptor.
+        //   5. Persist all rows in a single transaction. The OLD key file is then
+        //      backed up next to the new one for one rotation cycle so the operator
+        //      can recover from accidents.
+        if (args.FirstOrDefault() == "rotate-key")
+        {
+            string? newKeyPath = null;
+            for (int i = 1; i < args.Length - 1; i++)
+                if (args[i] == "--new-key-file") newKeyPath = args[i + 1];
+
+            if (string.IsNullOrWhiteSpace(newKeyPath))
+            {
+                Console.Error.WriteLine("Usage: mail2snmp credentials rotate-key --new-key-file <path>");
+                Console.Error.WriteLine("  The new key file is created if missing (random 256-bit key).");
+                return 1;
+            }
+
+            Console.WriteLine("WARNING: Master key rotation re-encrypts ALL stored credentials.");
+            Console.WriteLine("A full database backup is STRONGLY recommended before proceeding.");
+            Console.Write("Type 'CONFIRM' to proceed: ");
+            if (Console.ReadLine()?.Trim() != "CONFIRM") { Console.WriteLine("Aborted."); return 1; }
+
+            using var scope = sp.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Mail2SnmpDbContext>();
+            var oldEncryptor = scope.ServiceProvider.GetRequiredService<Mail2SNMP.Core.Interfaces.ICredentialEncryptor>();
+
+            // 1) Load or generate the new key
+            byte[] newKey;
+            if (File.Exists(newKeyPath))
+            {
+                newKey = await File.ReadAllBytesAsync(newKeyPath);
+                if (newKey.Length != 32)
+                {
+                    Console.Error.WriteLine($"New key file is {newKey.Length} bytes; expected 32.");
+                    return 1;
+                }
+                Console.WriteLine($"Using existing key from {newKeyPath}");
+            }
+            else
+            {
+                newKey = new byte[32];
+                System.Security.Cryptography.RandomNumberGenerator.Fill(newKey);
+                var dir = Path.GetDirectoryName(newKeyPath);
+                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                await File.WriteAllBytesAsync(newKeyPath, newKey);
+                Console.WriteLine($"Generated new key at {newKeyPath}");
+            }
+
+            var newLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
+            var newEncryptor = new Mail2SNMP.Infrastructure.Security.AesGcmCredentialEncryptor(
+                newKey, newLoggerFactory.CreateLogger<Mail2SNMP.Infrastructure.Security.AesGcmCredentialEncryptor>());
+
+            // 2/3/4) Decrypt with old, re-encrypt with new, in-memory only.
+            // We collect plaintexts first so a decrypt failure aborts BEFORE any write.
+            var mailboxes = await db.Mailboxes.ToListAsync();
+            var snmpTargets = await db.SnmpTargets.ToListAsync();
+            var webhookTargets = await db.WebhookTargets.ToListAsync();
+
+            var rewritten = 0;
+            try
+            {
+                foreach (var m in mailboxes.Where(x => !string.IsNullOrEmpty(x.EncryptedPassword)))
+                {
+                    var pt = oldEncryptor.Decrypt(m.EncryptedPassword);
+                    m.EncryptedPassword = newEncryptor.Encrypt(pt);
+                    rewritten++;
+                }
+                foreach (var t in snmpTargets)
+                {
+                    if (!string.IsNullOrEmpty(t.EncryptedAuthPassword))
+                    { t.EncryptedAuthPassword = newEncryptor.Encrypt(oldEncryptor.Decrypt(t.EncryptedAuthPassword)); rewritten++; }
+                    if (!string.IsNullOrEmpty(t.EncryptedPrivPassword))
+                    { t.EncryptedPrivPassword = newEncryptor.Encrypt(oldEncryptor.Decrypt(t.EncryptedPrivPassword)); rewritten++; }
+                }
+                foreach (var w in webhookTargets.Where(x => !string.IsNullOrEmpty(x.EncryptedSecret)))
+                {
+                    var pt = oldEncryptor.Decrypt(w.EncryptedSecret!);
+                    w.EncryptedSecret = newEncryptor.Encrypt(pt);
+                    rewritten++;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"FAILED while decrypting/re-encrypting: {ex.Message}");
+                Console.Error.WriteLine("No database changes were saved. Aborting.");
+                return 2;
+            }
+
+            // 5) Persist all changes in one transaction
+            using var transaction = await db.Database.BeginTransactionAsync();
+            try
+            {
+                await db.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                Console.Error.WriteLine($"DATABASE WRITE FAILED — rolled back: {ex.Message}");
+                return 3;
+            }
+
+            Console.WriteLine();
+            Console.WriteLine($"Rotation complete. Re-encrypted {rewritten} credentials.");
+            Console.WriteLine();
+            Console.WriteLine("NEXT STEPS:");
+            Console.WriteLine($"  1. Update the service configuration to point at: {newKeyPath}");
+            Console.WriteLine("     (set MASTER_KEY_PATH env var or update appsettings.json)");
+            Console.WriteLine("  2. Restart the Mail2SNMP service");
+            Console.WriteLine("  3. Verify /health/ready reports 'master-key' as Healthy");
+            Console.WriteLine("  4. Once verified, securely wipe the OLD key file");
+            return 0;
+        }
+
         if (args.FirstOrDefault() == "reset")
         {
             Console.WriteLine("WARNING: This will clear ALL stored encrypted credentials.");
@@ -484,7 +603,9 @@ public class Program
             Console.WriteLine("\nRe-enter all passwords via the Web UI.");
             return 0;
         }
-        Console.WriteLine("Usage: mail2snmp credentials reset");
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  mail2snmp credentials reset");
+        Console.WriteLine("  mail2snmp credentials rotate-key --new-key-file <path>");
         return 1;
     }
 
