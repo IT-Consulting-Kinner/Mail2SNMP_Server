@@ -10,6 +10,10 @@
         <NavMenu />
         <div class="p-3 border-top border-secondary small">
             <div class="text-white-50 mb-2">@_userName</div>
+            @* Wave E (17): dark mode toggle — persists choice in localStorage via mail2snmp.js *@
+            <button type="button" class="btn btn-outline-light btn-sm w-100 mb-2" onclick="mail2snmp.toggleTheme()">
+                <i class="bi bi-circle-half"></i> Toggle theme
+            </button>
             <form method="post" action="/logout">
                 <button type="submit" class="btn btn-outline-light btn-sm w-100">Logout</button>
             </form>

@@ -10,13 +10,14 @@
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="Mail2SNMP.Web.styles.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
+    @* Load early so the persisted theme is applied before paint (no FOUC). *@
+    <script src="mail2snmp.js"></script>
     <HeadOutlet />
 </head>
 
 <body>
     <Routes />
     <script src="_framework/blazor.web.js"></script>
-    <script src="mail2snmp.js"></script>
 </body>
 
 </html>
