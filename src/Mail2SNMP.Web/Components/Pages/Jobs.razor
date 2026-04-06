@@ -178,49 +178,98 @@ else
                         }
                         else if (_activeTab == "targets")
                         {
-                            @* SNMP Target Selection *@
-                            <div class="mb-3">
+                            @* G2: Drag-&-Drop dual-list. Click an item to move it between Available
+                               and Assigned. Bound to the same _selectedSnmpIds / _selectedWebhookIds
+                               sets the legacy checkbox UI used, so SaveJob keeps working unchanged. *@
+                            <div class="mb-4">
                                 <label class="form-label fw-bold">SNMP Targets</label>
-                                @if (_snmpTargets != null && _snmpTargets.Any(t => t.IsActive))
-                                {
-                                    @foreach (var target in _snmpTargets.Where(t => t.IsActive))
-                                    {
-                                        <div class="form-check">
-                                            <input type="checkbox" class="form-check-input" id="snmp-@target.Id"
-                                                   checked="@_selectedSnmpIds.Contains(target.Id)"
-                                                   @onchange="e => ToggleSnmp(target.Id, (bool)e.Value!)" />
-                                            <label class="form-check-label" for="snmp-@target.Id">
-                                                @target.Name <span class="text-muted small">(@target.Host:@target.Port, @target.Version)</span>
-                                            </label>
+                                <div class="row g-2">
+                                    <div class="col">
+                                        <div class="card">
+                                            <div class="card-header py-1 small text-muted bg-light">Available</div>
+                                            <ul class="list-group list-group-flush" style="max-height:200px;overflow:auto;">
+                                                @if (_snmpTargets != null)
+                                                {
+                                                    @foreach (var t in _snmpTargets.Where(x => x.IsActive && !_selectedSnmpIds.Contains(x.Id)))
+                                                    {
+                                                        <li class="list-group-item list-group-item-action py-1 small" style="cursor:pointer"
+                                                            @onclick="() => ToggleSnmp(t.Id, true)">
+                                                            <i class="bi bi-arrow-right-circle text-success"></i> @t.Name
+                                                            <span class="text-muted">(@t.Host:@t.Port)</span>
+                                                        </li>
+                                                    }
+                                                }
+                                            </ul>
                                         </div>
-                                    }
-                                }
-                                else
+                                    </div>
+                                    <div class="col">
+                                        <div class="card border-success">
+                                            <div class="card-header py-1 small bg-success bg-opacity-10">Assigned (@_selectedSnmpIds.Count)</div>
+                                            <ul class="list-group list-group-flush" style="max-height:200px;overflow:auto;">
+                                                @if (_snmpTargets != null)
+                                                {
+                                                    @foreach (var t in _snmpTargets.Where(x => _selectedSnmpIds.Contains(x.Id)))
+                                                    {
+                                                        <li class="list-group-item list-group-item-action py-1 small" style="cursor:pointer"
+                                                            @onclick="() => ToggleSnmp(t.Id, false)">
+                                                            <i class="bi bi-x-circle text-danger"></i> @t.Name
+                                                            <span class="text-muted">(@t.Host:@t.Port)</span>
+                                                        </li>
+                                                    }
+                                                }
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                                @if (_snmpTargets == null || !_snmpTargets.Any(t => t.IsActive))
                                 {
-                                    <div class="text-muted small">No active SNMP targets. <a href="/snmp-targets">Add one</a></div>
+                                    <div class="text-muted small mt-1">No active SNMP targets. <a href="/snmp-targets">Add one</a></div>
                                 }
                             </div>
 
-                            @* Webhook Target Selection *@
                             <div class="mb-3">
                                 <label class="form-label fw-bold">Webhook Targets</label>
-                                @if (_webhookTargets != null && _webhookTargets.Any(t => t.IsActive))
-                                {
-                                    @foreach (var target in _webhookTargets.Where(t => t.IsActive))
-                                    {
-                                        <div class="form-check">
-                                            <input type="checkbox" class="form-check-input" id="webhook-@target.Id"
-                                                   checked="@_selectedWebhookIds.Contains(target.Id)"
-                                                   @onchange="e => ToggleWebhook(target.Id, (bool)e.Value!)" />
-                                            <label class="form-check-label" for="webhook-@target.Id">
-                                                @target.Name <span class="text-muted small">(@target.Url)</span>
-                                            </label>
+                                <div class="row g-2">
+                                    <div class="col">
+                                        <div class="card">
+                                            <div class="card-header py-1 small text-muted bg-light">Available</div>
+                                            <ul class="list-group list-group-flush" style="max-height:200px;overflow:auto;">
+                                                @if (_webhookTargets != null)
+                                                {
+                                                    @foreach (var t in _webhookTargets.Where(x => x.IsActive && !_selectedWebhookIds.Contains(x.Id)))
+                                                    {
+                                                        <li class="list-group-item list-group-item-action py-1 small" style="cursor:pointer"
+                                                            @onclick="() => ToggleWebhook(t.Id, true)">
+                                                            <i class="bi bi-arrow-right-circle text-success"></i> @t.Name
+                                                            <span class="text-muted">(@t.Url)</span>
+                                                        </li>
+                                                    }
+                                                }
+                                            </ul>
                                         </div>
-                                    }
-                                }
-                                else
+                                    </div>
+                                    <div class="col">
+                                        <div class="card border-success">
+                                            <div class="card-header py-1 small bg-success bg-opacity-10">Assigned (@_selectedWebhookIds.Count)</div>
+                                            <ul class="list-group list-group-flush" style="max-height:200px;overflow:auto;">
+                                                @if (_webhookTargets != null)
+                                                {
+                                                    @foreach (var t in _webhookTargets.Where(x => _selectedWebhookIds.Contains(x.Id)))
+                                                    {
+                                                        <li class="list-group-item list-group-item-action py-1 small" style="cursor:pointer"
+                                                            @onclick="() => ToggleWebhook(t.Id, false)">
+                                                            <i class="bi bi-x-circle text-danger"></i> @t.Name
+                                                            <span class="text-muted">(@t.Url)</span>
+                                                        </li>
+                                                    }
+                                                }
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                                @if (_webhookTargets == null || !_webhookTargets.Any(t => t.IsActive))
                                 {
-                                    <div class="text-muted small">No active Webhook targets. <a href="/webhook-targets">Add one</a></div>
+                                    <div class="text-muted small mt-1">No active Webhook targets. <a href="/webhook-targets">Add one</a></div>
                                 }
                             </div>
                         }
