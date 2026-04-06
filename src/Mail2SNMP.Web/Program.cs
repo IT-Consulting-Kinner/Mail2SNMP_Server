@@ -12,6 +12,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Mail2SNMP.Infrastructure.Logging;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Prometheus;
 using Serilog;
 
@@ -195,6 +197,23 @@ try
 
     // SignalR for live updates
     builder.Services.AddSignalR();
+
+    // Wave B (9): OpenTelemetry tracing — gated by Otel:Enabled config flag.
+    // Exports OTLP traces (HTTP/gRPC) to a configurable endpoint (e.g. Jaeger, Tempo, Datadog).
+    var otelEnabled = builder.Configuration.GetValue<bool>("Otel:Enabled");
+    if (otelEnabled)
+    {
+        var otelEndpoint = builder.Configuration["Otel:Endpoint"] ?? "http://localhost:4317";
+        var otelService = builder.Configuration["Otel:ServiceName"] ?? "mail2snmp-web";
+        builder.Services.AddOpenTelemetry()
+            .ConfigureResource(r => r.AddService(otelService))
+            .WithTracing(t => t
+                .AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation()
+                .AddSource("Mail2SNMP.*")
+                .AddOtlpExporter(o => o.Endpoint = new Uri(otelEndpoint)));
+        Log.Information("OpenTelemetry tracing enabled (endpoint: {Endpoint})", otelEndpoint);
+    }
 
     // Wave A (14): Rate-limit the login endpoint (fixed-window per IP).
     // 10 attempts/minute/IP — defence in depth on top of Identity's per-account lockout.

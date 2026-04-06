@@ -4,5 +4,9 @@
   href: installation.md
 - name: Configuration
   href: configuration.md
+- name: Example Configurations
+  href: examples.md
+- name: Troubleshooting
+  href: troubleshooting.md
 - name: REST API Usage
   href: api-usage.md
