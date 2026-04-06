@@ -29,7 +29,7 @@ public class ScheduleService : IScheduleService
     /// Returns a single schedule by its identifier with the related Job included, or <c>null</c> if not found.
     /// </summary>
     public async Task<Schedule?> GetByIdAsync(int id, CancellationToken ct = default)
-        => await _db.Schedules.Include(s => s.Job).FirstOrDefaultAsync(s => s.Id == id, ct);
+        => await _db.Schedules.AsNoTracking().Include(s => s.Job).FirstOrDefaultAsync(s => s.Id == id, ct);
 
     /// <summary>
     /// Creates a new polling schedule.

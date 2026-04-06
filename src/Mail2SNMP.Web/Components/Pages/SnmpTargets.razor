@@ -10,14 +10,8 @@
     <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add Target</button>
 </div>
 
-@if (!string.IsNullOrEmpty(_error))
-{
-    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
-}
-@if (!string.IsNullOrEmpty(_success))
-{
-    <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
-}
+<AutoDismissAlert Type="danger"  @bind-Message="_error" />
+<AutoDismissAlert Type="success" @bind-Message="_success" AutoDismissSeconds="5" />
 
 @if (_loading)
 {
@@ -29,6 +23,19 @@ else if (_targets == null || _targets.Count == 0)
 }
 else
 {
+    <div class="mb-3 d-flex">
+        <input type="text" class="form-control form-control-sm me-2" style="max-width:300px;"
+               placeholder="Search by name or host..." @bind="_searchTerm" @bind:event="oninput" />
+        @if (!string.IsNullOrEmpty(_searchTerm))
+        {
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => _searchTerm = string.Empty">Clear</button>
+        }
+    </div>
+    var filtered = (string.IsNullOrWhiteSpace(_searchTerm)
+        ? (IEnumerable<SnmpTarget>)_targets
+        : _targets.Where(t =>
+            (t.Name?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (t.Host?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))).ToList();
 <div class="table-responsive">
     <table class="table table-striped table-hover">
         <thead class="table-dark">
@@ -43,7 +50,11 @@ else
             </tr>
         </thead>
         <tbody>
-            @foreach (var t in _targets)
+            @if (filtered.Count == 0)
+            {
+                <tr><td colspan="7" class="text-center text-muted py-3">No targets match the search term.</td></tr>
+            }
+            @foreach (var t in filtered)
             {
                 <tr>
                     <td>@t.Name</td>
@@ -85,19 +96,21 @@ else
                 <EditForm Model="_form" OnValidSubmit="Save">
                     <DataAnnotationsValidator />
                     <div class="modal-body">
-                        <ValidationSummary class="text-danger" />
                         <div class="mb-3">
                             <label class="form-label">Name</label>
                             <InputText class="form-control" @bind-Value="_form.Name" />
+                            <ValidationMessage For="@(() => _form.Name)" class="text-danger small" />
                         </div>
                         <div class="row mb-3">
                             <div class="col-8">
                                 <label class="form-label">Host</label>
                                 <InputText class="form-control" @bind-Value="_form.Host" />
+                                <ValidationMessage For="@(() => _form.Host)" class="text-danger small" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label">Port</label>
                                 <InputNumber class="form-control" @bind-Value="_form.Port" />
+                                <ValidationMessage For="@(() => _form.Port)" class="text-danger small" />
                             </div>
                         </div>
                         <div class="mb-3">
@@ -115,6 +128,7 @@ else
                             <div class="mb-3">
                                 <label class="form-label">Community String</label>
                                 <InputText class="form-control" @bind-Value="_form.CommunityString" />
+                                <ValidationMessage For="@(() => _form.CommunityString)" class="text-danger small" />
                             </div>
                         }
 
@@ -123,6 +137,7 @@ else
                             <div class="mb-3">
                                 <label class="form-label">Security Name</label>
                                 <InputText class="form-control" @bind-Value="_form.SecurityName" />
+                                <ValidationMessage For="@(() => _form.SecurityName)" class="text-danger small" />
                             </div>
                             <div class="row mb-3">
                                 <div class="col">
@@ -163,6 +178,8 @@ else
                         <div class="mb-3">
                             <label class="form-label">Enterprise Trap OID</label>
                             <InputText class="form-control" @bind-Value="_form.EnterpriseTrapOid" />
+                            <ValidationMessage For="@(() => _form.EnterpriseTrapOid)" class="text-danger small" />
+                            <small class="form-text text-muted">Default: 1.3.6.1.4.1.61376.1.2.0.1 (mail2SNMPEventCreatedNotification)</small>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Max Traps/Minute</label>
@@ -197,6 +214,7 @@ else
     private string? _success;
     private bool _loading = true;
     private bool _busy;
+    private string _searchTerm = string.Empty;
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
@@ -204,7 +222,7 @@ else
     {
         _loading = true;
         try { _targets = await SnmpTargetService.GetAllAsync(); }
-        catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "loading data"); }
         finally { _loading = false; }
     }
 
@@ -270,7 +288,7 @@ else
             CloseForm();
             await LoadData();
         }
-        catch (Exception ex) { _error = $"Failed to save: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "saving the item"); }
         finally { _busy = false; }
     }
 
@@ -286,7 +304,7 @@ else
             if (result) _success = "SNMP test successful!";
             else _error = "SNMP test failed. Check the worker log for details.";
         }
-        catch (Exception ex) { _error = $"Test failed: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "running the test"); }
         finally { _busy = false; }
     }
 
@@ -299,7 +317,7 @@ else
             return;
         _busy = true;
         try { await SnmpTargetService.DeleteAsync(id); _success = "Target deleted."; await LoadData(); }
-        catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "deleting the item"); }
         finally { _busy = false; }
     }
 

@@ -12,14 +12,8 @@
     <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add User</button>
 </div>
 
-@if (!string.IsNullOrEmpty(_error))
-{
-    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
-}
-@if (!string.IsNullOrEmpty(_success))
-{
-    <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
-}
+<AutoDismissAlert Type="danger"  @bind-Message="_error" />
+<AutoDismissAlert Type="success" @bind-Message="_success" AutoDismissSeconds="5" />
 
 @if (_loading)
 {
@@ -31,6 +25,20 @@ else if (_users == null || _users.Count == 0)
 }
 else
 {
+    <div class="mb-3 d-flex">
+        <input type="text" class="form-control form-control-sm me-2" style="max-width:300px;"
+               placeholder="Search by name, username or email..." @bind="_searchTerm" @bind:event="oninput" />
+        @if (!string.IsNullOrEmpty(_searchTerm))
+        {
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => _searchTerm = string.Empty">Clear</button>
+        }
+    </div>
+    var filtered = (string.IsNullOrWhiteSpace(_searchTerm)
+        ? (IEnumerable<UserWithRoles>)_users
+        : _users.Where(u =>
+            (u.User.DisplayName?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (u.User.UserName?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (u.User.Email?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))).ToList();
 <div class="table-responsive">
     <table class="table table-striped table-hover">
         <thead class="table-dark">
@@ -46,7 +54,11 @@ else
             </tr>
         </thead>
         <tbody>
-            @foreach (var u in _users)
+            @if (filtered.Count == 0)
+            {
+                <tr><td colspan="8" class="text-center text-muted py-3">No users match the search term.</td></tr>
+            }
+            @foreach (var u in filtered)
             {
                 <tr>
                     <td>@u.User.DisplayName</td>
@@ -84,18 +96,20 @@ else
                 <EditForm Model="_form" OnValidSubmit="SaveUser">
                     <DataAnnotationsValidator />
                     <div class="modal-body">
-                        <ValidationSummary class="text-danger" />
                         <div class="mb-3">
                             <label class="form-label">Display Name</label>
                             <InputText class="form-control" @bind-Value="_form.DisplayName" />
+                            <ValidationMessage For="@(() => _form.DisplayName)" class="text-danger small" />
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Username</label>
                             <InputText class="form-control" @bind-Value="_form.UserName" disabled="@(_editingUser != null)" />
+                            <ValidationMessage For="@(() => _form.UserName)" class="text-danger small" />
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Email</label>
                             <InputText class="form-control" @bind-Value="_form.Email" />
+                            <ValidationMessage For="@(() => _form.Email)" class="text-danger small" />
                         </div>
                         @if (_editingUser == null)
                         {
@@ -143,6 +157,7 @@ else
     private string? _success;
     private bool _loading = true;
     private bool _busy;
+    private string _searchTerm = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -172,7 +187,7 @@ else
                 _users.Add(new UserWithRoles { User = user, Roles = roles.ToList() });
             }
         }
-        catch (Exception ex) { _error = $"Failed to load users: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "loading users"); }
         finally { _loading = false; }
     }
 
@@ -261,7 +276,7 @@ else
             CloseForm();
             await LoadData();
         }
-        catch (Exception ex) { _error = $"Failed to save: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "saving the item"); }
         finally { _busy = false; }
     }
 
@@ -278,7 +293,7 @@ else
             _success = "User deleted.";
             await LoadData();
         }
-        catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "deleting the item"); }
         finally { _busy = false; }
     }
 

@@ -30,7 +30,7 @@ public class RuleService : IRuleService
     /// Returns a single rule by its identifier, or <c>null</c> if not found.
     /// </summary>
     public async Task<Rule?> GetByIdAsync(int id, CancellationToken ct = default)
-        => await _db.Rules.FindAsync(new object[] { id }, ct);
+        => await _db.Rules.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id, ct);
 
     /// <summary>
     /// Creates a new email parsing rule.

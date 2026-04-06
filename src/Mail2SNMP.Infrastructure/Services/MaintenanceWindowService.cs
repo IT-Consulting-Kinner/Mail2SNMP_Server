@@ -29,7 +29,7 @@ public class MaintenanceWindowService : IMaintenanceWindowService
     /// Returns a single maintenance window by its identifier, or <c>null</c> if not found.
     /// </summary>
     public async Task<MaintenanceWindow?> GetByIdAsync(int id, CancellationToken ct = default)
-        => await _db.MaintenanceWindows.FindAsync(new object[] { id }, ct);
+        => await _db.MaintenanceWindows.AsNoTracking().FirstOrDefaultAsync(m => m.Id == id, ct);
 
     /// <summary>
     /// Creates a new maintenance window.

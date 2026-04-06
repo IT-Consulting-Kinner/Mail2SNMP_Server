@@ -37,7 +37,7 @@ public class WebhookTargetService : IWebhookTargetService
     /// Returns a single webhook target by its identifier, or <c>null</c> if not found.
     /// </summary>
     public async Task<WebhookTarget?> GetByIdAsync(int id, CancellationToken ct = default)
-        => await _db.WebhookTargets.FindAsync(new object[] { id }, ct);
+        => await _db.WebhookTargets.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
 
     /// <summary>
     /// Creates a new webhook target.

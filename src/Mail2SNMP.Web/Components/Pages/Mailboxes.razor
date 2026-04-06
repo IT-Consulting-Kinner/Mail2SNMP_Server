@@ -10,21 +10,9 @@
     <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add Mailbox</button>
 </div>
 
-@if (!string.IsNullOrEmpty(_error))
-{
-    <div class="alert alert-danger alert-dismissible">
-        @_error
-        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
-    </div>
-}
-
-@if (!string.IsNullOrEmpty(_success))
-{
-    <div class="alert alert-success alert-dismissible">
-        @_success
-        <button type="button" class="btn-close" @onclick="() => _success = null"></button>
-    </div>
-}
+@* M6: Auto-dismissible alerts. Success disappears after 5s; errors stay until closed. *@
+<AutoDismissAlert Type="danger"  @bind-Message="_error" />
+<AutoDismissAlert Type="success" @bind-Message="_success" AutoDismissSeconds="5" />
 
 @if (_loading)
 {
@@ -36,6 +24,21 @@ else if (_mailboxes == null || _mailboxes.Count == 0)
 }
 else
 {
+    @* M4: Client-side search filter on Name / Host / Username *@
+    <div class="mb-3 d-flex">
+        <input type="text" class="form-control form-control-sm me-2" style="max-width:300px;"
+               placeholder="Search by name, host or username..." @bind="_searchTerm" @bind:event="oninput" />
+        @if (!string.IsNullOrEmpty(_searchTerm))
+        {
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => _searchTerm = string.Empty">Clear</button>
+        }
+    </div>
+    var filtered = (string.IsNullOrWhiteSpace(_searchTerm)
+        ? (IEnumerable<Mailbox>)_mailboxes
+        : _mailboxes.Where(m =>
+            (m.Name?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (m.Host?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (m.Username?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))).ToList();
 <div class="table-responsive">
     <table class="table table-striped table-hover">
         <thead class="table-dark">
@@ -52,7 +55,11 @@ else
             </tr>
         </thead>
         <tbody>
-            @foreach (var mb in _mailboxes)
+            @if (filtered.Count == 0)
+            {
+                <tr><td colspan="9" class="text-center text-muted py-3">No mailboxes match the search term.</td></tr>
+            }
+            @foreach (var mb in filtered)
             {
                 <tr>
                     <td>@mb.Name</td>
@@ -87,19 +94,21 @@ else
                 <EditForm Model="_form" OnValidSubmit="SaveMailbox">
                     <DataAnnotationsValidator />
                     <div class="modal-body">
-                        <ValidationSummary class="text-danger" />
                         <div class="mb-3">
                             <label class="form-label">Name</label>
                             <InputText class="form-control" @bind-Value="_form.Name" />
+                            <ValidationMessage For="@(() => _form.Name)" class="text-danger small" />
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Host</label>
                             <InputText class="form-control" @bind-Value="_form.Host" />
+                            <ValidationMessage For="@(() => _form.Host)" class="text-danger small" />
                         </div>
                         <div class="row mb-3">
                             <div class="col">
                                 <label class="form-label">Port</label>
                                 <InputNumber class="form-control" @bind-Value="_form.Port" />
+                                <ValidationMessage For="@(() => _form.Port)" class="text-danger small" />
                             </div>
                             <div class="col d-flex align-items-end">
                                 <div class="form-check">
@@ -111,10 +120,12 @@ else
                         <div class="mb-3">
                             <label class="form-label">Username</label>
                             <InputText class="form-control" @bind-Value="_form.Username" />
+                            <ValidationMessage For="@(() => _form.Username)" class="text-danger small" />
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Password</label>
                             <InputText class="form-control" type="password" @bind-Value="_form.Password" />
+                            <ValidationMessage For="@(() => _form.Password)" class="text-danger small" />
                             @if (_editing != null)
                             {
                                 <small class="text-muted">Leave blank to keep existing password</small>
@@ -123,6 +134,7 @@ else
                         <div class="mb-3">
                             <label class="form-label">Folder</label>
                             <InputText class="form-control" @bind-Value="_form.Folder" />
+                            <ValidationMessage For="@(() => _form.Folder)" class="text-danger small" />
                         </div>
                         <div class="form-check mb-3">
                             <InputCheckbox class="form-check-input" @bind-Value="_form.IsActive" />
@@ -148,6 +160,7 @@ else
     private string? _success;
     private bool _loading = true;
     private bool _busy;
+    private string _searchTerm = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -163,7 +176,7 @@ else
         }
         catch (Exception ex)
         {
-            _error = $"Failed to load mailboxes: {ex.Message}";
+            _error = ErrorMessageFormatter.ToFriendly(ex, "loading mailboxes");
         }
         finally
         {
@@ -243,7 +256,7 @@ else
         }
         catch (Exception ex)
         {
-            _error = $"Failed to save mailbox: {ex.Message}";
+            _error = ErrorMessageFormatter.ToFriendly(ex, "saving the mailbox");
         }
         finally
         {
@@ -267,7 +280,7 @@ else
         }
         catch (Exception ex)
         {
-            _error = $"Test failed: {ex.Message}";
+            _error = ErrorMessageFormatter.ToFriendly(ex, "running the test");
         }
         finally
         {
@@ -291,7 +304,7 @@ else
         }
         catch (Exception ex)
         {
-            _error = $"Failed to delete: {ex.Message}";
+            _error = ErrorMessageFormatter.ToFriendly(ex, "deleting the item");
         }
         finally
         {

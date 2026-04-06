@@ -9,14 +9,8 @@
     <h3 class="mb-0">Dead Letters</h3>
 </div>
 
-@if (!string.IsNullOrEmpty(_error))
-{
-    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
-}
-@if (!string.IsNullOrEmpty(_success))
-{
-    <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
-}
+<AutoDismissAlert Type="danger"  @bind-Message="_error" />
+<AutoDismissAlert Type="success" @bind-Message="_success" AutoDismissSeconds="5" />
 
 @if (_loading)
 {
@@ -107,7 +101,7 @@ else
             _entries = await DeadLetterService.GetAllAsync();
             _currentPage = 1;
         }
-        catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "loading data"); }
         finally { _loading = false; }
     }
 
@@ -116,7 +110,7 @@ else
         if (_busy) return;
         _busy = true;
         try { await DeadLetterService.RetryAsync(id); _success = "Retry queued."; await LoadData(); }
-        catch (Exception ex) { _error = $"Retry failed: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "retrying the entry"); }
         finally { _busy = false; }
     }
 
@@ -148,7 +142,7 @@ else
             _success = "All pending entries queued for retry.";
             await LoadData();
         }
-        catch (Exception ex) { _error = $"Retry all failed: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "retrying all entries"); }
         finally { _busy = false; }
     }
 

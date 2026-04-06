@@ -1,0 +1,67 @@
+@implements IDisposable
+
+@*
+    Reusable dismissible alert component used across all CRUD pages.
+    - Shows the bound Message inside a Bootstrap alert.
+    - Optional auto-dismiss after AutoDismissSeconds (0 = never).
+    - Two-way binds Message back to null when closed (manually or by timer).
+*@
+
+@if (!string.IsNullOrEmpty(Message))
+{
+    <div class="alert alert-@Type alert-dismissible" role="alert">
+        @Message
+        <button type="button" class="btn-close" @onclick="Close" aria-label="Close"></button>
+    </div>
+}
+
+@code {
+    /// <summary>The bound message text. Setting it to null/empty hides the alert.</summary>
+    [Parameter] public string? Message { get; set; }
+
+    /// <summary>Two-way binding callback for Message.</summary>
+    [Parameter] public EventCallback<string?> MessageChanged { get; set; }
+
+    /// <summary>Bootstrap alert type: success, danger, warning, info, secondary.</summary>
+    [Parameter] public string Type { get; set; } = "info";
+
+    /// <summary>
+    /// Auto-dismiss the alert after this many seconds. Set to 0 to disable
+    /// auto-dismiss (the user must close the alert manually). Default is 0.
+    /// </summary>
+    [Parameter] public int AutoDismissSeconds { get; set; } = 0;
+
+    private System.Threading.Timer? _timer;
+    private string? _lastMessage;
+
+    protected override void OnParametersSet()
+    {
+        // (Re)start the dismiss timer whenever the message changes to a non-empty value.
+        if (AutoDismissSeconds > 0
+            && !string.IsNullOrEmpty(Message)
+            && Message != _lastMessage)
+        {
+            _lastMessage = Message;
+            _timer?.Dispose();
+            _timer = new System.Threading.Timer(async _ =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    await Close();
+                });
+            }, null, TimeSpan.FromSeconds(AutoDismissSeconds), Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private async Task Close()
+    {
+        Message = null;
+        _lastMessage = null;
+        _timer?.Dispose();
+        _timer = null;
+        await MessageChanged.InvokeAsync(null);
+        StateHasChanged();
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

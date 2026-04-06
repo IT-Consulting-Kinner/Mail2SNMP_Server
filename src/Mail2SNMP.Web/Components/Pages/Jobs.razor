@@ -14,14 +14,8 @@
     <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add Job</button>
 </div>
 
-@if (!string.IsNullOrEmpty(_error))
-{
-    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
-}
-@if (!string.IsNullOrEmpty(_success))
-{
-    <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
-}
+<AutoDismissAlert Type="danger"  @bind-Message="_error" />
+<AutoDismissAlert Type="success" @bind-Message="_success" AutoDismissSeconds="5" />
 
 @if (!string.IsNullOrEmpty(_dryRunResult))
 {
@@ -42,6 +36,20 @@ else if (_jobs == null || _jobs.Count == 0)
 }
 else
 {
+    <div class="mb-3 d-flex">
+        <input type="text" class="form-control form-control-sm me-2" style="max-width:300px;"
+               placeholder="Search by name, mailbox or rule..." @bind="_searchTerm" @bind:event="oninput" />
+        @if (!string.IsNullOrEmpty(_searchTerm))
+        {
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => _searchTerm = string.Empty">Clear</button>
+        }
+    </div>
+    var filtered = (string.IsNullOrWhiteSpace(_searchTerm)
+        ? (IEnumerable<Job>)_jobs
+        : _jobs.Where(j =>
+            (j.Name?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (j.Mailbox?.Name?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (j.Rule?.Name?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))).ToList();
 <div class="table-responsive">
     <table class="table table-striped table-hover">
         <thead class="table-dark">
@@ -57,7 +65,11 @@ else
             </tr>
         </thead>
         <tbody>
-            @foreach (var job in _jobs)
+            @if (filtered.Count == 0)
+            {
+                <tr><td colspan="8" class="text-center text-muted py-3">No jobs match the search term.</td></tr>
+            }
+            @foreach (var job in filtered)
             {
                 <tr>
                     <td>@job.Name</td>
@@ -110,10 +122,10 @@ else
                 <EditForm Model="_form" OnValidSubmit="SaveJob">
                     <DataAnnotationsValidator />
                     <div class="modal-body">
-                        <ValidationSummary class="text-danger" />
                         <div class="mb-3">
                             <label class="form-label">Name</label>
                             <InputText class="form-control" @bind-Value="_form.Name" />
+                            <ValidationMessage For="@(() => _form.Name)" class="text-danger small" />
                         </div>
                         <div class="row mb-3">
                             <div class="col">
@@ -128,6 +140,7 @@ else
                                         }
                                     }
                                 </InputSelect>
+                                <ValidationMessage For="@(() => _form.MailboxId)" class="text-danger small" />
                             </div>
                             <div class="col">
                                 <label class="form-label">Rule</label>
@@ -141,6 +154,7 @@ else
                                         }
                                     }
                                 </InputSelect>
+                                <ValidationMessage For="@(() => _form.RuleId)" class="text-danger small" />
                             </div>
                         </div>
 
@@ -247,6 +261,7 @@ else
     private HashSet<int> _selectedWebhookIds = new();
     private bool _loading = true;
     private bool _busy;
+    private string _searchTerm = string.Empty;
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
@@ -261,7 +276,7 @@ else
             _snmpTargets = await SnmpTargetService.GetAllAsync();
             _webhookTargets = await WebhookTargetService.GetAllAsync();
         }
-        catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "loading data"); }
         finally { _loading = false; }
     }
 
@@ -306,6 +321,16 @@ else
     private async Task SaveJob()
     {
         if (_busy) return;
+        // M1: Warn the user when a job is saved without any notification target assigned.
+        // The job is still allowed (e.g. for "logging only" use cases) but the user must
+        // confirm that they intentionally created a no-op job.
+        if (_selectedSnmpIds.Count == 0 && _selectedWebhookIds.Count == 0)
+        {
+            var ok = await JS.InvokeAsync<bool>("confirm",
+                "This job has NO notification targets assigned. Events will be created in the database " +
+                "but no SNMP traps or webhook calls will be sent. Save anyway?");
+            if (!ok) return;
+        }
         _busy = true;
         try
         {
@@ -337,7 +362,7 @@ else
             CloseForm();
             await LoadData();
         }
-        catch (Exception ex) { _error = $"Failed to save job: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "saving the job"); }
         finally { _busy = false; }
     }
 
@@ -349,7 +374,7 @@ else
         {
             _dryRunResult = await JobService.DryRunAsync(id);
         }
-        catch (Exception ex) { _error = $"Dry run failed: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "running the dry-run"); }
         finally { _busy = false; }
     }
 
@@ -362,7 +387,7 @@ else
             return;
         _busy = true;
         try { await JobService.DeleteAsync(id); _success = "Job deleted."; await LoadData(); }
-        catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "deleting the item"); }
         finally { _busy = false; }
     }
 

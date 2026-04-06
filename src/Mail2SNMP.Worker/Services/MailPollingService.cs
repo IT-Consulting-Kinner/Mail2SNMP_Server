@@ -31,6 +31,7 @@ public class MailPollingService : BackgroundService
     private readonly ILogger<MailPollingService> _logger;
     private readonly SemaphoreSlim _imapSemaphore;
     private readonly int _consumerCount;
+    private readonly ImapSettings _imapSettings;
 
     public MailPollingService(
         Channel<MailWorkItem> channel,
@@ -42,12 +43,12 @@ public class MailPollingService : BackgroundService
         _scopeFactory = scopeFactory;
         _logger = logger;
 
-        var imapSettings = configuration
+        _imapSettings = configuration
             .GetSection("Imap")
             .Get<ImapSettings>() ?? new ImapSettings();
 
-        _imapSemaphore = new SemaphoreSlim(imapSettings.MaxConcurrentConnections);
-        _consumerCount = imapSettings.ConsumerTasks;
+        _imapSemaphore = new SemaphoreSlim(_imapSettings.MaxConcurrentConnections);
+        _consumerCount = _imapSettings.ConsumerTasks;
     }
 
     /// <summary>
@@ -258,8 +259,11 @@ public class MailPollingService : BackgroundService
                 ? SecureSocketOptions.SslOnConnect
                 : SecureSocketOptions.StartTlsWhenAvailable;
 
+            // M11: configurable IMAP connect timeout. The connect-only window covers
+            // the TCP handshake + TLS negotiation + LOGIN; subsequent operations use
+            // the parent token (with operation timeout enforced separately).
             using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            connectCts.CancelAfter(TimeSpan.FromSeconds(30));
+            connectCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, _imapSettings.ConnectTimeoutSeconds * 3)));
 
             await imapClient.ConnectAsync(mailbox.Host, mailbox.Port, sslOptions, connectCts.Token);
 

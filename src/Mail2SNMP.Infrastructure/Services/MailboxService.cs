@@ -1,11 +1,13 @@
 using Mail2SNMP.Core.Exceptions;
 using Mail2SNMP.Core.Interfaces;
 using Mail2SNMP.Infrastructure.Data;
+using Mail2SNMP.Models.Configuration;
 using Mail2SNMP.Models.Entities;
 using MailKit.Net.Imap;
 using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Mail2SNMP.Infrastructure.Services;
 
@@ -18,14 +20,22 @@ public class MailboxService : IMailboxService
     private readonly ILicenseProvider _license;
     private readonly IAuditService _audit;
     private readonly ICredentialEncryptor _credentialEncryptor;
+    private readonly ImapSettings _imapSettings;
     private readonly ILogger<MailboxService> _logger;
 
-    public MailboxService(Mail2SnmpDbContext db, ILicenseProvider license, IAuditService audit, ICredentialEncryptor credentialEncryptor, ILogger<MailboxService> logger)
+    public MailboxService(
+        Mail2SnmpDbContext db,
+        ILicenseProvider license,
+        IAuditService audit,
+        ICredentialEncryptor credentialEncryptor,
+        IOptions<ImapSettings> imapSettings,
+        ILogger<MailboxService> logger)
     {
         _db = db;
         _license = license;
         _audit = audit;
         _credentialEncryptor = credentialEncryptor;
+        _imapSettings = imapSettings.Value;
         _logger = logger;
     }
 
@@ -39,7 +49,7 @@ public class MailboxService : IMailboxService
     /// Returns a single mailbox by its identifier, or <c>null</c> if not found.
     /// </summary>
     public async Task<Mailbox?> GetByIdAsync(int id, CancellationToken ct = default)
-        => await _db.Mailboxes.FindAsync(new object[] { id }, ct);
+        => await _db.Mailboxes.AsNoTracking().FirstOrDefaultAsync(m => m.Id == id, ct);
 
     /// <summary>
     /// Creates a new mailbox after verifying the license-enforced mailbox limit has not been reached.
@@ -110,9 +120,9 @@ public class MailboxService : IMailboxService
                 ? SecureSocketOptions.SslOnConnect
                 : SecureSocketOptions.StartTlsWhenAvailable;
 
-            // 10s connect timeout
+            // M11: configurable IMAP connect timeout (default 10s)
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(10));
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, _imapSettings.ConnectTimeoutSeconds)));
 
             await client.ConnectAsync(mailbox.Host, mailbox.Port, sslOptions, timeoutCts.Token);
 

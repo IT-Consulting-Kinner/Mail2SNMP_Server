@@ -11,14 +11,8 @@
     <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add Schedule</button>
 </div>
 
-@if (!string.IsNullOrEmpty(_error))
-{
-    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
-}
-@if (!string.IsNullOrEmpty(_success))
-{
-    <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
-}
+<AutoDismissAlert Type="danger"  @bind-Message="_error" />
+<AutoDismissAlert Type="success" @bind-Message="_success" AutoDismissSeconds="5" />
 
 @if (_loading)
 {
@@ -30,6 +24,19 @@ else if (_schedules == null || _schedules.Count == 0)
 }
 else
 {
+    <div class="mb-3 d-flex">
+        <input type="text" class="form-control form-control-sm me-2" style="max-width:300px;"
+               placeholder="Search by name or job..." @bind="_searchTerm" @bind:event="oninput" />
+        @if (!string.IsNullOrEmpty(_searchTerm))
+        {
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => _searchTerm = string.Empty">Clear</button>
+        }
+    </div>
+    var filtered = (string.IsNullOrWhiteSpace(_searchTerm)
+        ? (IEnumerable<Schedule>)_schedules
+        : _schedules.Where(s =>
+            (s.Name?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (s.Job?.Name?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))).ToList();
 <div class="table-responsive">
     <table class="table table-striped table-hover">
         <thead class="table-dark">
@@ -44,7 +51,11 @@ else
             </tr>
         </thead>
         <tbody>
-            @foreach (var s in _schedules)
+            @if (filtered.Count == 0)
+            {
+                <tr><td colspan="7" class="text-center text-muted py-3">No schedules match the search term.</td></tr>
+            }
+            @foreach (var s in filtered)
             {
                 <tr>
                     <td>@s.Name</td>
@@ -77,10 +88,10 @@ else
                 <EditForm Model="_form" OnValidSubmit="Save">
                     <DataAnnotationsValidator />
                     <div class="modal-body">
-                        <ValidationSummary class="text-danger" />
                         <div class="mb-3">
                             <label class="form-label">Name</label>
                             <InputText class="form-control" @bind-Value="_form.Name" />
+                            <ValidationMessage For="@(() => _form.Name)" class="text-danger small" />
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Job</label>
@@ -94,10 +105,12 @@ else
                                     }
                                 }
                             </InputSelect>
+                            <ValidationMessage For="@(() => _form.JobId)" class="text-danger small" />
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Interval (minutes)</label>
                             <InputNumber class="form-control" @bind-Value="_form.IntervalMinutes" />
+                            <ValidationMessage For="@(() => _form.IntervalMinutes)" class="text-danger small" />
                         </div>
                         <div class="form-check mb-3">
                             <InputCheckbox class="form-check-input" @bind-Value="_form.IsActive" />
@@ -124,6 +137,7 @@ else
     private string? _success;
     private bool _loading = true;
     private bool _busy;
+    private string _searchTerm = string.Empty;
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
@@ -135,7 +149,7 @@ else
             _schedules = await ScheduleService.GetAllAsync();
             _jobs = await JobService.GetAllAsync();
         }
-        catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "loading data"); }
         finally { _loading = false; }
     }
 
@@ -181,7 +195,7 @@ else
             CloseForm();
             await LoadData();
         }
-        catch (Exception ex) { _error = $"Failed to save: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "saving the item"); }
         finally { _busy = false; }
     }
 
@@ -190,7 +204,7 @@ else
         if (_busy) return;
         _busy = true;
         try { await ScheduleService.ToggleAsync(id); _success = "Schedule toggled."; await LoadData(); }
-        catch (Exception ex) { _error = $"Failed to toggle: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "toggling the item"); }
         finally { _busy = false; }
     }
 
@@ -203,7 +217,7 @@ else
             return;
         _busy = true;
         try { await ScheduleService.DeleteAsync(id); _success = "Schedule deleted."; await LoadData(); }
-        catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "deleting the item"); }
         finally { _busy = false; }
     }
 

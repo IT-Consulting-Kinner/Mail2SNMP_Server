@@ -3,12 +3,14 @@ using Mail2SNMP.Core.Interfaces;
 using Mail2SNMP.Core.Services;
 using Mail2SNMP.Infrastructure.Data;
 using Mail2SNMP.Infrastructure.Services;
+using Mail2SNMP.Models.Configuration;
 using Mail2SNMP.Models.DTOs;
 using Mail2SNMP.Models.Entities;
 using Mail2SNMP.Models.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace Mail2SNMP.Tests.Infrastructure;
@@ -46,7 +48,7 @@ public class ServiceTests : IDisposable
     [Fact]
     public async Task MailboxService_Create_And_GetAll()
     {
-        var service = new MailboxService(_db, _license, _audit, _credentialEncryptor, NullLogger<MailboxService>.Instance);
+        var service = new MailboxService(_db, _license, _audit, _credentialEncryptor, Options.Create(new ImapSettings()), NullLogger<MailboxService>.Instance);
         var mailbox = new Mailbox { Name = "Test", Host = "imap.test.com", Username = "user" };
         await service.CreateAsync(mailbox);
 
@@ -58,7 +60,7 @@ public class ServiceTests : IDisposable
     [Fact]
     public async Task MailboxService_Create_ExceedsLimit_Throws()
     {
-        var service = new MailboxService(_db, _license, _audit, _credentialEncryptor, NullLogger<MailboxService>.Instance);
+        var service = new MailboxService(_db, _license, _audit, _credentialEncryptor, Options.Create(new ImapSettings()), NullLogger<MailboxService>.Instance);
         for (int i = 0; i < 3; i++)
             await service.CreateAsync(new Mailbox { Name = $"MB{i}", Host = "host", Username = "u" });
 
@@ -69,7 +71,7 @@ public class ServiceTests : IDisposable
     [Fact]
     public async Task MailboxService_Delete_ThenCreateNewIsAllowed()
     {
-        var service = new MailboxService(_db, _license, _audit, _credentialEncryptor, NullLogger<MailboxService>.Instance);
+        var service = new MailboxService(_db, _license, _audit, _credentialEncryptor, Options.Create(new ImapSettings()), NullLogger<MailboxService>.Instance);
         var mb = await service.CreateAsync(new Mailbox { Name = "ToDelete", Host = "host", Username = "u" });
         await service.CreateAsync(new Mailbox { Name = "MB2", Host = "host", Username = "u" });
         await service.CreateAsync(new Mailbox { Name = "MB3", Host = "host", Username = "u" });

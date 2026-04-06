@@ -24,6 +24,11 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddMail2SnmpInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        // Bind shared option classes so any host (Worker, Api, Web) gets the same settings.
+        services.Configure<ImapSettings>(configuration.GetSection("Imap"));
+        services.Configure<EventSettings>(configuration.GetSection("Events"));
+        services.Configure<RetentionSettings>(configuration.GetSection("Retention"));
+
         // Database with automatic CRUD audit interceptor (v5.8)
         var dbSettings = configuration.GetSection("Database").Get<DatabaseSettings>() ?? new DatabaseSettings();
         var effectiveConnectionString = dbSettings.GetEffectiveConnectionString();

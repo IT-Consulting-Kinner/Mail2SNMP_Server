@@ -41,7 +41,7 @@ public class SnmpTargetService : ISnmpTargetService
     /// Returns a single SNMP target by its identifier, or <c>null</c> if not found.
     /// </summary>
     public async Task<SnmpTarget?> GetByIdAsync(int id, CancellationToken ct = default)
-        => await _db.SnmpTargets.FindAsync(new object[] { id }, ct);
+        => await _db.SnmpTargets.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
 
     /// <summary>
     /// Creates a new SNMP trap target.

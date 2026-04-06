@@ -7,10 +7,7 @@
 
 <h3 class="mb-3">Audit Log</h3>
 
-@if (!string.IsNullOrEmpty(_error))
-{
-    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
-}
+<AutoDismissAlert Type="danger" @bind-Message="_error" />
 
 <div class="row g-2 mb-3">
     <div class="col-md-3">
@@ -113,7 +110,7 @@ else
                 _fromDate, _toDate);
             _currentPage = 1;
         }
-        catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "loading data"); }
         finally { _loading = false; }
     }
 

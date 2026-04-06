@@ -114,6 +114,17 @@ public class ImapSettings
     public int MaxConcurrentConnections { get; set; } = 10;
     public int ChannelBoundedCapacity { get; set; } = 20;
     public int ConsumerTasks { get; set; } = 5;
+
+    /// <summary>
+    /// IMAP connect/authenticate timeout in seconds. Used by both
+    /// MailPollingService and the Test-Connection action. Default 10.
+    /// </summary>
+    public int ConnectTimeoutSeconds { get; set; } = 10;
+
+    /// <summary>
+    /// IMAP per-operation timeout (search/fetch) in seconds. Default 60.
+    /// </summary>
+    public int OperationTimeoutSeconds { get; set; } = 60;
 }
 
 /// <summary>

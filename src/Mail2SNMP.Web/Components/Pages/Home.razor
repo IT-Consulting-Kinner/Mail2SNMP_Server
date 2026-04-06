@@ -12,6 +12,7 @@
 @inject IMaintenanceWindowService MaintenanceService
 @inject ILicenseProvider LicenseProvider
 @inject Mail2SnmpDbContext Db
+@using Mail2SNMP.Infrastructure.Services
 
 <PageTitle>Dashboard - Mail2SNMP</PageTitle>
 
@@ -27,6 +28,32 @@
 }
 else
 {
+    @* M2: License banner — visible when license is missing, expired, or expiring soon *@
+    @if (_license != null)
+    {
+        if (_license.ExpiresUtc.HasValue && _license.ExpiresUtc.Value < DateTime.UtcNow)
+        {
+            <div class="alert alert-danger d-flex align-items-center" role="alert">
+                <strong class="me-2">⚠ License expired</strong>
+                <span>on @_license.ExpiresUtc.Value.ToString("yyyy-MM-dd"). The system has fallen back to <strong>Community Edition</strong> limits. Please renew your license to restore Enterprise features.</span>
+            </div>
+        }
+        else if (_license.Edition == LicenseEdition.Community)
+        {
+            <div class="alert alert-info d-flex align-items-center" role="alert">
+                <strong class="me-2">Community Edition</strong>
+                <span>— max @_license.MaxMailboxes mailboxes, @_license.MaxJobs jobs, @_license.MaxWorkerInstances worker instance. Upgrade to Enterprise for unlimited resources, SNMPv3, OIDC SSO, and webhook dead-letter retries.</span>
+            </div>
+        }
+        else if (_license.ExpiresUtc.HasValue && _license.ExpiresUtc.Value < DateTime.UtcNow.AddDays(30))
+        {
+            <div class="alert alert-warning d-flex align-items-center" role="alert">
+                <strong class="me-2">License expiring soon</strong>
+                <span>on @_license.ExpiresUtc.Value.ToString("yyyy-MM-dd") (in @((int)(_license.ExpiresUtc.Value - DateTime.UtcNow).TotalDays) days). Please renew before that date to avoid downgrade.</span>
+            </div>
+        }
+    }
+
     <div class="row g-3">
         <div class="col-md-4 col-lg-3">
             <div class="card border-0 shadow-sm">
@@ -98,6 +125,15 @@ else
         </div>
     </div>
 
+    @* M3: Channel overflow indicator — non-zero means the IMAP polling channel is saturated. *@
+    @if (_channelOverflow > 0)
+    {
+        <div class="alert alert-warning mt-3" role="alert">
+            <strong>⚠ Channel saturation:</strong> @_channelOverflow mail polling job(s) were dropped because the worker channel was full.
+            Consider increasing <code>Imap.ChannelBoundedCapacity</code> or <code>Imap.ConsumerTasks</code> in <code>appsettings.json</code>.
+        </div>
+    }
+
     <div class="row mt-4">
         <div class="col-12">
             <div class="card border-0 shadow-sm">
@@ -138,6 +174,8 @@ else
     private string _publishDate = string.Empty;
     private string _downloadLink = string.Empty;
     private bool _updateAvailable = false;
+    private LicenseInfo? _license;
+    private double _channelOverflow;
 
     protected override async Task OnInitializedAsync()
     {
@@ -162,6 +200,11 @@ else
                 LicenseEdition = LicenseProvider.Current.Edition.ToString(),
                 IsHealthy = true
             };
+            _license = LicenseProvider.Current;
+
+            // M3: read the in-process Prometheus counter so the dashboard surfaces
+            // saturation events even when the Prometheus endpoint is disabled.
+            _channelOverflow = Mail2SnmpMetrics.ChannelOverflow.Value;
 
             // Load version + update info
             _currentVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";

@@ -12,14 +12,8 @@
     <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">Add Window</button>
 </div>
 
-@if (!string.IsNullOrEmpty(_error))
-{
-    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
-}
-@if (!string.IsNullOrEmpty(_success))
-{
-    <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
-}
+<AutoDismissAlert Type="danger"  @bind-Message="_error" />
+<AutoDismissAlert Type="success" @bind-Message="_success" AutoDismissSeconds="5" />
 
 @if (_loading)
 {
@@ -54,8 +48,8 @@ else
                         }
                     </div>
                     <div class="card-body">
-                        <p class="mb-1"><strong>Start:</strong> @w.StartUtc.ToString("g") UTC</p>
-                        <p class="mb-1"><strong>End:</strong> @w.EndUtc.ToString("g") UTC</p>
+                        <p class="mb-1"><strong>Start:</strong> @w.StartUtc.ToLocalTime().ToString("g") <small class="text-muted">(local)</small></p>
+                        <p class="mb-1"><strong>End:</strong> @w.EndUtc.ToLocalTime().ToString("g") <small class="text-muted">(local)</small></p>
                         <p class="mb-1"><strong>Scope:</strong> @w.Scope</p>
                         @if (!string.IsNullOrEmpty(w.RecurringCron))
                         {
@@ -90,19 +84,21 @@ else
                 <EditForm Model="_form" OnValidSubmit="Save">
                     <DataAnnotationsValidator />
                     <div class="modal-body">
-                        <ValidationSummary class="text-danger" />
                         <div class="mb-3">
                             <label class="form-label">Name</label>
                             <InputText class="form-control" @bind-Value="_form.Name" />
+                            <ValidationMessage For="@(() => _form.Name)" class="text-danger small" />
                         </div>
                         <div class="row mb-3">
                             <div class="col">
-                                <label class="form-label">Start (UTC)</label>
-                                <InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_form.StartUtc" />
+                                <label class="form-label">Start (local time)</label>
+                                <InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_form.StartLocal" />
+                                <small class="form-text text-muted">Stored as @_form.StartLocal.ToUniversalTime().ToString("yyyy-MM-dd HH:mm") UTC</small>
                             </div>
                             <div class="col">
-                                <label class="form-label">End (UTC)</label>
-                                <InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_form.EndUtc" />
+                                <label class="form-label">End (local time)</label>
+                                <InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_form.EndLocal" />
+                                <small class="form-text text-muted">Stored as @_form.EndLocal.ToUniversalTime().ToString("yyyy-MM-dd HH:mm") UTC</small>
                             </div>
                         </div>
                         <div class="mb-3">
@@ -150,7 +146,7 @@ else
     {
         _loading = true;
         try { _windows = await MaintenanceService.GetAllAsync(); }
-        catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "loading data"); }
         finally { _loading = false; }
     }
 
@@ -158,8 +154,8 @@ else
     {
         _form = new MaintenanceForm
         {
-            StartUtc = DateTime.UtcNow,
-            EndUtc = DateTime.UtcNow.AddHours(2),
+            StartLocal = DateTime.Now,
+            EndLocal = DateTime.Now.AddHours(2),
             Scope = "All"
         };
         _showForm = true;
@@ -173,11 +169,13 @@ else
         _busy = true;
         try
         {
+            // M9: Convert local-time form input to UTC for storage so the
+            // backend logic always compares in a single zone.
             var window = new MaintenanceWindow
             {
                 Name = _form.Name,
-                StartUtc = _form.StartUtc,
-                EndUtc = _form.EndUtc,
+                StartUtc = _form.StartLocal.ToUniversalTime(),
+                EndUtc = _form.EndLocal.ToUniversalTime(),
                 Scope = _form.Scope,
                 RecurringCron = _form.RecurringCron,
                 CreatedBy = _currentUserName
@@ -187,7 +185,7 @@ else
             CloseForm();
             await LoadData();
         }
-        catch (Exception ex) { _error = $"Failed to save: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "saving the item"); }
         finally { _busy = false; }
     }
 
@@ -200,7 +198,7 @@ else
             return;
         _busy = true;
         try { await MaintenanceService.DeleteAsync(id); _success = "Window deleted."; await LoadData(); }
-        catch (Exception ex) { _error = $"Failed to delete: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "deleting the item"); }
         finally { _busy = false; }
     }
 
@@ -209,11 +207,12 @@ else
         [Required(ErrorMessage = "Name is required.")]
         public string Name { get; set; } = string.Empty;
 
+        // M9: Inputs are bound to local-time fields and converted to UTC on save.
         [Required(ErrorMessage = "Start time is required.")]
-        public DateTime StartUtc { get; set; }
+        public DateTime StartLocal { get; set; }
 
         [Required(ErrorMessage = "End time is required.")]
-        public DateTime EndUtc { get; set; }
+        public DateTime EndLocal { get; set; }
 
         [Required(ErrorMessage = "Scope is required.")]
         public string Scope { get; set; } = "All";

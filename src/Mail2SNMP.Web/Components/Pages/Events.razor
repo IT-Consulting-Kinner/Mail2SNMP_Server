@@ -8,14 +8,8 @@
     <h3 class="mb-0">Events</h3>
 </div>
 
-@if (!string.IsNullOrEmpty(_error))
-{
-    <div class="alert alert-danger alert-dismissible">@_error <button type="button" class="btn-close" @onclick="() => _error = null"></button></div>
-}
-@if (!string.IsNullOrEmpty(_success))
-{
-    <div class="alert alert-success alert-dismissible">@_success <button type="button" class="btn-close" @onclick="() => _success = null"></button></div>
-}
+<AutoDismissAlert Type="danger"  @bind-Message="_error" />
+<AutoDismissAlert Type="success" @bind-Message="_success" AutoDismissSeconds="5" />
 
 <div class="mb-3">
     <label class="form-label me-2">Filter by State:</label>
@@ -126,7 +120,7 @@ else
             _events = await EventService.GetAllAsync(_stateFilter);
             _currentPage = 1;
         }
-        catch (Exception ex) { _error = $"Failed to load: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "loading data"); }
         finally { _loading = false; }
     }
 
@@ -141,7 +135,7 @@ else
         if (_busy) return;
         _busy = true;
         try { await EventService.AcknowledgeAsync(id, "web-user"); _success = "Event acknowledged."; await LoadData(); }
-        catch (Exception ex) { _error = $"Failed: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "the operation"); }
         finally { _busy = false; }
     }
 
@@ -150,7 +144,7 @@ else
         if (_busy) return;
         _busy = true;
         try { await EventService.ResolveAsync(id, "web-user"); _success = "Event resolved."; await LoadData(); }
-        catch (Exception ex) { _error = $"Failed: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "the operation"); }
         finally { _busy = false; }
     }
 
@@ -159,7 +153,7 @@ else
         if (_busy) return;
         _busy = true;
         try { await EventService.SuppressAsync(id); _success = "Event suppressed."; await LoadData(); }
-        catch (Exception ex) { _error = $"Failed: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "the operation"); }
         finally { _busy = false; }
     }
 
@@ -168,7 +162,7 @@ else
         if (_busy) return;
         _busy = true;
         try { await EventService.ReplayAsync(id); _success = "Event replayed."; await LoadData(); }
-        catch (Exception ex) { _error = $"Failed: {ex.Message}"; }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "the operation"); }
         finally { _busy = false; }
     }
 

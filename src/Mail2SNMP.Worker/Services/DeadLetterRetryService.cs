@@ -23,7 +23,9 @@ public class DeadLetterRetryService : BackgroundService
     private readonly TimeSpan _pollInterval;
     private readonly int _batchSize;
     private readonly int _maxAttempts;
-    private static readonly TimeSpan LockDuration = TimeSpan.FromMinutes(5);
+    private readonly TimeSpan _lockDuration;
+    private readonly int _backoffBaseMinutes;
+    private readonly TimeSpan _initialDelay;
 
     public DeadLetterRetryService(
         IServiceScopeFactory scopeFactory,
@@ -34,10 +36,14 @@ public class DeadLetterRetryService : BackgroundService
         _logger = logger;
         _instanceId = $"{Environment.MachineName}-{Environment.ProcessId}";
 
+        // M11: every magic number that affects retry behaviour is now configurable.
         var section = configuration.GetSection("DeadLetter");
         _pollInterval = TimeSpan.FromSeconds(section.GetValue("PollIntervalSeconds", 900));
         _batchSize = section.GetValue("BatchSize", 10);
         _maxAttempts = section.GetValue("MaxAttempts", 10);
+        _lockDuration = TimeSpan.FromMinutes(section.GetValue("LockDurationMinutes", 5));
+        _backoffBaseMinutes = section.GetValue("BackoffBaseMinutes", 15);
+        _initialDelay = TimeSpan.FromSeconds(section.GetValue("InitialDelaySeconds", 15));
     }
 
     /// <summary>
@@ -63,8 +69,8 @@ public class DeadLetterRetryService : BackgroundService
             }
         }
 
-        // Initial delay to let other services start
-        await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
+        // Initial delay to let other services start (configurable via DeadLetter:InitialDelaySeconds)
+        await Task.Delay(_initialDelay, stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -104,7 +110,7 @@ public class DeadLetterRetryService : BackgroundService
             $"""
             UPDATE DeadLetterEntries
             SET LockedByInstanceId = {_instanceId},
-                LockedUntilUtc = {now.Add(LockDuration)},
+                LockedUntilUtc = {now.Add(_lockDuration)},
                 Status = {(int)DeadLetterStatus.Locked}
             WHERE Status = {(int)DeadLetterStatus.Pending}
               AND (LockedUntilUtc IS NULL OR LockedUntilUtc < {now})
@@ -181,7 +187,8 @@ public class DeadLetterRetryService : BackgroundService
                 else
                 {
                     // Exponential backoff: 15min, 30min, 60min, 120min...
-                    var backoff = TimeSpan.FromMinutes(15 * Math.Pow(2, entry.AttemptCount - 1));
+                    // Exponential backoff: base * 2^(attempt-1) — base configurable via DeadLetter:BackoffBaseMinutes.
+                    var backoff = TimeSpan.FromMinutes(_backoffBaseMinutes * Math.Pow(2, entry.AttemptCount - 1));
                     entry.NextRetryUtc = DateTime.UtcNow.Add(backoff);
                     entry.Status = DeadLetterStatus.Pending;
                     _logger.LogWarning(
