@@ -398,7 +398,18 @@ else
         _showForm = true;
     }
 
-    private void CloseForm() { _showForm = false; _editing = null; }
+    private void CloseForm()
+    {
+        // H9: reset form state on close so the next open starts clean.
+        _showForm = false;
+        _editing = null;
+        _form = new JobForm();
+        _activeTab = "basic";
+        _validationAttempted = false;
+        _dryRunResult = null;
+        _selectedSnmpIds = new();
+        _selectedWebhookIds = new();
+    }
 
     private void ToggleSnmp(int id, bool isChecked)
     {

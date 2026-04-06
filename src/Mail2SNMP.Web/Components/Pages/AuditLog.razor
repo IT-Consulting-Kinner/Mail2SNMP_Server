@@ -141,23 +141,32 @@ else
     private async Task ExportCsv()
     {
         if (_events == null || _events.Count == 0) return;
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine("TimestampUtc,ActorType,ActorId,Action,TargetType,TargetId,Result,IpAddress,UserAgent,Details");
-        foreach (var e in _events)
+        try
         {
-            sb.Append(e.TimestampUtc.ToString("o")).Append(',')
-              .Append(Csv(e.ActorType.ToString())).Append(',')
-              .Append(Csv(e.ActorId)).Append(',')
-              .Append(Csv(e.Action)).Append(',')
-              .Append(Csv(e.TargetType)).Append(',')
-              .Append(Csv(e.TargetId)).Append(',')
-              .Append(Csv(e.Result.ToString())).Append(',')
-              .Append(Csv(e.IpAddress)).Append(',')
-              .Append(Csv(e.UserAgent)).Append(',')
-              .AppendLine(Csv(e.Details));
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("TimestampUtc,ActorType,ActorId,Action,TargetType,TargetId,Result,IpAddress,UserAgent,Details");
+            foreach (var e in _events)
+            {
+                sb.Append(e.TimestampUtc.ToString("o")).Append(',')
+                  .Append(Csv(e.ActorType.ToString())).Append(',')
+                  .Append(Csv(e.ActorId)).Append(',')
+                  .Append(Csv(e.Action)).Append(',')
+                  .Append(Csv(e.TargetType)).Append(',')
+                  .Append(Csv(e.TargetId)).Append(',')
+                  .Append(Csv(e.Result.ToString())).Append(',')
+                  .Append(Csv(e.IpAddress)).Append(',')
+                  .Append(Csv(e.UserAgent)).Append(',')
+                  .AppendLine(Csv(e.Details));
+            }
+            var filename = $"audit-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv";
+            await JS.InvokeVoidAsync("mail2snmp.downloadText", filename, "text/csv;charset=utf-8", sb.ToString());
         }
-        var filename = $"audit-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv";
-        await JS.InvokeVoidAsync("mail2snmp.downloadText", filename, "text/csv;charset=utf-8", sb.ToString());
+        catch (Exception ex)
+        {
+            // H7: surface JS interop or build failures so the operator knows the
+            // download did not happen, instead of leaving them staring at a quiet UI.
+            _error = ErrorMessageFormatter.ToFriendly(ex, "exporting the audit log");
+        }
     }
 
     // RFC4180-style minimal CSV quoting: escape quotes by doubling, wrap if comma/quote/newline present.

@@ -254,11 +254,23 @@ else
         _showTester = true;
     }
 
-    private void CloseTester() { _showTester = false; _testerRule = null; }
+    private void CloseTester()
+    {
+        // H9: clear ALL tester state so a re-open starts fresh.
+        _showTester = false;
+        _testerRule = null;
+        _testFrom = string.Empty;
+        _testSubject = string.Empty;
+        _testBody = string.Empty;
+        _testResult = null;
+    }
 
     private void RunTest()
     {
         if (_testerRule == null) return;
+        // H11: clear stale error so a successful re-test does not still show
+        // the previous regex-throw message.
+        _error = null;
         try
         {
             _testResult = RuleEvaluator.Evaluate(_testerRule, _testFrom, _testSubject, _testBody);
@@ -354,7 +366,13 @@ else
         _showForm = true;
     }
 
-    private void CloseForm() { _showForm = false; _editing = null; }
+    private void CloseForm()
+    {
+        // H9: reset form state on close so the next open starts clean.
+        _showForm = false;
+        _editing = null;
+        _form = new RuleForm();
+    }
 
     private async Task SaveRule()
     {

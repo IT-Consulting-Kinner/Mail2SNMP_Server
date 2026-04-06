@@ -102,11 +102,10 @@ public class MaintenanceWindowService : IMaintenanceWindowService
                     var cron = Cronos.CronExpression.Parse(w.RecurringCron);
                     var duration = w.EndUtc - w.StartUtc;
                     if (duration <= TimeSpan.Zero) duration = TimeSpan.FromHours(1); // fallback
-                    // GetOccurrences returns all occurrences in [from, to). We look back
-                    // from a window equal to the duration, so a currently-active recurrence
-                    // is captured.
+                    // H5: pass TimeZoneInfo.Utc explicitly so the cron expression is
+                    // ALWAYS evaluated in UTC, regardless of the host's local timezone.
                     var lookback = now - duration;
-                    var occurrence = cron.GetOccurrences(lookback, now, fromInclusive: true, toInclusive: true)
+                    var occurrence = cron.GetOccurrences(lookback, now, TimeZoneInfo.Utc, fromInclusive: true, toInclusive: true)
                                          .Cast<DateTime?>().LastOrDefault();
                     if (occurrence is DateTime occ)
                     {

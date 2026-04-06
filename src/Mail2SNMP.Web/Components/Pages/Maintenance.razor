@@ -108,7 +108,13 @@ else
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Recurring Cron (optional)</label>
-                            <InputText class="form-control" @bind-Value="_form.RecurringCron" />
+                            <InputText class="form-control" @bind-Value="_form.RecurringCron" placeholder="e.g. 0 8 * * 1-5" />
+                            <small class="text-muted">
+                                H6: 5-field cron, evaluated in <strong>UTC</strong>.
+                                Format: <code>minute hour day-of-month month day-of-week</code>.
+                                Examples: <code>0 8 * * *</code> = 08:00 UTC daily; <code>0 8 * * 1-5</code> = 08:00 UTC weekdays.
+                                The window's <em>duration</em> is taken from Start/End above and re-applied at every cron occurrence.
+                            </small>
                         </div>
                     </div>
                     <div class="modal-footer">

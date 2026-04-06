@@ -65,34 +65,14 @@ public class EventService : IEventService
     {
         evt.LastStateChangeUtc = DateTime.UtcNow;
 
-        // Enforce active event limit per job
-        var job = await _db.Jobs.FindAsync(new object[] { evt.JobId }, ct);
-        if (job != null)
-        {
-            var activeStates = new[] { EventState.New, EventState.Notified, EventState.Acknowledged };
-            var activeCount = await _db.Events
-                .CountAsync(e => e.JobId == evt.JobId && activeStates.Contains(e.State), ct);
-
-            if (activeCount >= job.MaxActiveEvents)
-            {
-                // Expire oldest New event first, then oldest Notified
-                // Never auto-expire Acknowledged events
-                var toExpire = await _db.Events
-                    .Where(e => e.JobId == evt.JobId && (e.State == EventState.New || e.State == EventState.Notified))
-                    .OrderBy(e => e.State == EventState.New ? 0 : 1) // New first
-                    .ThenBy(e => e.CreatedUtc)
-                    .FirstOrDefaultAsync(ct);
-
-                if (toExpire != null)
-                {
-                    toExpire.State = EventState.Expired;
-                    toExpire.LastStateChangeUtc = DateTime.UtcNow;
-                    _logger.LogInformation(
-                        "Active event limit ({Limit}) reached for Job {JobId}. Expired Event {EventId} ({State})",
-                        job.MaxActiveEvents, evt.JobId, toExpire.Id, toExpire.State);
-                }
-            }
-        }
+        // Pre-load job (untracked — only used to read MaxActiveEvents and RuleId)
+        // The active-event-limit enforcement now happens INSIDE the serializable
+        // transaction in CreateOrIncrementAsync (H2) so concurrent producers cannot
+        // both pass the count check and exceed the limit.
+        var job = await _db.Jobs.AsNoTracking()
+            .Where(j => j.Id == evt.JobId)
+            .Select(j => new { j.MaxActiveEvents, j.RuleId })
+            .FirstOrDefaultAsync(ct);
 
         // G3: Determine effective dedup window. Per-rule override takes precedence
         // over the global Events:DefaultDedupWindowMinutes setting. job.Rule may be
@@ -108,6 +88,8 @@ public class EventService : IEventService
             dedupWindowMinutes = rule?.DedupWindowMinutes;
         }
 
+        var maxActive = job?.MaxActiveEvents ?? int.MaxValue;
+
         // Event deduplication: if we have a MessageId, check the EventDedup table.
         // If a dedup entry exists within the job's window, increment HitCount on the
         // existing event instead. The dedup-check + increment must run inside a
@@ -115,12 +97,12 @@ public class EventService : IEventService
         if (!string.IsNullOrEmpty(evt.MessageId))
         {
             var dedupKey = EventDedupKeyGenerator.Generate(evt.MessageId, evt.JobId);
-            return await CreateOrIncrementAsync(evt, dedupKey, dedupWindowMinutes, ct);
+            return await CreateOrIncrementAsync(evt, dedupKey, dedupWindowMinutes, maxActive, ct);
         }
 
         // No MessageId — use fallback dedup key based on subject + sender + time
         var fallbackKey = EventDedupKeyGenerator.GenerateFallback(evt.Subject, evt.MailFrom, evt.CreatedUtc, evt.JobId);
-        return await CreateOrIncrementAsync(evt, fallbackKey, dedupWindowMinutes, ct);
+        return await CreateOrIncrementAsync(evt, fallbackKey, dedupWindowMinutes, maxActive, ct);
     }
 
     /// <summary>
@@ -130,7 +112,7 @@ public class EventService : IEventService
     /// concurrent producers can never both pass the dedup check and create duplicate
     /// events for the same key.
     /// </summary>
-    private async Task<Event> CreateOrIncrementAsync(Event evt, string dedupKey, int? dedupWindowMinutes, CancellationToken ct)
+    private async Task<Event> CreateOrIncrementAsync(Event evt, string dedupKey, int? dedupWindowMinutes, int maxActive, CancellationToken ct)
     {
         // Use the existing transaction if the caller already started one (e.g. integration tests)
         var ownTransaction = _db.Database.CurrentTransaction == null;
@@ -143,14 +125,14 @@ public class EventService : IEventService
                 .FirstOrDefaultAsync(d => d.DedupKeyHash == dedupKey && d.JobId == evt.JobId, ct);
 
             // G3: if a per-rule dedup window is configured and the existing entry is older
-            // than the window, treat it as expired — the new event should be created fresh.
+            // than the window, mark it for removal — the new event should be created fresh.
+            // (Removed but NOT saved here; the final SaveChanges below commits everything atomically.)
             if (existingDedup != null && dedupWindowMinutes is int window && window > 0)
             {
                 var cutoff = DateTime.UtcNow.AddMinutes(-window);
                 if (existingDedup.FirstSeenUtc < cutoff)
                 {
                     _db.EventDedups.Remove(existingDedup);
-                    await _db.SaveChangesAsync(ct);
                     existingDedup = null;
                 }
             }
@@ -168,6 +150,31 @@ public class EventService : IEventService
                         "Duplicate event suppressed for Job {JobId}. Existing Event {EventId} HitCount={HitCount}",
                         evt.JobId, existingEvent.Id, existingEvent.HitCount);
                     return existingEvent;
+                }
+            }
+
+            // H2: Active-event-limit enforcement INSIDE the serializable transaction
+            // so concurrent producers cannot both pass the count and exceed the limit.
+            if (maxActive < int.MaxValue)
+            {
+                var activeStates = new[] { EventState.New, EventState.Notified, EventState.Acknowledged };
+                var activeCount = await _db.Events
+                    .CountAsync(e => e.JobId == evt.JobId && activeStates.Contains(e.State), ct);
+                if (activeCount >= maxActive)
+                {
+                    var toExpire = await _db.Events
+                        .Where(e => e.JobId == evt.JobId && (e.State == EventState.New || e.State == EventState.Notified))
+                        .OrderBy(e => e.State == EventState.New ? 0 : 1)
+                        .ThenBy(e => e.CreatedUtc)
+                        .FirstOrDefaultAsync(ct);
+                    if (toExpire != null)
+                    {
+                        toExpire.State = EventState.Expired;
+                        toExpire.LastStateChangeUtc = DateTime.UtcNow;
+                        _logger.LogInformation(
+                            "Active event limit ({Limit}) reached for Job {JobId}. Expired Event {EventId}",
+                            maxActive, evt.JobId, toExpire.Id);
+                    }
                 }
             }
 

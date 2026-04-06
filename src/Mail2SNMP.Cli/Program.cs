@@ -471,8 +471,18 @@ public class Program
 
             Console.WriteLine("WARNING: Master key rotation re-encrypts ALL stored credentials.");
             Console.WriteLine("A full database backup is STRONGLY recommended before proceeding.");
+            Console.WriteLine();
+            Console.WriteLine("CRITICAL: Stop the Mail2SNMP service BEFORE running this command.");
+            Console.WriteLine("If the service is running, a concurrent mailbox/target create will be");
+            Console.WriteLine("encrypted with the OLD key and become unusable after rotation.");
             Console.Write("Type 'CONFIRM' to proceed: ");
             if (Console.ReadLine()?.Trim() != "CONFIRM") { Console.WriteLine("Aborted."); return 1; }
+
+            // Wire Ctrl+C to a CancellationToken so the rotation can abort cleanly
+            // on operator interrupt without leaving the DB in a half-written state.
+            using var rotateCts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, e) => { e.Cancel = true; rotateCts.Cancel(); };
+            var rotateCt = rotateCts.Token;
 
             using var scope = sp.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<Mail2SnmpDbContext>();
@@ -540,12 +550,18 @@ public class Program
                 return 2;
             }
 
-            // 5) Persist all changes in one transaction
-            using var transaction = await db.Database.BeginTransactionAsync();
+            // 5) Persist all changes in one transaction (CT-aware)
+            using var transaction = await db.Database.BeginTransactionAsync(rotateCt);
             try
             {
-                await db.SaveChangesAsync();
-                await transaction.CommitAsync();
+                await db.SaveChangesAsync(rotateCt);
+                await transaction.CommitAsync(rotateCt);
+            }
+            catch (OperationCanceledException)
+            {
+                await transaction.RollbackAsync();
+                Console.Error.WriteLine("Rotation aborted by operator (Ctrl+C). All changes rolled back.");
+                return 4;
             }
             catch (Exception ex)
             {

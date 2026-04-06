@@ -27,7 +27,11 @@
         <h5><i class="bi bi-shield-lock"></i> Save this key now</h5>
         <p>This is the <strong>only</strong> time you will see the full key. Copy it now — it cannot be recovered.</p>
         <code class="d-block p-2 bg-dark text-white user-select-all">@_newKeyPlaintext</code>
-        <button class="btn btn-sm btn-secondary mt-2" @onclick="() => _newKeyPlaintext = null">I have saved it</button>
+        <div class="mt-2">
+            @* H10: explicit Copy-to-Clipboard button so users do not lose the key by mistake *@
+            <button class="btn btn-sm btn-success me-2" @onclick="CopyKey"><i class="bi bi-clipboard"></i> Copy to clipboard</button>
+            <button class="btn btn-sm btn-secondary" @onclick="() => _newKeyPlaintext = null">I have saved it</button>
+        </div>
     </div>
 }
 
@@ -81,6 +85,11 @@ else
                     <button type="button" class="btn-close" @onclick="() => _showForm = false"></button>
                 </div>
                 <div class="modal-body">
+                    @* H12: surface validation errors so users see why Create did nothing *@
+                    @if (!string.IsNullOrEmpty(_formError))
+                    {
+                        <div class="alert alert-danger py-2 small">@_formError</div>
+                    }
                     <div class="mb-3">
                         <label class="form-label">Name</label>
                         <input class="form-control" @bind="_formName" placeholder="e.g. Grafana scraper" />
@@ -114,9 +123,22 @@ else
     private string? _error;
     private string? _success;
     private string? _newKeyPlaintext;
+    private string? _formError;
     private string _formName = string.Empty;
     private string _formScopes = "read";
     private DateTime? _formExpires;
+
+    private async Task CopyKey()
+    {
+        // H10: copy the one-time plaintext to the clipboard via JS interop.
+        if (string.IsNullOrEmpty(_newKeyPlaintext)) return;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _newKeyPlaintext);
+            _success = "API key copied to clipboard.";
+        }
+        catch (Exception ex) { _error = "Could not copy: " + ex.Message; }
+    }
 
     protected override async Task OnInitializedAsync() => await Load();
 
@@ -131,12 +153,14 @@ else
         _formName = string.Empty;
         _formScopes = "read";
         _formExpires = null;
+        _formError = null;
         _showForm = true;
     }
 
     private async Task Create()
     {
-        if (string.IsNullOrWhiteSpace(_formName)) { _error = "Name is required."; return; }
+        _formError = null;
+        if (string.IsNullOrWhiteSpace(_formName)) { _formError = "Name is required."; return; }
         _busy = true;
         try
         {

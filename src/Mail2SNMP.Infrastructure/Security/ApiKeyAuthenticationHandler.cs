@@ -50,14 +50,21 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         if (key.ExpiresUtc.HasValue && key.ExpiresUtc.Value < DateTime.UtcNow)
             return AuthenticateResult.Fail("API key expired");
 
-        try
+        // H3: Debounce LastUsedUtc updates — only persist if it has been > 5 minutes
+        // since the previous update. Prevents a write storm under high traffic
+        // (which would otherwise lock SQLite or bloat the SQL Server log).
+        var now = DateTime.UtcNow;
+        if (!key.LastUsedUtc.HasValue || (now - key.LastUsedUtc.Value) > TimeSpan.FromMinutes(5))
         {
-            key.LastUsedUtc = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
-        }
-        catch
-        {
-            // Don't fail authentication just because we couldn't update the timestamp.
+            try
+            {
+                key.LastUsedUtc = now;
+                await _db.SaveChangesAsync();
+            }
+            catch
+            {
+                // Don't fail authentication just because we couldn't update the timestamp.
+            }
         }
 
         var claims = new List<Claim>

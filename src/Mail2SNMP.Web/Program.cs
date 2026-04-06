@@ -210,12 +210,16 @@ try
     {
         var otelEndpoint = builder.Configuration["Otel:Endpoint"] ?? "http://localhost:4317";
         var otelService = builder.Configuration["Otel:ServiceName"] ?? "mail2snmp-web";
+        // H8: AddSource("Mail2SNMP.*") removed — no Mail2SNMP-prefixed ActivitySource
+        // is created in the codebase yet, so the filter matched nothing. Re-add the
+        // source filter once concrete ActivitySource("Mail2SNMP.<area>") instances
+        // are introduced. Framework instrumentation (ASP.NET Core, HttpClient) is
+        // still exported.
         builder.Services.AddOpenTelemetry()
             .ConfigureResource(r => r.AddService(otelService))
             .WithTracing(t => t
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
-                .AddSource("Mail2SNMP.*")
                 .AddOtlpExporter(o => o.Endpoint = new Uri(otelEndpoint)));
         Log.Information("OpenTelemetry tracing enabled (endpoint: {Endpoint})", otelEndpoint);
     }
@@ -301,6 +305,24 @@ try
                 details: "SQLite is not recommended for production. Health status: degraded.", ct: default);
         }
     }
+
+    // H1: Honour X-Forwarded-For/Proto from a trusted reverse proxy so the rate
+    // limiter and audit log see the real client IP, not the proxy IP. The set of
+    // trusted proxies comes from ForwardedHeaders:KnownProxies (CIDR list); empty
+    // by default — operators MUST configure it for production deployments behind
+    // a reverse proxy. KnownNetworks/KnownProxies is the only way to opt out of
+    // ASP.NET Core's default loopback-only allowlist safely.
+    var fwdOpts = new Microsoft.AspNetCore.Builder.ForwardedHeadersOptions
+    {
+        ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+                         | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
+    };
+    foreach (var ip in builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? Array.Empty<string>())
+    {
+        if (System.Net.IPAddress.TryParse(ip, out var parsed))
+            fwdOpts.KnownProxies.Add(parsed);
+    }
+    app.UseForwardedHeaders(fwdOpts);
 
     // Configure the HTTP request pipeline
     if (!app.Environment.IsDevelopment())
