@@ -86,6 +86,7 @@ public static class WorkerDependencyInjection
         services.AddHostedService<DataRetentionService>();
         services.AddHostedService<KeepAliveService>();
         services.AddHostedService<UpdateCheckService>();
+        services.AddHostedService<AutoAcknowledgeService>();
 
         return services;
     }

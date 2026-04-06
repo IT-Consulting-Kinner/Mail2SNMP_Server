@@ -149,6 +149,15 @@ public class EventSettings
     public int DefaultMaxActiveEvents { get; set; } = 200;
     public int AutoExpireDays { get; set; } = 30;
     public int ResolvedRetentionDays { get; set; } = 90;
+
+    /// <summary>
+    /// Wave D (4): if &gt; 0, the AutoAcknowledgeService scans every minute and
+    /// auto-acknowledges (with the System actor) any New event older than this many minutes.
+    /// This causes the EventConfirmed pair-trap to be sent automatically — useful for
+    /// self-clearing alarms (disk back below threshold, service back up, etc.).
+    /// 0 disables the feature globally.
+    /// </summary>
+    public int AutoAcknowledgeAfterMinutes { get; set; } = 0;
 }
 
 /// <summary>
