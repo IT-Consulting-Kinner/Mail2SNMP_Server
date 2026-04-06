@@ -15,13 +15,16 @@
     <Feature Id="ProductFeature" Title="Mail2SNMP Server" Level="1">
       <ComponentGroupRef Id="ProductComponents" />
       <ComponentGroupRef Id="ServiceComponents" />
+      <ComponentGroupRef Id="MibComponents" />
       <ComponentGroupRef Id="DataDirectories" />
     </Feature>
 
     <!-- Directory Structure -->
     <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="COMPANYDIR" Name="IT-Consulting Kinner">
-        <Directory Id="INSTALLFOLDER" Name="Mail2SNMP_Server" />
+        <Directory Id="INSTALLFOLDER" Name="Mail2SNMP_Server">
+          <Directory Id="MIBFOLDER" Name="MIB" />
+        </Directory>
       </Directory>
     </StandardDirectory>
 
@@ -61,6 +64,13 @@
                         Stop="both"
                         Remove="uninstall"
                         Wait="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- MIB File -->
+    <ComponentGroup Id="MibComponents" Directory="MIBFOLDER">
+      <Component Id="MibFile" Guid="A7B8C9D0-E1F2-3456-ABCD-567890123456">
+        <File Id="Mail2SnmpMib" Source="..\..\mib\Mail2SNMP-MIB.mib" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 

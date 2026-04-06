@@ -1,5 +1,6 @@
 using Mail2SNMP.Models.DTOs;
 using Mail2SNMP.Models.Entities;
+// ReSharper disable once UnusedType.Global
 
 namespace Mail2SNMP.Core.Interfaces;
 
@@ -32,5 +33,24 @@ public interface INotificationChannel
     /// Default implementation does nothing (for non-webhook channels).
     /// </summary>
     Task SendToWebhookTargetAsync(NotificationContext context, WebhookTarget target, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Sends an mail2SNMPEventConfirmedNotification trap. SNMP-only.
+    /// Default implementation does nothing.
+    /// </summary>
+    Task SendEventConfirmedAsync(long eventId, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Sends a KeepAlive notification trap to all targets that have it enabled. SNMP-only.
+    /// </summary>
+    Task SendKeepAliveAsync(CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Sends an Update-available notification trap. SNMP-only.
+    /// </summary>
+    Task SendUpdateAvailableAsync(UpdateInfo info, CancellationToken ct = default)
         => Task.CompletedTask;
 }

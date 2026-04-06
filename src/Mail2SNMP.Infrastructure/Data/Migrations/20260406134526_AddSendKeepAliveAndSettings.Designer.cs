@@ -3,6 +3,7 @@ using System;
 using Mail2SNMP.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Mail2SNMP.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(Mail2SnmpDbContext))]
-    partial class Mail2SnmpDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260406134526_AddSendKeepAliveAndSettings")]
+    partial class AddSendKeepAliveAndSettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.25");

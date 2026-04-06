@@ -160,6 +160,11 @@
                             <InputNumber class="form-control" @bind-Value="_form.MaxTrapsPerMinute" />
                         </div>
                         <div class="form-check mb-3">
+                            <InputCheckbox class="form-check-input" @bind-Value="_form.SendKeepAlive" />
+                            <label class="form-check-label">Send KeepAlive Traps</label>
+                            <small class="form-text text-muted d-block">When enabled, this target receives periodic keep-alive traps from the worker (interval configured in appsettings.json &gt; KeepAlive).</small>
+                        </div>
+                        <div class="form-check mb-3">
                             <InputCheckbox class="form-check-input" @bind-Value="_form.IsActive" />
                             <label class="form-check-label">Active</label>
                         </div>
@@ -193,7 +198,7 @@
     private void ShowAddForm()
     {
         _editing = null;
-        _form = new SnmpTargetForm { Port = 162, Version = SnmpVersion.V2c, MaxTrapsPerMinute = 100, IsActive = true, IsEditing = false };
+        _form = new SnmpTargetForm { Port = 162, Version = SnmpVersion.V2c, MaxTrapsPerMinute = 100, IsActive = true, SendKeepAlive = false, IsEditing = false };
         _showForm = true;
     }
 
@@ -206,7 +211,7 @@
             CommunityString = t.CommunityString, SecurityName = t.SecurityName,
             AuthProtocol = t.AuthProtocol, PrivProtocol = t.PrivProtocol,
             EngineId = t.EngineId, EnterpriseTrapOid = t.EnterpriseTrapOid,
-            MaxTrapsPerMinute = t.MaxTrapsPerMinute, IsActive = t.IsActive,
+            MaxTrapsPerMinute = t.MaxTrapsPerMinute, SendKeepAlive = t.SendKeepAlive, IsActive = t.IsActive,
             IsEditing = true
         };
         _showForm = true;
@@ -225,7 +230,9 @@
                 _editing.SecurityName = _form.SecurityName; _editing.AuthProtocol = _form.AuthProtocol;
                 _editing.PrivProtocol = _form.PrivProtocol; _editing.EngineId = _form.EngineId;
                 _editing.EnterpriseTrapOid = _form.EnterpriseTrapOid;
-                _editing.MaxTrapsPerMinute = _form.MaxTrapsPerMinute; _editing.IsActive = _form.IsActive;
+                _editing.MaxTrapsPerMinute = _form.MaxTrapsPerMinute;
+                _editing.SendKeepAlive = _form.SendKeepAlive;
+                _editing.IsActive = _form.IsActive;
                 if (!string.IsNullOrEmpty(_form.AuthPassword)) _editing.EncryptedAuthPassword = _form.AuthPassword;
                 if (!string.IsNullOrEmpty(_form.PrivPassword)) _editing.EncryptedPrivPassword = _form.PrivPassword;
                 await SnmpTargetService.UpdateAsync(_editing);
@@ -240,7 +247,7 @@
                     AuthProtocol = _form.AuthProtocol, EncryptedAuthPassword = _form.AuthPassword ?? string.Empty,
                     PrivProtocol = _form.PrivProtocol, EncryptedPrivPassword = _form.PrivPassword ?? string.Empty,
                     EngineId = _form.EngineId, EnterpriseTrapOid = _form.EnterpriseTrapOid,
-                    MaxTrapsPerMinute = _form.MaxTrapsPerMinute, IsActive = _form.IsActive
+                    MaxTrapsPerMinute = _form.MaxTrapsPerMinute, SendKeepAlive = _form.SendKeepAlive, IsActive = _form.IsActive
                 };
                 await SnmpTargetService.CreateAsync(target);
                 _success = "SNMP target created.";
@@ -292,6 +299,7 @@
         [Range(1, 10000, ErrorMessage = "Max traps per minute must be between 1 and 10,000.")]
         public int MaxTrapsPerMinute { get; set; } = 100;
 
+        public bool SendKeepAlive { get; set; } = false;
         public bool IsActive { get; set; } = true;
         public bool IsEditing { get; set; }
 

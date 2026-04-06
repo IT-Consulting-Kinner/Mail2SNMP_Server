@@ -1,5 +1,9 @@
 @page "/"
 @rendermode InteractiveServer
+@using Mail2SNMP.Infrastructure.Data
+@using Mail2SNMP.Models.Entities
+@using Microsoft.EntityFrameworkCore
+@using System.Reflection
 @inject IMailboxService MailboxService
 @inject IJobService JobService
 @inject IScheduleService ScheduleService
@@ -7,6 +11,7 @@
 @inject IDeadLetterService DeadLetterService
 @inject IMaintenanceWindowService MaintenanceService
 @inject ILicenseProvider LicenseProvider
+@inject Mail2SnmpDbContext Db
 
 <PageTitle>Dashboard - Mail2SNMP</PageTitle>
 
@@ -93,6 +98,31 @@ else
         </div>
     </div>
 
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Mail2SNMP Server Version</h6>
+                    <p class="mb-1"><strong>Installed:</strong> @_currentVersion</p>
+                    @if (!string.IsNullOrEmpty(_availableVersion) && _updateAvailable)
+                    {
+                        <div class="alert alert-info mt-2 mb-0">
+                            <strong>Update available:</strong> @_availableVersion (@_publishDate)
+                            @if (!string.IsNullOrEmpty(_downloadLink))
+                            {
+                                <a href="@_downloadLink" target="_blank" class="ms-2">Download</a>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <small class="text-muted">No update available.</small>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
     @if (!string.IsNullOrEmpty(_error))
     {
         <div class="alert alert-danger mt-3">@_error</div>
@@ -103,6 +133,11 @@ else
     private DashboardDto _dashboard = new();
     private bool _loading = true;
     private string? _error;
+    private string _currentVersion = "0.0.0";
+    private string _availableVersion = string.Empty;
+    private string _publishDate = string.Empty;
+    private string _downloadLink = string.Empty;
+    private bool _updateAvailable = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -127,6 +162,17 @@ else
                 LicenseEdition = LicenseProvider.Current.Edition.ToString(),
                 IsHealthy = true
             };
+
+            // Load version + update info
+            _currentVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
+            var available = await Db.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == "update.available_version");
+            var date      = await Db.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == "update.publish_date");
+            var link      = await Db.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == "update.download_link");
+            _availableVersion = available?.Value ?? string.Empty;
+            _publishDate      = date?.Value ?? string.Empty;
+            _downloadLink     = link?.Value ?? string.Empty;
+            _updateAvailable  = !string.IsNullOrEmpty(_availableVersion)
+                && !string.Equals(_availableVersion, _currentVersion, StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex)
         {

@@ -99,3 +99,50 @@ public class HostingSettings
 {
     public bool AllInOne { get; set; }
 }
+
+/// <summary>
+/// SNMP KeepAlive notification configuration.
+/// Sends an empty keep-alive trap to all SNMP targets that have SendKeepAlive enabled.
+/// </summary>
+public class KeepAliveSettings
+{
+    /// <summary>
+    /// When true, the worker periodically sends KeepAlive traps.
+    /// </summary>
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>
+    /// Interval between KeepAlive traps in minutes (default: 5).
+    /// </summary>
+    public int IntervalMinutes { get; set; } = 5;
+}
+
+/// <summary>
+/// Update check configuration. The worker periodically polls a JSON feed
+/// to detect newer versions and can emit an SNMP Update notification.
+/// </summary>
+public class UpdateCheckSettings
+{
+    /// <summary>
+    /// When true, the update check runs (immediately at start, then every IntervalHours).
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Interval in hours between update checks (default: 24).
+    /// </summary>
+    public int IntervalHours { get; set; } = 24;
+
+    /// <summary>
+    /// URL of the JSON feed containing version, publish_date, and download_link fields.
+    /// </summary>
+    public string Url { get; set; } = "https://mail2snmp.adsumus.biz/downloads/Mail2SNMP.json";
+
+    /// <summary>
+    /// Trap notification mode:
+    /// - Off: never send a trap (UI hint only)
+    /// - Once: send a trap only on first detection of a given version
+    /// - UntilUpdated: send a trap on every check until the installed version catches up
+    /// </summary>
+    public string TrapMode { get; set; } = "UntilUpdated";
+}

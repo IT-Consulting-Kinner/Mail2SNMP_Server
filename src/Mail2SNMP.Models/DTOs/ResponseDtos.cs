@@ -38,6 +38,7 @@ public class SnmpTargetResponse
     public string? EngineId { get; set; }
     public string? EnterpriseTrapOid { get; set; }
     public int MaxTrapsPerMinute { get; set; }
+    public bool SendKeepAlive { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedUtc { get; set; }
 }
@@ -157,6 +158,7 @@ public static class ResponseDtoMapper
             EngineId = target.EngineId,
             EnterpriseTrapOid = target.EnterpriseTrapOid,
             MaxTrapsPerMinute = target.MaxTrapsPerMinute,
+            SendKeepAlive = target.SendKeepAlive,
             IsActive = target.IsActive,
             CreatedUtc = target.CreatedUtc
         };

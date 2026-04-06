@@ -1,0 +1,151 @@
+-- Version: V2.0
+-- History:
+-- V2.0 2024-02-11
+-- V1.1 2024-02-04
+-- V1.0 2024-01-20
+Mail2SNMP-MIB DEFINITIONS ::= BEGIN
+IMPORTS
+ MODULE-IDENTITY, OBJECT-TYPE, NOTIFICATION-TYPE, Integer32, enterprises FROM SNMPv2-SMI
+ MODULE-COMPLIANCE, OBJECT-GROUP, NOTIFICATION-GROUP FROM SNMPv2-CONF;
+
+it-c-k MODULE-IDENTITY
+ LAST-UPDATED "202402110000Z"
+ ORGANIZATION "IT-C-K.com"
+ CONTACT-INFO
+ "Kevin Kinner
+  Liebknechtstrasse 4
+  99085 Erfurt Germany
+  
+  kevin.kinner@it-c-k.com"
+ DESCRIPTION "This MIB contains definition of the SNMP Traps associated to alerts sent by mail2SNMP"
+ REVISION "202402110000Z"
+ DESCRIPTION "Version 2.0"
+ ::= { enterprises 61376 }
+  
+mail2SNMPMIB OBJECT IDENTIFIER ::= { it-c-k 1 }
+
+mail2SNMPMIBObjects OBJECT IDENTIFIER ::= { mail2SNMPMIB 1 }
+
+eventTable OBJECT-TYPE
+ SYNTAX SEQUENCE OF EventEntry
+ MAX-ACCESS not-accessible
+ STATUS current
+ DESCRIPTION "A list of active events"
+ ::= { mail2SNMPMIBObjects 1 }
+
+eventEntry OBJECT-TYPE
+ SYNTAX EventEntry
+ MAX-ACCESS not-accessible
+ STATUS current
+ DESCRIPTION "This is the data structure associated to triggered events."
+ INDEX { eventID }
+ ::= { eventTable 1 }
+  
+EventEntry ::= SEQUENCE {
+ eventID Integer32,
+ eventName OCTET STRING,
+ eventSeverity OCTET STRING,
+ eventMessage OCTET STRING
+}
+
+eventID OBJECT-TYPE
+ SYNTAX Integer32 (1..2147483647)
+ MAX-ACCESS read-only
+ STATUS current
+ DESCRIPTION "The event ID of the event being sent;"
+ ::= { eventEntry 1 }
+
+eventName OBJECT-TYPE
+ SYNTAX OCTET STRING
+ MAX-ACCESS read-only
+ STATUS current
+ DESCRIPTION "The event severity of the event being sent"
+ ::= { eventEntry 2 }
+  
+eventSeverity OBJECT-TYPE
+ SYNTAX OCTET STRING
+ MAX-ACCESS read-only
+ STATUS current
+ DESCRIPTION "The event severity of the event being sent"
+ ::= { eventEntry 3 }
+  
+eventMessage OBJECT-TYPE
+ SYNTAX OCTET STRING
+ MAX-ACCESS read-only
+ STATUS current
+ DESCRIPTION "The event message of the event being sent"
+ ::= { eventEntry 4 }
+
+-- notifications
+  
+mail2SNMPMIBNotifications OBJECT IDENTIFIER ::= { mail2SNMPMIB 2 }
+
+mail2SNMPMIBNotificationsPrefix OBJECT IDENTIFIER ::= { mail2SNMPMIBNotifications 0 }
+
+mail2SNMPEventCreatedNotification NOTIFICATION-TYPE
+ OBJECTS { eventID, eventName, eventSeverity, eventMessage }
+ STATUS current
+ DESCRIPTION "A notification about an event in mail parsing."
+ ::= { mail2SNMPMIBNotificationsPrefix 1 }
+
+mail2SNMPEventConfirmedNotification NOTIFICATION-TYPE
+ OBJECTS { eventID }
+ STATUS current
+ DESCRIPTION "A notification about an event that was confirmed."
+ ::= { mail2SNMPMIBNotificationsPrefix 2 }
+
+mail2SNMPKeepAliveNotification NOTIFICATION-TYPE
+ STATUS current
+ DESCRIPTION "Keep alive event"
+ ::= { mail2SNMPMIBNotificationsPrefix 3 }
+
+mail2SNMPUpdateNotification NOTIFICATION-TYPE
+ STATUS current
+ DESCRIPTION "Update information event"
+ ::= { mail2SNMPMIBNotificationsPrefix 4 }
+
+-- conformance information
+
+mail2SNMPMIBConformance OBJECT IDENTIFIER ::= { mail2SNMPMIB 3 }
+
+mail2SNMPMIBCompliances OBJECT IDENTIFIER ::= { mail2SNMPMIBConformance 1 }
+
+mail2SNMPMIBGroups OBJECT IDENTIFIER ::= { mail2SNMPMIBConformance 2 }
+
+-- compliance statements
+
+mail2SNMPMIBCompliance MODULE-COMPLIANCE
+ STATUS current
+ DESCRIPTION "The compliance statement for all events."
+ MODULE -- this  module
+ MANDATORY-GROUPS {
+  mail2SNMPGroup,
+  mail2SNMPNotificationsGroup
+ }
+ ::= { mail2SNMPMIBCompliances 1 }
+
+-- Units of Conformance
+		
+mail2SNMPGroup OBJECT-GROUP
+ OBJECTS {
+  eventID,
+  eventName,
+  eventSeverity,
+  eventMessage
+ }
+ STATUS current
+ DESCRIPTION "The collection of objects which are used to provide event information."
+ ::= { mail2SNMPMIBGroups 1 }
+ 
+ mail2SNMPNotificationsGroup NOTIFICATION-GROUP
+ NOTIFICATIONS {
+  mail2SNMPEventCreatedNotification,
+  mail2SNMPEventConfirmedNotification,
+  mail2SNMPKeepAliveNotification,
+  mail2SNMPUpdateNotification
+ }
+ STATUS current
+ DESCRIPTION "The set of notifications provided by mail2SNMP."
+ ::= { mail2SNMPMIBGroups 2 }
+
+END

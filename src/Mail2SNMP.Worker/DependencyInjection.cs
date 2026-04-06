@@ -67,12 +67,18 @@ public static class WorkerDependencyInjection
             options.WaitForJobsToComplete = true;
         });
 
+        // Bind KeepAlive + UpdateCheck options
+        services.Configure<KeepAliveSettings>(configuration.GetSection("KeepAlive"));
+        services.Configure<UpdateCheckSettings>(configuration.GetSection("UpdateCheck"));
+
         // Hosted services
         services.AddHostedService<HeartbeatService>();
         services.AddHostedService<ScheduleSyncService>();
         services.AddHostedService<MailPollingService>();
         services.AddHostedService<DeadLetterRetryService>();
         services.AddHostedService<DataRetentionService>();
+        services.AddHostedService<KeepAliveService>();
+        services.AddHostedService<UpdateCheckService>();
 
         return services;
     }

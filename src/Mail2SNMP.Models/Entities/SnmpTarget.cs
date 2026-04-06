@@ -37,6 +37,11 @@ public class SnmpTarget : IValidatableObject
     [Range(1, 10000, ErrorMessage = "Max traps per minute must be between 1 and 10,000.")]
     public int MaxTrapsPerMinute { get; set; } = 100;
 
+    /// <summary>
+    /// When true, this target receives periodic KeepAlive traps from the worker.
+    /// </summary>
+    public bool SendKeepAlive { get; set; } = false;
+
     public bool IsActive { get; set; } = true;
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 

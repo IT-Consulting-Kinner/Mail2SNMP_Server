@@ -27,6 +27,7 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
     public DbSet<AuthTicket> AuthTickets => Set<AuthTicket>();
     public DbSet<JobSnmpTarget> JobSnmpTargets => Set<JobSnmpTarget>();
     public DbSet<JobWebhookTarget> JobWebhookTargets => Set<JobWebhookTarget>();
+    public DbSet<Setting> Settings => Set<Setting>();
 
     /// <summary>
     /// Configures entity mappings, column constraints, indexes, and relationships for all domain entities.
@@ -189,6 +190,13 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
             e.Property(x => x.Id).HasMaxLength(200);
             e.Property(x => x.Value).IsRequired();
             e.HasIndex(x => x.ExpiresUtc);
+        });
+
+        builder.Entity<Setting>(e =>
+        {
+            e.HasKey(x => x.Key);
+            e.Property(x => x.Key).HasMaxLength(200);
+            e.Property(x => x.Value).HasMaxLength(2000);
         });
     }
 }

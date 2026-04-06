@@ -20,3 +20,14 @@ public class NotificationContext
     public string? WebhookTemplate { get; set; }
     public string? OidMapping { get; set; }
 }
+
+/// <summary>
+/// Information about an available product update returned from the update check feed.
+/// </summary>
+public class UpdateInfo
+{
+    public string CurrentVersion { get; set; } = string.Empty;
+    public string AvailableVersion { get; set; } = string.Empty;
+    public string DownloadUrl { get; set; } = string.Empty;
+    public string PublishDate { get; set; } = string.Empty;
+}

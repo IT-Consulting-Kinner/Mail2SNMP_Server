@@ -183,7 +183,8 @@ public class EventService : IEventService
     }
 
     /// <summary>
-    /// Transitions the event to Acknowledged on behalf of the specified user.
+    /// Transitions the event to Acknowledged on behalf of the specified user
+    /// and emits an mail2SNMPEventConfirmedNotification trap to all active SNMP targets.
     /// </summary>
     public async Task AcknowledgeAsync(long id, string userId, CancellationToken ct = default)
     {
@@ -198,6 +199,18 @@ public class EventService : IEventService
         evt.LastStateChangeUtc = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         await _audit.LogAsync(ActorType.User, userId, "Event.Acknowledged", "Event", id.ToString(), ct: ct);
+
+        // Emit EventConfirmed SNMP trap (best-effort, must not fail the acknowledge action)
+        try
+        {
+            var snmpChannel = _channels.FirstOrDefault(c => c.ChannelName == "snmp");
+            if (snmpChannel != null)
+                await snmpChannel.SendEventConfirmedAsync(id, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send EventConfirmed trap for event {EventId}", id);
+        }
     }
 
     /// <summary>

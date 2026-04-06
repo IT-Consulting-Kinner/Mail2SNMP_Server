@@ -31,6 +31,18 @@ public class SnmpNotificationChannel : INotificationChannel
 
     public string ChannelName => "snmp";
 
+    // Mail2SNMP MIB OIDs (Enterprise Number 61376, registered to IT-Consulting Kinner)
+    public const string EventCreatedOid   = "1.3.6.1.4.1.61376.1.2.0.1";
+    public const string EventConfirmedOid = "1.3.6.1.4.1.61376.1.2.0.2";
+    public const string KeepAliveOid      = "1.3.6.1.4.1.61376.1.2.0.3";
+    public const string UpdateOid         = "1.3.6.1.4.1.61376.1.2.0.4";
+
+    // MIB object identifiers (varbinds)
+    private const string EventIDOid       = "1.3.6.1.4.1.61376.1.1.1.1.1";
+    private const string EventNameOid     = "1.3.6.1.4.1.61376.1.1.1.1.2";
+    private const string EventSeverityOid = "1.3.6.1.4.1.61376.1.1.1.1.3";
+    private const string EventMessageOid  = "1.3.6.1.4.1.61376.1.1.1.1.4";
+
     public SnmpNotificationChannel(
         Mail2SnmpDbContext db,
         ICredentialEncryptor encryptor,
@@ -118,49 +130,146 @@ public class SnmpNotificationChannel : INotificationChannel
     }
 
     /// <summary>
-    /// Constructs and sends an SNMP trap (v1, v2c, or v3) to a single target.
+    /// Constructs and sends an EventCreated SNMP trap (v1, v2c, or v3) to a single target.
+    /// Uses the official Mail2SNMP MIB OIDs (eventID, eventName, eventSeverity, eventMessage).
     /// </summary>
     private Task SendTrapAsync(Models.Entities.SnmpTarget target, NotificationContext context)
     {
-        var oid = new ObjectIdentifier(target.EnterpriseTrapOid ?? "1.3.6.1.4.1.99999.1.1");
-        var payload = _templateEngine.BuildPayload(context, context.TrapTemplate);
+        var trapOid = new ObjectIdentifier(target.EnterpriseTrapOid ?? EventCreatedOid);
 
+        // Use the email subject as the eventMessage (fallback to "From: subject" combo)
+        var message = !string.IsNullOrWhiteSpace(context.Subject)
+            ? context.Subject
+            : $"{context.From}: {context.JobName}";
+
+        // MIB-conformant varbinds for mail2SNMPEventCreatedNotification:
+        //   eventID, eventName, eventSeverity, eventMessage
         var varbinds = new List<Variable>
         {
-            new(new ObjectIdentifier(oid + ".1"), new OctetString(_templateEngine.TruncateForSnmp(context.JobName))),
-            new(new ObjectIdentifier(oid + ".2"), new OctetString(_templateEngine.TruncateForSnmp(context.Subject))),
-            new(new ObjectIdentifier(oid + ".3"), new OctetString(_templateEngine.TruncateForSnmp(context.From))),
-            new(new ObjectIdentifier(oid + ".4"), new OctetString(context.Severity.ToString())),
-            new(new ObjectIdentifier(oid + ".5"), new Integer32(context.HitCount))
+            new(new ObjectIdentifier(EventIDOid),       new Integer32((int)Math.Min(context.EventId, int.MaxValue))),
+            new(new ObjectIdentifier(EventNameOid),     new OctetString(_templateEngine.TruncateForSnmp(context.JobName))),
+            new(new ObjectIdentifier(EventSeverityOid), new OctetString(context.Severity.ToString())),
+            new(new ObjectIdentifier(EventMessageOid),  new OctetString(_templateEngine.TruncateForSnmp(message)))
         };
 
-        var endpoint = new IPEndPoint(IPAddress.Parse(target.Host), target.Port);
+        return SendVarbindsAsync(target, trapOid, varbinds);
+    }
+
+    /// <summary>
+    /// Sends an mail2SNMPEventConfirmedNotification trap (eventID only) to all active SNMP targets.
+    /// Triggered when an event is acknowledged.
+    /// </summary>
+    public async Task SendEventConfirmedAsync(long eventId, CancellationToken ct = default)
+    {
+        var targets = await _db.SnmpTargets.Where(t => t.IsActive).ToListAsync(ct);
+        var trapOid = new ObjectIdentifier(EventConfirmedOid);
+
+        foreach (var target in targets)
+        {
+            try
+            {
+                var varbinds = new List<Variable>
+                {
+                    new(new ObjectIdentifier(EventIDOid), new Integer32((int)Math.Min(eventId, int.MaxValue)))
+                };
+                await SendVarbindsAsync(target, trapOid, varbinds);
+                _logger.LogInformation("EventConfirmed trap sent to {Host}:{Port} for event {EventId}", target.Host, target.Port, eventId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send EventConfirmed trap to {Host}:{Port}", target.Host, target.Port);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sends an mail2SNMPKeepAliveNotification trap (no varbinds) to all SNMP targets that have SendKeepAlive enabled.
+    /// </summary>
+    public async Task SendKeepAliveAsync(CancellationToken ct = default)
+    {
+        var targets = await _db.SnmpTargets.Where(t => t.IsActive && t.SendKeepAlive).ToListAsync(ct);
+        var trapOid = new ObjectIdentifier(KeepAliveOid);
+
+        foreach (var target in targets)
+        {
+            try
+            {
+                await SendVarbindsAsync(target, trapOid, new List<Variable>());
+                _logger.LogDebug("KeepAlive trap sent to {Host}:{Port}", target.Host, target.Port);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send KeepAlive trap to {Host}:{Port}", target.Host, target.Port);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sends an mail2SNMPUpdateNotification trap to all active SNMP targets, carrying current/available
+    /// version information in the eventMessage varbind for compatibility with the existing MIB.
+    /// </summary>
+    public async Task SendUpdateAvailableAsync(UpdateInfo info, CancellationToken ct = default)
+    {
+        var targets = await _db.SnmpTargets.Where(t => t.IsActive).ToListAsync(ct);
+        var trapOid = new ObjectIdentifier(UpdateOid);
+
+        var message = $"Mail2SNMP update available: {info.CurrentVersion} → {info.AvailableVersion} ({info.PublishDate}) {info.DownloadUrl}";
+
+        foreach (var target in targets)
+        {
+            try
+            {
+                var varbinds = new List<Variable>
+                {
+                    new(new ObjectIdentifier(EventNameOid),     new OctetString("Mail2SNMP Update Available")),
+                    new(new ObjectIdentifier(EventSeverityOid), new OctetString("Information")),
+                    new(new ObjectIdentifier(EventMessageOid),  new OctetString(_templateEngine.TruncateForSnmp(message)))
+                };
+                await SendVarbindsAsync(target, trapOid, varbinds);
+                _logger.LogInformation("Update trap sent to {Host}:{Port} ({Available})", target.Host, target.Port, info.AvailableVersion);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send Update trap to {Host}:{Port}", target.Host, target.Port);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Internal helper that performs the actual UDP send for v1/v2c/v3.
+    /// </summary>
+    private Task SendVarbindsAsync(Models.Entities.SnmpTarget target, ObjectIdentifier trapOid, List<Variable> varbinds)
+    {
+        IPAddress ipAddress;
+        if (!IPAddress.TryParse(target.Host, out ipAddress!))
+        {
+            ipAddress = Dns.GetHostEntry(target.Host).AddressList[0];
+        }
+        var endpoint = new IPEndPoint(ipAddress, target.Port);
 
         if (target.Version == SnmpVersion.V1)
         {
             Messenger.SendTrapV1(endpoint, IPAddress.Loopback,
                 new OctetString(target.CommunityString ?? "public"),
-                oid, GenericCode.EnterpriseSpecific, 0, 0, varbinds);
+                trapOid, GenericCode.EnterpriseSpecific, 0, 0, varbinds);
         }
         else if (target.Version == SnmpVersion.V2c)
         {
             Messenger.SendTrapV2(0, VersionCode.V2, endpoint,
                 new OctetString(target.CommunityString ?? "public"),
-                oid, 0, varbinds);
+                trapOid, 0, varbinds);
         }
         else
         {
-            // SNMP v3 requires an Enterprise license
             if (!_license.IsEnterprise())
             {
                 _logger.LogWarning(
-                    "SNMP v3 target {Name} skipped — requires an Enterprise license. " +
-                    "Downgrade the target to v1/v2c or activate an Enterprise license.",
+                    "SNMP v3 target {Name} skipped — requires an Enterprise license.",
                     target.Name);
                 return Task.CompletedTask;
             }
 
-            SendV3Trap(target, endpoint, oid, varbinds);
+            SendV3Trap(target, endpoint, trapOid, varbinds);
         }
 
         return Task.CompletedTask;
