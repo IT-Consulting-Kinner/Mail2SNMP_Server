@@ -278,6 +278,14 @@ try
     // ── Middleware pipeline ─────────────────────────────────────────────────
     app.UseSerilogRequestLogging();
 
+    // S2: strip the Server header (mirrors the Web project). Don't advertise the
+    // ASP.NET Core version to attackers running banner-grabbing tools.
+    app.Use(async (ctx, next) =>
+    {
+        ctx.Response.Headers.Remove("Server");
+        await next();
+    });
+
     if (app.Environment.IsDevelopment())
     {
         app.UseSwagger();

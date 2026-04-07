@@ -102,6 +102,13 @@ public static class SsrfGuard
     /// </summary>
     private static bool IsPrivate(IPAddress ip)
     {
+        // S3: unwrap IPv4-mapped IPv6 (::ffff:a.b.c.d) so an attacker cannot
+        // bypass the IPv4 byte checks below by encoding 169.254.169.254 as
+        // ::ffff:169.254.169.254. IsLoopback() catches the loopback case but
+        // not arbitrary mapped addresses.
+        if (ip.IsIPv4MappedToIPv6)
+            ip = ip.MapToIPv4();
+
         if (IPAddress.IsLoopback(ip)) return true;
 
         if (ip.AddressFamily == AddressFamily.InterNetwork)

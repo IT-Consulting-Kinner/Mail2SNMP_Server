@@ -26,6 +26,7 @@ public class DeadLetterRetryService : BackgroundService
     private readonly TimeSpan _lockDuration;
     private readonly int _backoffBaseMinutes;
     private readonly TimeSpan _initialDelay;
+    private readonly bool _allowPrivateTargets;
 
     public DeadLetterRetryService(
         IServiceScopeFactory scopeFactory,
@@ -44,6 +45,12 @@ public class DeadLetterRetryService : BackgroundService
         _lockDuration = TimeSpan.FromMinutes(section.GetValue("LockDurationMinutes", 5));
         _backoffBaseMinutes = section.GetValue("BackoffBaseMinutes", 15);
         _initialDelay = TimeSpan.FromSeconds(section.GetValue("InitialDelaySeconds", 15));
+
+        // S1: dead-letter retries must apply the same SSRF guard as the live
+        // delivery path. Without this an Operator could create a webhook with
+        // a benign URL, let it fail (going to dead letter), then update the
+        // URL to 169.254.169.254 — and the retry path would happily fetch it.
+        _allowPrivateTargets = configuration.GetValue<bool>("Security:AllowPrivateWebhookTargets");
     }
 
     /// <summary>
@@ -146,6 +153,22 @@ public class DeadLetterRetryService : BackgroundService
                         "DeadLetter {Id}: WebhookTarget {TargetId} inactive or missing. Abandoning.",
                         entry.Id, entry.WebhookTargetId);
                     entry.Status = DeadLetterStatus.Abandoned;
+                    entry.LockedUntilUtc = null;
+                    entry.LockedByInstanceId = null;
+                    continue;
+                }
+
+                // S1: SSRF guard. Re-validate the URL on every retry — the
+                // webhook target may have been edited since the dead-letter
+                // entry was created, and the live delivery path's R1 check
+                // does not protect us here.
+                if (!Mail2SNMP.Infrastructure.Security.SsrfGuard.IsSafeOutboundUrl(entry.WebhookTarget.Url, _allowPrivateTargets, out var ssrfReason))
+                {
+                    _logger.LogWarning(
+                        "DeadLetter {Id}: webhook target {Name} ({Url}) blocked by SSRF guard: {Reason}. Abandoning.",
+                        entry.Id, entry.WebhookTarget.Name, entry.WebhookTarget.Url, ssrfReason);
+                    entry.Status = DeadLetterStatus.Abandoned;
+                    entry.LastError = $"SSRF guard rejected target URL: {ssrfReason}";
                     entry.LockedUntilUtc = null;
                     entry.LockedByInstanceId = null;
                     continue;
