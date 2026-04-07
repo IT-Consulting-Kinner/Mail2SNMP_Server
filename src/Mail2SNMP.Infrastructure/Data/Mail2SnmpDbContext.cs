@@ -111,7 +111,7 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(200).IsRequired();
             e.Property(x => x.Host).HasMaxLength(500).IsRequired();
-            e.Property(x => x.CommunityString).HasMaxLength(500);
+            e.Property(x => x.EncryptedCommunityString).HasMaxLength(2000);
             e.Property(x => x.SecurityName).HasMaxLength(200);
             e.Property(x => x.EncryptedAuthPassword).HasMaxLength(2000);
             e.Property(x => x.EncryptedPrivPassword).HasMaxLength(2000);

@@ -88,6 +88,16 @@ try
     var oidcSettings = builder.Configuration.GetSection("Oidc").Get<OidcSettings>();
     if (oidcSettings is not null && !string.IsNullOrEmpty(oidcSettings.Authority) && !string.IsNullOrEmpty(oidcSettings.ClientId))
     {
+        // R3: refuse to start with an OIDC Authority that is not HTTPS. Plain
+        // HTTP would expose the entire OAuth flow (auth code, ID token) to a
+        // network observer; the OIDC spec mandates TLS for non-loopback URLs.
+        if (!Uri.TryCreate(oidcSettings.Authority, UriKind.Absolute, out var oidcAuthorityUri) ||
+            oidcAuthorityUri.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new InvalidOperationException(
+                $"Oidc:Authority must be an https:// URL. Got '{oidcSettings.Authority}'.");
+        }
+
         builder.Services.AddAuthentication()
             .AddOpenIdConnect("Oidc", options =>
             {
@@ -368,6 +378,9 @@ try
     app.Use(async (ctx, next) =>
     {
         var h = ctx.Response.Headers;
+        // R-INFO: strip the Server header so we don't advertise the ASP.NET Core
+        // version number to attackers running banner-grabbing tools.
+        h.Remove("Server");
         h["X-Content-Type-Options"] = "nosniff";
         h["X-Frame-Options"] = "DENY";
         h["Referrer-Policy"] = "no-referrer";
@@ -388,9 +401,15 @@ try
         await next();
     });
 
-    // Swagger (available in all environments for API consumers)
-    app.UseSwagger();
-    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Mail2SNMP API v1"));
+    // R-INFO: Swagger UI is only exposed in Development. In production the API
+    // schema would otherwise be reachable via /swagger by anyone who can hit
+    // the host (the endpoints themselves still require auth, but the schema
+    // discovery makes attack reconnaissance trivial).
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseSwagger();
+        app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Mail2SNMP API v1"));
+    }
 
     app.UseHttpsRedirection();
     app.UseStaticFiles();

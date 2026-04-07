@@ -329,15 +329,17 @@ public class ServiceTests : IDisposable
     [Fact]
     public void SnmpTarget_Validation_V2c_RequiresCommunityString()
     {
-        var target = new SnmpTarget { Name = "T", Host = "h", Port = 162, Version = SnmpVersion.V2c, CommunityString = null };
+        // R2: the entity-level rule requires the EncryptedCommunityString slot
+        // (which holds plaintext on the way in to CreateAsync, then ciphertext at rest).
+        var target = new SnmpTarget { Name = "T", Host = "h", Port = 162, Version = SnmpVersion.V2c, EncryptedCommunityString = null };
         var results = ValidateModel(target);
-        Assert.Contains(results, r => r.MemberNames.Contains("CommunityString"));
+        Assert.Contains(results, r => r.MemberNames.Contains("EncryptedCommunityString"));
     }
 
     [Fact]
     public void SnmpTarget_Validation_V2c_WithCommunity_Valid()
     {
-        var target = new SnmpTarget { Name = "T", Host = "h", Port = 162, Version = SnmpVersion.V2c, CommunityString = "public" };
+        var target = new SnmpTarget { Name = "T", Host = "h", Port = 162, Version = SnmpVersion.V2c, EncryptedCommunityString = "public" };
         var results = ValidateModel(target);
         Assert.Empty(results);
     }

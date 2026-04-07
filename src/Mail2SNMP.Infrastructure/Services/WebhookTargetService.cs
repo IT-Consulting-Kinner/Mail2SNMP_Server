@@ -5,6 +5,7 @@ using Mail2SNMP.Core.Interfaces;
 using Mail2SNMP.Infrastructure.Data;
 using Mail2SNMP.Models.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Mail2SNMP.Infrastructure.Services;
@@ -18,14 +19,22 @@ public class WebhookTargetService : IWebhookTargetService
     private readonly IAuditService _audit;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ICredentialEncryptor _encryptor;
+    private readonly bool _allowPrivateTargets;
     private readonly ILogger<WebhookTargetService> _logger;
 
-    public WebhookTargetService(Mail2SnmpDbContext db, IAuditService audit, IHttpClientFactory httpClientFactory, ICredentialEncryptor encryptor, ILogger<WebhookTargetService> logger)
+    public WebhookTargetService(
+        Mail2SnmpDbContext db,
+        IAuditService audit,
+        IHttpClientFactory httpClientFactory,
+        ICredentialEncryptor encryptor,
+        Microsoft.Extensions.Configuration.IConfiguration configuration,
+        ILogger<WebhookTargetService> logger)
     {
         _db = db;
         _audit = audit;
         _httpClientFactory = httpClientFactory;
         _encryptor = encryptor;
+        _allowPrivateTargets = configuration.GetValue<bool>("Security:AllowPrivateWebhookTargets");
         _logger = logger;
     }
 
@@ -101,6 +110,17 @@ public class WebhookTargetService : IWebhookTargetService
     {
         var target = await GetByIdAsync(id, ct)
             ?? throw new KeyNotFoundException($"Webhook target {id} not found.");
+
+        // R1: SSRF guard. The Test button must not be a backdoor for hitting
+        // internal services. Same policy as the actual delivery path.
+        if (!Mail2SNMP.Infrastructure.Security.SsrfGuard.IsSafeOutboundUrl(target.Url, _allowPrivateTargets, out var reason))
+        {
+            _logger.LogWarning(
+                "Webhook test for target {Name} ({Url}) blocked by SSRF guard: {Reason}",
+                target.Name, target.Url, reason);
+            throw new InvalidOperationException(
+                $"Webhook target '{target.Name}' was blocked by the SSRF guard: {reason}");
+        }
 
         _logger.LogInformation("Testing webhook for target {Name} ({Url})", target.Name, target.Url);
 

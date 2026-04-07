@@ -23,9 +23,14 @@ public class SnmpTarget : IValidatableObject
 
     public SnmpVersion Version { get; set; } = SnmpVersion.V2c;
 
-    // v1/v2c — RFC 3414 limits community strings to 32 octets in practice; we cap at 255 for safety.
-    [StringLength(255, ErrorMessage = "Community string must not exceed 255 characters.")]
-    public string? CommunityString { get; set; }
+    // R2: Encrypted community string (v1/v2c). Stored as AES-GCM ciphertext via the
+    // J1 EnsureEncrypted funnel in SnmpTargetService.Create/UpdateAsync, exactly like
+    // the v3 auth/priv passwords below. The Razor edit form binds to a separate
+    // plaintext property and only assigns when the user supplied a new value, so the
+    // ciphertext at rest is never round-tripped through the UI. The cap is generous
+    // (1024 chars) because AES-GCM ciphertext expands the input.
+    [StringLength(1024, ErrorMessage = "Encrypted community string must not exceed 1024 characters.")]
+    public string? EncryptedCommunityString { get; set; }
 
     // v3
     [StringLength(200, ErrorMessage = "Security name must not exceed 200 characters.")]
@@ -58,8 +63,8 @@ public class SnmpTarget : IValidatableObject
     {
         if (Version == SnmpVersion.V1 || Version == SnmpVersion.V2c)
         {
-            if (string.IsNullOrWhiteSpace(CommunityString))
-                yield return new ValidationResult("Community string is required for SNMP v1/v2c.", new[] { nameof(CommunityString) });
+            if (string.IsNullOrWhiteSpace(EncryptedCommunityString))
+                yield return new ValidationResult("Community string is required for SNMP v1/v2c.", new[] { nameof(EncryptedCommunityString) });
         }
         else if (Version == SnmpVersion.V3)
         {

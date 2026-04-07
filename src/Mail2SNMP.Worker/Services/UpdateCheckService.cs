@@ -99,6 +99,25 @@ public class UpdateCheckService : BackgroundService
     private async Task CheckOnceAsync(CancellationToken ct)
     {
         var current = GetCurrentVersion();
+
+        // R4: enforce HTTPS for the update feed. A MITM on a plain-HTTP feed
+        // could inject a fake "version available" trap and noise up the
+        // operator's monitoring. The default URL is HTTPS; this guard prevents
+        // operators from accidentally weakening it.
+        if (!Uri.TryCreate(_settings.Url, UriKind.Absolute, out var feedUri) || feedUri.Scheme != Uri.UriSchemeHttps)
+        {
+            _logger.LogWarning("Update feed URL must be https:// — got '{Url}'. Skipping check.", _settings.Url);
+            return;
+        }
+
+        // R1: SSRF guard. The feed URL is operator-configurable and must not be
+        // pointed at internal services or the cloud metadata endpoint.
+        if (!Mail2SNMP.Infrastructure.Security.SsrfGuard.IsSafeOutboundUrl(_settings.Url, allowPrivate: false, out var ssrfReason))
+        {
+            _logger.LogWarning("Update feed URL blocked by SSRF guard: {Reason}", ssrfReason);
+            return;
+        }
+
         UpdateFeedResponse? feed;
         try
         {

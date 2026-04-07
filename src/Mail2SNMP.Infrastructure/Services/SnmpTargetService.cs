@@ -48,11 +48,13 @@ public class SnmpTargetService : ISnmpTargetService
     /// </summary>
     public async Task<SnmpTarget> CreateAsync(SnmpTarget target, CancellationToken ct = default)
     {
-        // J1: Encrypt v3 auth/priv passwords before persisting. EnsureEncrypted is the
-        // single funnel for credential storage and is idempotent — callers that already
-        // pass ciphertext are passed through unchanged.
+        // J1 + R2: Encrypt v3 auth/priv passwords AND v1/v2c community string
+        // before persisting. EnsureEncrypted is the single funnel for credential
+        // storage and is idempotent — callers that already pass ciphertext are
+        // passed through unchanged.
         target.EncryptedAuthPassword = _encryptor.EnsureEncrypted(target.EncryptedAuthPassword);
         target.EncryptedPrivPassword = _encryptor.EnsureEncrypted(target.EncryptedPrivPassword);
+        target.EncryptedCommunityString = _encryptor.EnsureEncrypted(target.EncryptedCommunityString);
 
         _db.SnmpTargets.Add(target);
         await _db.SaveChangesAsync(ct);
@@ -65,9 +67,10 @@ public class SnmpTargetService : ISnmpTargetService
     /// </summary>
     public async Task<SnmpTarget> UpdateAsync(SnmpTarget target, CancellationToken ct = default)
     {
-        // J1: Same idempotent encryption funnel as CreateAsync.
+        // J1 + R2: Same idempotent encryption funnel as CreateAsync.
         target.EncryptedAuthPassword = _encryptor.EnsureEncrypted(target.EncryptedAuthPassword);
         target.EncryptedPrivPassword = _encryptor.EnsureEncrypted(target.EncryptedPrivPassword);
+        target.EncryptedCommunityString = _encryptor.EnsureEncrypted(target.EncryptedCommunityString);
 
         var existing = _db.ChangeTracker.Entries<SnmpTarget>()
             .FirstOrDefault(e => e.Entity.Id == target.Id);
@@ -123,16 +126,23 @@ public class SnmpTargetService : ISnmpTargetService
         {
             var endpoint = new IPEndPoint(IPAddress.Parse(target.Host), target.Port);
 
+            // R2: decrypt the community string at the moment of use. Failure to
+            // decrypt is fail-fast (master key mismatch) so we never silently
+            // send a trap with the literal ciphertext as a community string.
+            string community = "public";
+            if (!string.IsNullOrEmpty(target.EncryptedCommunityString))
+                community = DecryptCredential(target.EncryptedCommunityString);
+
             if (target.Version == SnmpVersion.V1)
             {
                 Messenger.SendTrapV1(endpoint, IPAddress.Loopback,
-                    new OctetString(target.CommunityString ?? "public"),
+                    new OctetString(community),
                     testOid, GenericCode.EnterpriseSpecific, 0, 0, varbinds);
             }
             else if (target.Version == SnmpVersion.V2c)
             {
                 Messenger.SendTrapV2(0, VersionCode.V2, endpoint,
-                    new OctetString(target.CommunityString ?? "public"),
+                    new OctetString(community),
                     testOid, 0, varbinds);
             }
             else

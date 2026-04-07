@@ -5,10 +5,12 @@ using System.Text.Json;
 using Mail2SNMP.Core.Interfaces;
 using Mail2SNMP.Core.Services;
 using Mail2SNMP.Infrastructure.Data;
+using Mail2SNMP.Infrastructure.Security;
 using Mail2SNMP.Models.DTOs;
 using Mail2SNMP.Models.Entities;
 using Mail2SNMP.Models.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Mail2SNMP.Infrastructure.Channels;
@@ -28,6 +30,7 @@ public class WebhookNotificationChannel : INotificationChannel
     private readonly FloodProtectionService _floodProtection;
     private readonly NotificationDedupCache _dedupCache;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly bool _allowPrivateTargets;
     private readonly ILogger<WebhookNotificationChannel> _logger;
 
     public string ChannelName => "webhook";
@@ -41,6 +44,7 @@ public class WebhookNotificationChannel : INotificationChannel
         FloodProtectionService floodProtection,
         NotificationDedupCache dedupCache,
         IHttpClientFactory httpClientFactory,
+        IConfiguration configuration,
         ILogger<WebhookNotificationChannel> logger)
     {
         _db = db;
@@ -48,6 +52,10 @@ public class WebhookNotificationChannel : INotificationChannel
         _license = license;
         _deadLetterService = deadLetterService;
         _templateEngine = templateEngine;
+        // R1: opt-in flag for operators who legitimately need internal webhook
+        // targets (e.g. on-prem Splunk on 10.x). Defaults to false so cloud
+        // deployments are safe by default.
+        _allowPrivateTargets = configuration.GetValue<bool>("Security:AllowPrivateWebhookTargets");
         _floodProtection = floodProtection;
         _dedupCache = dedupCache;
         // T5: use the named "WebhookSend" client registered in DI instead of mutating
@@ -167,6 +175,19 @@ public class WebhookNotificationChannel : INotificationChannel
                     "Invalid headers JSON for webhook target {Name}. The default headers will be used.",
                     target.Name);
             }
+        }
+
+        // R1: SSRF guard. Refuse to POST to loopback / link-local / RFC1918 /
+        // cloud metadata addresses unless the operator has explicitly opted in.
+        // The check resolves the host via DNS so an attacker cannot tunnel a
+        // public name into 169.254.169.254.
+        if (!SsrfGuard.IsSafeOutboundUrl(target.Url, _allowPrivateTargets, out var reason))
+        {
+            _logger.LogWarning(
+                "Webhook target {Name} ({Url}) blocked by SSRF guard: {Reason}",
+                target.Name, target.Url, reason);
+            throw new InvalidOperationException(
+                $"Webhook target '{target.Name}' was blocked by the SSRF guard: {reason}");
         }
 
         // N2: dispose the HttpResponseMessage explicitly so the underlying

@@ -91,6 +91,16 @@ try
     var oidcSettings = builder.Configuration.GetSection("Oidc").Get<OidcSettings>();
     if (oidcSettings is not null && !string.IsNullOrEmpty(oidcSettings.Authority) && !string.IsNullOrEmpty(oidcSettings.ClientId))
     {
+        // R3: same HTTPS-only check as in the Web project. Refuse to start
+        // with a plain-HTTP OIDC authority — the entire OAuth flow would be
+        // observable on the wire.
+        if (!Uri.TryCreate(oidcSettings.Authority, UriKind.Absolute, out var oidcAuthorityUri) ||
+            oidcAuthorityUri.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new InvalidOperationException(
+                $"Oidc:Authority must be an https:// URL. Got '{oidcSettings.Authority}'.");
+        }
+
         builder.Services.AddAuthentication()
             .AddOpenIdConnect("Oidc", options =>
             {

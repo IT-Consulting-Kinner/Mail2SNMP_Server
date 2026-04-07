@@ -29,7 +29,12 @@ public class SnmpTargetResponse
     public string Host { get; set; } = string.Empty;
     public int Port { get; set; }
     public string Version { get; set; } = string.Empty;
-    public string? CommunityString { get; set; }
+    /// <summary>
+    /// R2: indicates whether a v1/v2c community string is configured. The
+    /// actual value is encrypted at rest and never returned through the API
+    /// — same policy as <see cref="HasAuthPassword"/> and <see cref="HasPrivPassword"/>.
+    /// </summary>
+    public bool HasCommunityString { get; set; }
     public string? SecurityName { get; set; }
     public string AuthProtocol { get; set; } = string.Empty;
     public bool HasAuthPassword { get; set; }
@@ -149,7 +154,7 @@ public static class ResponseDtoMapper
             Host = target.Host,
             Port = target.Port,
             Version = target.Version.ToString(),
-            CommunityString = target.CommunityString,
+            HasCommunityString = !string.IsNullOrEmpty(target.EncryptedCommunityString),
             SecurityName = target.SecurityName,
             AuthProtocol = target.AuthProtocol.ToString(),
             HasAuthPassword = !string.IsNullOrEmpty(target.EncryptedAuthPassword),

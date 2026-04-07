@@ -93,7 +93,7 @@ else
                         }
                         else
                         {
-                            <span>@(string.IsNullOrEmpty(t.CommunityString) ? "N/A" : "***")</span>
+                            <span>@(string.IsNullOrEmpty(t.EncryptedCommunityString) ? "N/A" : "***")</span>
                         }
                     </td>
                     <td><span class="badge @(t.IsActive ? "bg-success" : "bg-secondary")">@(t.IsActive ? "Active" : "Inactive")</span></td>
@@ -152,8 +152,15 @@ else
                         {
                             <div class="mb-3">
                                 <label class="form-label">Community String</label>
-                                <InputText class="form-control" @bind-Value="_form.CommunityString" />
+                                @* R2: rendered as a password field so it doesn't shoulder-surf,
+                                   and never pre-populated on edit. The Save handler only writes
+                                   to EncryptedCommunityString when the user typed something. *@
+                                <InputText type="password" class="form-control" @bind-Value="_form.CommunityString" />
                                 <ValidationMessage For="@(() => _form.CommunityString)" class="text-danger small" />
+                                @if (_editing != null)
+                                {
+                                    <small class="text-muted">Leave blank to keep the existing community string.</small>
+                                }
                             </div>
                         }
 
@@ -174,6 +181,13 @@ else
                                         }
                                     </InputSelect>
                                     <ValidationMessage For="@(() => _form.AuthProtocol)" class="text-danger small" />
+                                    @* R-INFO: warn against MD5 and SHA1 — both are cryptographically
+                                       broken and only present for compatibility with very old SNMPv3
+                                       receivers. SHA-256 / SHA-512 are the recommended choices. *@
+                                    @if (_form.AuthProtocol == AuthProtocol.MD5 || _form.AuthProtocol == AuthProtocol.SHA)
+                                    {
+                                        <small class="text-warning"><i class="bi bi-exclamation-triangle"></i> @_form.AuthProtocol is broken and deprecated — prefer SHA-256 or SHA-512 unless your receiver requires it.</small>
+                                    }
                                 </div>
                                 <div class="col">
                                     <label class="form-label">Auth Password</label>
@@ -195,6 +209,11 @@ else
                                         }
                                     </InputSelect>
                                     <ValidationMessage For="@(() => _form.PrivProtocol)" class="text-danger small" />
+                                    @* R-INFO: DES is broken; prefer AES-128 or AES-256. *@
+                                    @if (_form.PrivProtocol == PrivProtocol.DES)
+                                    {
+                                        <small class="text-warning"><i class="bi bi-exclamation-triangle"></i> DES is broken and deprecated — prefer AES-128 or AES-256.</small>
+                                    }
                                 </div>
                                 <div class="col">
                                     <label class="form-label">Privacy Password</label>
@@ -331,10 +350,13 @@ else
     private void ShowEditForm(SnmpTarget t)
     {
         _editing = t;
+        // R2: never round-trip the encrypted community string through the form.
+        // Leaving CommunityString null + the "leave blank to keep" hint follows
+        // the same pattern as v3 Auth/Priv passwords (J1/I3).
         _form = new SnmpTargetForm
         {
             Name = t.Name, Host = t.Host, Port = t.Port, Version = t.Version,
-            CommunityString = t.CommunityString, SecurityName = t.SecurityName,
+            CommunityString = null, SecurityName = t.SecurityName,
             AuthProtocol = t.AuthProtocol, PrivProtocol = t.PrivProtocol,
             EngineId = t.EngineId, EnterpriseTrapOid = t.EnterpriseTrapOid,
             MaxTrapsPerMinute = t.MaxTrapsPerMinute, SendKeepAlive = t.SendKeepAlive, IsActive = t.IsActive,
@@ -361,13 +383,16 @@ else
             if (_editing != null)
             {
                 _editing.Name = _form.Name; _editing.Host = _form.Host; _editing.Port = _form.Port;
-                _editing.Version = _form.Version; _editing.CommunityString = _form.CommunityString;
+                _editing.Version = _form.Version;
                 _editing.SecurityName = _form.SecurityName; _editing.AuthProtocol = _form.AuthProtocol;
                 _editing.PrivProtocol = _form.PrivProtocol; _editing.EngineId = _form.EngineId;
                 _editing.EnterpriseTrapOid = _form.EnterpriseTrapOid;
                 _editing.MaxTrapsPerMinute = _form.MaxTrapsPerMinute;
                 _editing.SendKeepAlive = _form.SendKeepAlive;
                 _editing.IsActive = _form.IsActive;
+                // R2 + I3: only update credential fields if the user typed a fresh value;
+                // otherwise the existing ciphertext is preserved (J1 funnel is idempotent).
+                if (!string.IsNullOrEmpty(_form.CommunityString)) _editing.EncryptedCommunityString = _form.CommunityString;
                 if (!string.IsNullOrEmpty(_form.AuthPassword)) _editing.EncryptedAuthPassword = _form.AuthPassword;
                 if (!string.IsNullOrEmpty(_form.PrivPassword)) _editing.EncryptedPrivPassword = _form.PrivPassword;
                 await SnmpTargetService.UpdateAsync(_editing);
@@ -378,7 +403,8 @@ else
                 var target = new SnmpTarget
                 {
                     Name = _form.Name, Host = _form.Host, Port = _form.Port, Version = _form.Version,
-                    CommunityString = _form.CommunityString, SecurityName = _form.SecurityName,
+                    EncryptedCommunityString = _form.CommunityString ?? string.Empty,
+                    SecurityName = _form.SecurityName,
                     AuthProtocol = _form.AuthProtocol, EncryptedAuthPassword = _form.AuthPassword ?? string.Empty,
                     PrivProtocol = _form.PrivProtocol, EncryptedPrivPassword = _form.PrivPassword ?? string.Empty,
                     EngineId = _form.EngineId, EnterpriseTrapOid = _form.EnterpriseTrapOid,
@@ -461,7 +487,10 @@ else
         {
             if (Version == SnmpVersion.V1 || Version == SnmpVersion.V2c)
             {
-                if (string.IsNullOrWhiteSpace(CommunityString))
+                // R2: on edit the community string is empty by design (we never
+                // round-trip ciphertext through the form), so the requirement
+                // only applies on create.
+                if (!IsEditing && string.IsNullOrWhiteSpace(CommunityString))
                     yield return new ValidationResult("Community string is required for SNMP v1/v2c.", new[] { nameof(CommunityString) });
             }
             else if (Version == SnmpVersion.V3)

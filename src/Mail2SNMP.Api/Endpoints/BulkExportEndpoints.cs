@@ -40,8 +40,11 @@ public static class BulkExportEndpoints
                 }),
                 snmpTargets = (await st.GetAllAsync(ct)).Select(t => new
                 {
-                    t.Name, t.Host, t.Port, t.Version, t.CommunityString, t.IsActive
-                    // EncryptedAuthPassword/EncryptedPrivPassword intentionally omitted
+                    t.Name, t.Host, t.Port, t.Version, t.IsActive
+                    // R2 + J1: EncryptedCommunityString, EncryptedAuthPassword and
+                    // EncryptedPrivPassword are intentionally omitted from the export
+                    // bundle. Operators must re-enter the credentials in the new
+                    // environment via the regular UI flows.
                 }),
                 webhookTargets = (await wt.GetAllAsync(ct)).Select(t => new
                 {

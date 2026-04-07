@@ -302,16 +302,33 @@ public class SnmpNotificationChannel : INotificationChannel
         }
         var endpoint = new IPEndPoint(ipAddress, target.Port);
 
+        // R2: decrypt the community string at the moment of use. The funnel
+        // in SnmpTargetService stored AES-GCM ciphertext; passing the literal
+        // ciphertext as a community string would silently fail every trap on
+        // the receiving side, so a master-key mismatch must surface loudly.
+        string community = "public";
+        if (!string.IsNullOrEmpty(target.EncryptedCommunityString))
+        {
+            try { community = _encryptor.Decrypt(target.EncryptedCommunityString); }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Failed to decrypt community string for SNMP target {Name}. Master key mismatch — trap dropped.",
+                    target.Name);
+                return Task.CompletedTask;
+            }
+        }
+
         if (target.Version == SnmpVersion.V1)
         {
             Messenger.SendTrapV1(endpoint, IPAddress.Loopback,
-                new OctetString(target.CommunityString ?? "public"),
+                new OctetString(community),
                 trapOid, GenericCode.EnterpriseSpecific, 0, 0, varbinds);
         }
         else if (target.Version == SnmpVersion.V2c)
         {
             Messenger.SendTrapV2(0, VersionCode.V2, endpoint,
-                new OctetString(target.CommunityString ?? "public"),
+                new OctetString(community),
                 trapOid, 0, varbinds);
         }
         else
