@@ -340,15 +340,38 @@ public class MailPollingService : BackgroundService
                     var body = message.TextBody ?? message.HtmlBody ?? string.Empty;
                     var messageId = message.MessageId;
 
-                    // Idempotency: skip emails already processed (prevents duplicates across cluster instances)
+                    // N3: Atomic claim. Previously we did SELECT-then-process-then-INSERT,
+                    // which left a TOCTOU window where two nodes could both pass the SELECT
+                    // and run the entire processing pipeline before the UNIQUE constraint
+                    // tripped on the second INSERT. EventDedup caught the duplicate event
+                    // but rule evaluation, IMAP traffic and notification queueing all ran
+                    // twice. Now we INSERT a placeholder ProcessedMail row FIRST and only
+                    // proceed if the insert succeeded — the loser of the race catches the
+                    // UNIQUE-constraint exception and skips the email entirely.
                     if (!string.IsNullOrEmpty(messageId))
                     {
-                        var alreadyProcessed = await dbContext.ProcessedMails
-                            .AnyAsync(p => p.MessageId == messageId && p.MailboxId == mailbox.Id, ct);
-                        if (alreadyProcessed)
+                        dbContext.ProcessedMails.Add(new ProcessedMail
                         {
+                            MessageId = messageId,
+                            MailboxId = mailbox.Id,
+                            From = from,
+                            Subject = subject,
+                            ReceivedUtc = message.Date.UtcDateTime,
+                            ProcessedUtc = DateTime.UtcNow
+                        });
+                        try
+                        {
+                            await dbContext.SaveChangesAsync(ct);
+                        }
+                        catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true)
+                        {
+                            // Another instance already claimed this email — skip without processing.
+                            // Detach the failed-insert entry so the next iteration starts clean.
+                            foreach (var entry in dbContext.ChangeTracker.Entries<ProcessedMail>().ToList())
+                                entry.State = EntityState.Detached;
+
                             _logger.LogDebug(
-                                "Email already processed (MessageId={MessageId}, Mailbox={Name}). Skipping.",
+                                "Email already claimed by another instance (MessageId={MessageId}, Mailbox={Name}). Skipping.",
                                 messageId, mailbox.Name);
                             await folder.AddFlagsAsync(uid, MessageFlags.Seen, true, ct);
                             continue;
@@ -410,31 +433,8 @@ public class MailPollingService : BackgroundService
                         }
                     }
 
-                    // Record this email as processed (idempotency across cluster instances)
-                    if (!string.IsNullOrEmpty(messageId))
-                    {
-                        dbContext.ProcessedMails.Add(new ProcessedMail
-                        {
-                            MessageId = messageId,
-                            MailboxId = mailbox.Id,
-                            From = from,
-                            Subject = subject,
-                            ReceivedUtc = message.Date.UtcDateTime,
-                            ProcessedUtc = DateTime.UtcNow
-                        });
-
-                        try
-                        {
-                            await dbContext.SaveChangesAsync(ct);
-                        }
-                        catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true)
-                        {
-                            // Another instance already recorded this message — safe to ignore
-                            _logger.LogDebug(
-                                "ProcessedMail duplicate insert (MessageId={MessageId}, Mailbox={Name}). Another instance processed it.",
-                                messageId, mailbox.Name);
-                        }
-                    }
+                    // N3: ProcessedMails was already inserted as the atomic claim before
+                    // processing started. Nothing to do here on the success path.
 
                     // Mark message as seen after processing
                     await folder.AddFlagsAsync(uid, MessageFlags.Seen, true, ct);

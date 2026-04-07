@@ -51,11 +51,32 @@ public class AutoAcknowledgeService : BackgroundService
         try { await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken); }
         catch (OperationCanceledException) { return; }
 
+        // N7: cluster-wide instance ID for primary election. Without this guard
+        // every node would scan the same events every minute and the state-machine
+        // race would emit one InvalidOperationException warning per node per ack
+        // for the losers — log spam plus pointless work. Now only the primary
+        // executes the scan; the others sleep.
+        var instanceId = $"{Environment.MachineName}-{Environment.ProcessId}";
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await ScanAndAcknowledgeAsync(stoppingToken);
+                bool isPrimary;
+                using (var scope = _scopeFactory.CreateScope())
+                {
+                    var leaseService = scope.ServiceProvider.GetRequiredService<IWorkerLeaseService>();
+                    isPrimary = await PrimaryElection.IsPrimaryAsync(leaseService, instanceId, stoppingToken);
+                }
+
+                if (isPrimary)
+                {
+                    await ScanAndAcknowledgeAsync(stoppingToken);
+                }
+                else
+                {
+                    _logger.LogDebug("AutoAcknowledgeService: not primary, skipping scan");
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

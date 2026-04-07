@@ -17,10 +17,20 @@ public interface IWorkerLeaseService
 
     /// <summary>
     /// Renews an existing lease for the specified worker instance, extending its expiration.
+    /// Returns <c>false</c> when the lease is no longer present in the database — typically
+    /// because another node already expired it (e.g. after a network partition). Callers
+    /// MUST treat <c>false</c> as a fatal cluster-state error and shut the instance down,
+    /// otherwise it would continue running as a "ghost worker" outside the cluster's view.
     /// </summary>
-    /// <param name="instanceId">The unique identifier of the worker instance whose lease should be renewed.</param>
-    /// <param name="ct">Optional cancellation token.</param>
-    Task RenewLeaseAsync(string instanceId, CancellationToken ct = default);
+    Task<bool> RenewLeaseAsync(string instanceId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the lease record for the given instance, or <c>null</c> if none exists.
+    /// Used by HeartbeatService (in the Mail2SNMP.Worker project) to verify a freshly
+    /// acquired lease was actually persisted — defends against a connection drop
+    /// after INSERT but before the server's response was read.
+    /// </summary>
+    Task<WorkerLease?> GetByInstanceIdAsync(string instanceId, CancellationToken ct = default);
 
     /// <summary>
     /// Releases the lease held by the specified worker instance.

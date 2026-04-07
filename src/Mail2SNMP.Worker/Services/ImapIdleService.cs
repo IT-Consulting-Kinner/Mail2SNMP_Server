@@ -56,16 +56,60 @@ public class ImapIdleService : BackgroundService
 
         _logger.LogInformation("ImapIdleService starting — push-based mail ingestion");
 
-        // Wait for the rest of the host to come up
+        // Wait for the rest of the host to come up (including HeartbeatService
+        // acquiring its lease, so PrimaryElection works on the very first iteration).
         try { await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken); }
         catch (OperationCanceledException) { return; }
 
-        // Per-mailbox loops, restarted on error.
+        var instanceId = $"{Environment.MachineName}-{Environment.ProcessId}";
+
+        // Per-mailbox loops, restarted on error. Only started while we are the
+        // elected cluster primary — otherwise N+1 instances would each open their
+        // own IDLE connection per mailbox, multiplying IMAP load and triggering
+        // duplicate processing through the ProcessedMails dedup path (N6).
         var loops = new Dictionary<int, Task>();
+        var loopCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        var weAreLeading = false;
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
+                bool isPrimary;
+                using (var scope = _scopeFactory.CreateScope())
+                {
+                    var leaseService = scope.ServiceProvider.GetRequiredService<IWorkerLeaseService>();
+                    isPrimary = await PrimaryElection.IsPrimaryAsync(leaseService, instanceId, stoppingToken);
+                }
+
+                if (!isPrimary)
+                {
+                    if (weAreLeading)
+                    {
+                        // We just lost leadership — cancel all per-mailbox IDLE loops
+                        // so the new primary can take over without us holding stale
+                        // connections to the IMAP server.
+                        _logger.LogInformation("ImapIdleService: lost cluster leadership, releasing IDLE connections");
+                        loopCts.Cancel();
+                        try { await Task.WhenAll(loops.Values); }
+                        catch { /* loops cancelled — expected */ }
+                        loops.Clear();
+                        loopCts.Dispose();
+                        loopCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                        weAreLeading = false;
+                    }
+
+                    try { await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken); }
+                    catch (OperationCanceledException) { break; }
+                    continue;
+                }
+
+                if (!weAreLeading)
+                {
+                    _logger.LogInformation("ImapIdleService: this instance is the cluster primary, starting IDLE loops");
+                    weAreLeading = true;
+                }
+
                 List<int> activeMailboxIds;
                 using (var scope = _scopeFactory.CreateScope())
                 {
@@ -81,7 +125,8 @@ public class ImapIdleService : BackgroundService
                 {
                     if (!loops.ContainsKey(id) || loops[id].IsCompleted)
                     {
-                        loops[id] = Task.Run(() => RunIdleLoopAsync(id, stoppingToken), stoppingToken);
+                        var token = loopCts.Token;
+                        loops[id] = Task.Run(() => RunIdleLoopAsync(id, token), token);
                     }
                 }
             }
@@ -94,6 +139,8 @@ public class ImapIdleService : BackgroundService
             catch (OperationCanceledException) { break; }
         }
 
+        loopCts.Cancel();
+        loopCts.Dispose();
         _logger.LogInformation("ImapIdleService stopped");
     }
 

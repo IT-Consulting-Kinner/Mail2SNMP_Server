@@ -58,9 +58,16 @@ public static class WorkerDependencyInjection
 
                 q.UseDefaultThreadPool(tp => tp.MaxConcurrency = 10);
 
-                // Enable clustering so multiple worker instances share the same job store
+                // N9: build a deterministic-but-unique instance id instead of relying
+                // on Quartz's "AUTO" generator. AUTO uses MachineName + timestamp +
+                // counter, which can collide in Kubernetes when a pod is recycled
+                // and a new pod inherits the same hostname. We combine MachineName
+                // with the current process id AND a fresh GUID prefix so duplicates
+                // across pods are statistically impossible while still being readable
+                // in the QRTZ_SCHEDULER_STATE table for diagnostics.
                 q.SetProperty("quartz.jobStore.clustered", "true");
-                q.SetProperty("quartz.scheduler.instanceId", "AUTO");
+                var quartzInstanceId = $"{Environment.MachineName}-{Environment.ProcessId}-{Guid.NewGuid().ToString("N")[..8]}";
+                q.SetProperty("quartz.scheduler.instanceId", quartzInstanceId);
             }
         });
         services.AddQuartzHostedService(options =>

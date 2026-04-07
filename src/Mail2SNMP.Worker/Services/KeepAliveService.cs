@@ -71,19 +71,32 @@ public class KeepAliveService : BackgroundService
                 // it is implicitly the primary.
                 var leaseService = scope.ServiceProvider.GetRequiredService<IWorkerLeaseService>();
                 var leases = await leaseService.GetActiveLeasesAsync(stoppingToken);
-                var isPrimary = true;
-                if (leases.Count > 0)
+
+                // N5: previously this defaulted to isPrimary=true when leases.Count == 0,
+                // which produced 4 duplicate KeepAlive traps if all heartbeats happened
+                // to be transiently expired (DB hang etc.). Now we skip the trap unless
+                // the lease list ACTUALLY contains this instance — that proves we are
+                // a member of the cluster, and the lexicographic comparison then picks
+                // exactly one primary.
+                var self = leases.FirstOrDefault(l =>
+                    string.Equals(l.InstanceId, _instanceId, StringComparison.Ordinal));
+                if (self == null)
                 {
-                    var primary = leases
-                        .OrderBy(l => l.InstanceId, StringComparer.Ordinal)
-                        .First();
-                    isPrimary = string.Equals(primary.InstanceId, _instanceId, StringComparison.Ordinal);
-                    if (!isPrimary)
-                    {
-                        _logger.LogDebug(
-                            "KeepAlive skipped — this instance ({This}) is not the primary ({Primary}).",
-                            _instanceId, primary.InstanceId);
-                    }
+                    _logger.LogDebug(
+                        "KeepAlive skipped — this instance ({This}) is not in the active lease list yet.",
+                        _instanceId);
+                    await Task.Delay(interval, stoppingToken);
+                    continue;
+                }
+                var primary = leases
+                    .OrderBy(l => l.InstanceId, StringComparer.Ordinal)
+                    .First();
+                var isPrimary = string.Equals(primary.InstanceId, _instanceId, StringComparison.Ordinal);
+                if (!isPrimary)
+                {
+                    _logger.LogDebug(
+                        "KeepAlive skipped — this instance ({This}) is not the primary ({Primary}).",
+                        _instanceId, primary.InstanceId);
                 }
 
                 if (isPrimary)

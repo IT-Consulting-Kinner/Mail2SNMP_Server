@@ -14,6 +14,12 @@ namespace Mail2SNMP.Infrastructure.Security;
 /// </summary>
 public class LicenseValidator : ILicenseProvider
 {
+    // N1: All reads/writes of _current go through Volatile.Read / Volatile.Write
+    // (or the Current property + a single ref-assignment in ReloadAsync). LicenseInfo
+    // is treated as immutable after construction, so swapping the reference atomically
+    // is sufficient: a reader either sees the old object in full or the new object in
+    // full, never a torn mixture. No lock needed; lock-free pattern is faster on the
+    // GetLimit hot path which runs on every TryAcquireLeaseAsync.
     private LicenseInfo _current;
     private readonly string? _licenseFilePath;
     private readonly ILogger<LicenseValidator> _logger;
@@ -46,39 +52,50 @@ public class LicenseValidator : ILicenseProvider
     }
 
     /// <summary>
-    /// Gets the currently loaded license information.
+    /// Gets the currently loaded license information. Reads the reference via
+    /// <see cref="Volatile.Read{T}"/> so a concurrent <see cref="ReloadAsync"/>
+    /// cannot return a half-initialised value.
     /// </summary>
-    public LicenseInfo Current => _current;
+    public LicenseInfo Current => Volatile.Read(ref _current);
 
     /// <summary>
     /// Returns <c>true</c> if the current license is an Enterprise edition.
     /// </summary>
-    public bool IsEnterprise() => _current.Edition == LicenseEdition.Enterprise;
+    public bool IsEnterprise() => Current.Edition == LicenseEdition.Enterprise;
 
     /// <summary>
     /// Returns <c>true</c> if the license is Enterprise and includes the specified feature.
     /// </summary>
     public bool HasFeature(string featureName) =>
-        IsEnterprise() && _current.Features.Contains(featureName, StringComparer.OrdinalIgnoreCase);
+        IsEnterprise() && Current.Features.Contains(featureName, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Returns the numeric limit for the given constraint name (e.g. "maxmailboxes", "maxjobs").
+    /// Snapshots <see cref="Current"/> once so all branches read from the same instance
+    /// even if a reload races with this call.
     /// </summary>
-    public int GetLimit(string limitName) => limitName.ToLowerInvariant() switch
+    public int GetLimit(string limitName)
     {
-        "maxmailboxes" => _current.MaxMailboxes,
-        "maxjobs" => _current.MaxJobs,
-        "maxworkerinstances" => _current.MaxWorkerInstances,
-        _ => 0
-    };
+        var snapshot = Current;
+        return limitName.ToLowerInvariant() switch
+        {
+            "maxmailboxes" => snapshot.MaxMailboxes,
+            "maxjobs" => snapshot.MaxJobs,
+            "maxworkerinstances" => snapshot.MaxWorkerInstances,
+            _ => 0
+        };
+    }
 
     /// <summary>
     /// Reloads the license from the file or environment variable, replacing the cached value.
+    /// The reference swap is atomic via <see cref="Volatile.Write{T}"/>; readers see either
+    /// the old or the new <see cref="LicenseInfo"/> instance, never a torn mixture.
     /// </summary>
     public Task ReloadAsync(CancellationToken cancellationToken = default)
     {
-        _current = LoadLicense();
-        _logger.LogInformation("License reloaded. Edition: {Edition}", _current.Edition);
+        var fresh = LoadLicense();
+        Volatile.Write(ref _current, fresh);
+        _logger.LogInformation("License reloaded. Edition: {Edition}", fresh.Edition);
         return Task.CompletedTask;
     }
 

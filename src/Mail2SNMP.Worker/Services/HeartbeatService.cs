@@ -70,7 +70,23 @@ public class HeartbeatService : BackgroundService
                     using var opCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
                     opCts.CancelAfter(TimeSpan.FromSeconds(15));
 
-                    await leaseService.RenewLeaseAsync(_instanceId, opCts.Token);
+                    // N2: ghost-worker detection. If our lease was already expired
+                    // and removed by another node (e.g. after a network partition),
+                    // RenewLeaseAsync now returns false and we shut down — otherwise
+                    // we would silently keep processing without being part of the
+                    // cluster's view, violating the worker count limit and breaking
+                    // primary election in KeepAlive / IDLE / UpdateCheck.
+                    var renewed = await leaseService.RenewLeaseAsync(_instanceId, opCts.Token);
+                    if (!renewed)
+                    {
+                        _logger.LogCritical(
+                            "Lease for instance {InstanceId} no longer exists in the database. " +
+                            "It was probably expired by another node after a partition or stall. " +
+                            "Shutting down to avoid running as a ghost worker.",
+                            _instanceId);
+                        _lifetime.StopApplication();
+                        return;
+                    }
                     _logger.LogDebug("Lease renewed for instance {InstanceId}", _instanceId);
 
                     // Check if the current license still allows this worker instance.
@@ -158,7 +174,24 @@ public class HeartbeatService : BackgroundService
                 var result = await leaseService.TryAcquireLeaseAsync(_instanceId, stoppingToken);
 
                 if (result)
-                    return true;
+                {
+                    // N4: verify the lease row actually exists. Defends against the
+                    // edge case where the INSERT committed but the connection died
+                    // before the OK response was read — without this check the
+                    // instance would think it owns a lease that does not exist.
+                    var lease = await leaseService.GetByInstanceIdAsync(_instanceId, stoppingToken);
+                    if (lease == null)
+                    {
+                        _logger.LogWarning(
+                            "TryAcquireLeaseAsync returned true but no lease row was found for {InstanceId}. " +
+                            "Treating as failure and retrying.",
+                            _instanceId);
+                    }
+                    else
+                    {
+                        return true;
+                    }
+                }
 
                 _logger.LogWarning(
                     "Lease acquisition failed. Retrying in {Delay}s (deadline: {Deadline:HH:mm:ss})",

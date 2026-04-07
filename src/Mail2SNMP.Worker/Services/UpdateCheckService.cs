@@ -48,12 +48,33 @@ public class UpdateCheckService : BackgroundService
         var interval = TimeSpan.FromHours(Math.Max(1, _settings.IntervalHours));
         _logger.LogInformation("UpdateCheckService started (interval: {Hours} h, mode: {Mode})", _settings.IntervalHours, _settings.TrapMode);
 
+        // N10: only the elected primary instance performs the update check.
+        // Without this guard a 4-node cluster would emit 4 identical "update
+        // available" SNMP traps every interval, multiplying the alert volume
+        // operators see. Single-instance deployments are unaffected — the
+        // single node is implicitly the primary.
+        var instanceId = $"{Environment.MachineName}-{Environment.ProcessId}";
+
         // Run immediately at startup, then every interval.
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await CheckOnceAsync(stoppingToken);
+                bool isPrimary;
+                using (var scope = _scopeFactory.CreateScope())
+                {
+                    var leaseService = scope.ServiceProvider.GetRequiredService<IWorkerLeaseService>();
+                    isPrimary = await PrimaryElection.IsPrimaryAsync(leaseService, instanceId, stoppingToken);
+                }
+
+                if (isPrimary)
+                {
+                    await CheckOnceAsync(stoppingToken);
+                }
+                else
+                {
+                    _logger.LogDebug("UpdateCheckService: not primary, skipping check");
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
