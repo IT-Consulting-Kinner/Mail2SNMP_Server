@@ -1,8 +1,92 @@
 # Changelog
 
-All notable changes to Mail2SNMP Server. This project is **pre-release** — there are no published versions yet, only development waves identified by the branch and commit hash. Each wave fixes the findings of a 4-agent comprehensive code review of the previous wave.
+All notable changes to Mail2SNMP Server. Entries are grouped by **release** and by the development **waves** that made up each release. Each wave fixes the findings of a multi-agent comprehensive code review of the previous wave; the wave pattern is documented in the repo's development history.
 
-## Wave L (commit: pending) — 2026-04-07
+## 1.0.0 — 2026-04-07
+
+**First public release** of Mail2SNMP Server — a Windows service that converts incoming email into SNMP traps and webhook notifications based on operator-defined rules, with a Blazor Server management UI and a REST API for automation.
+
+Built up over 22 review waves (A–U) and ~131 fixes. Highlights:
+
+### Core feature set
+
+- **Mail ingestion**: IMAP polling (scheduled) **and** IMAP IDLE (real-time push), configurable per deployment. Multi-instance workers coordinate via a serializable database lease so only the licensed number of pollers run at once.
+- **Rule matching**: Regex / contains / equals on Subject, Body, Sender, or arbitrary headers, with a 2-second regex timeout to prevent ReDoS.
+- **SNMP notifications**: v1, v2c, v3 (AuthPriv with SHA-256 / AES-256 recommended). Four event types per the Mail2SNMP MIB (Enterprise OID 61376): `EventCreated`, `EventConfirmed`, `KeepAlive`, `Update`. Every matched event sends an `EventCreated` trap; on acknowledge a paired `EventConfirmed` trap carries the same event ID so monitoring systems can self-clear the alert. Trap mode Off / Once / UntilUpdated is configurable per target.
+- **Webhook notifications**: HMAC-SHA256 signed payloads (Enterprise), template-based JSON bodies, configurable rate limiting per target, SSRF guard against loopback / link-local / RFC 1918 / cloud metadata endpoints, dead-letter queue with cluster-safe row-locked retry.
+- **Auto-acknowledge**: Events older than `Events:AutoAcknowledgeAfterMinutes` are auto-acknowledged and the paired clear-trap is emitted — for self-healing alarms.
+- **Event deduplication**: Per-rule time-windowed dedup key (subject + sender + MessageID fallback), enforced inside a Serializable transaction so concurrent producers cannot create duplicates.
+- **Maintenance windows**: Fixed windows and recurring cron-driven windows (UTC-evaluated) suppress notifications during planned outages.
+- **Credential encryption**: Mailbox passwords, SNMP v3 auth/priv passwords, SNMP v1/v2c community strings and webhook secrets are all encrypted at rest with AES-256-GCM. The master key is stored in `%ProgramData%\IT-Consulting Kinner\Mail2SNMP_Server\Key\master.key` with restrictive ACLs / `chmod 600`. The `mail2snmp credentials rotate-key` CLI command re-encrypts every credential in a single transaction with Ctrl+C safety.
+
+### Web UI (Blazor Server)
+
+- Management pages for Mailboxes, Rules, Jobs, Schedules, SNMP Targets, Webhook Targets, Events, Audit Log, Maintenance Windows, Dead Letters, Users, API Keys, Settings.
+- Dashboard with 14-day event trend, top-5 jobs, license status, update banner, onboarding checklist.
+- First-time setup wizard with post-create race guard.
+- Dark mode (persisted in localStorage).
+- Themed confirm dialog (not the native browser `confirm()`), debounced search inputs, mobile off-canvas sidebar drawer, `modal-fullscreen-sm-down` on phones.
+- Per-page configurable documentation links via the `Help` section of `appsettings.json` — no recompile required to swap to a customer's own docs host. Supports a `{base}` placeholder so either one CMS root or individual pages can be overridden.
+- Accessibility: skip-to-content link, `role="alert"` on error banners, `aria-pressed` on filter toggles, autofocus on primary modal inputs.
+- CSV export on Events, Dead Letters and Audit Log.
+
+### REST API (ASP.NET Core Minimal API)
+
+- Full CRUD for every entity, bulk export endpoint for backup / migration, test endpoints for mailboxes / SNMP targets / webhook targets.
+- **Two authentication schemes**: session cookie (for browser / UI) and `X-Api-Key` header (for automation). API keys support `read` / `write` / `admin` scopes mapped to the `ReadOnly` / `Operator` / `Admin` policies. Key hashes are SHA-256, lookups use a unique index, `LastUsedUtc` updates are debounced to once per 5 minutes per key.
+- **OIDC / SSO** integration (Enterprise) — authority URL must be HTTPS.
+
+### Security hardening
+
+- CSP, HSTS, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy: no-referrer, Permissions-Policy.
+- Server header stripped.
+- Rate limiter on `/account/login` (10 attempts / minute / IP) with `UseForwardedHeaders` so the real client IP is seen behind a reverse proxy (requires `ForwardedHeaders:KnownProxies` configuration).
+- Login lockout after 5 failed attempts for 15 minutes (ASP.NET Core Identity).
+- SwaggerUI only in Development.
+- Master key drift detected at startup via a real-credential decrypt probe in `MasterKeyHealthCheck`.
+- SSRF guard (R1) with DNS rebinding mitigation, IPv4-mapped IPv6 unwrap (S3), applied to the live webhook delivery path **and** the dead-letter retry path (S1).
+- License edition consensus check prevents a Community node from joining an Enterprise cluster (N8).
+
+### Multi-instance / clustering
+
+- Worker leases coordinated via serializable DB transaction; `RenewLeaseAsync` returns false on missing row and the instance self-shuts down to avoid "ghost worker" state.
+- `KeepAlive` / `AutoAcknowledge` / `UpdateCheck` / IMAP IDLE all run only on the elected cluster primary (lexicographically smallest instance ID).
+- Quartz scheduler clustered with deterministic instance IDs to survive Kubernetes pod recycling.
+- `ProcessedMails` uses an atomic INSERT-first claim pattern so losers of the race skip the entire processing pipeline instead of only the duplicate event.
+- `DeadLetterRetryService` uses row-level locking via `UPDATE … WHERE LockedUntilUtc < now` — the gold-standard pattern for distributed work queues.
+
+### Operations
+
+- **Health endpoints**: `/health/live`, `/health/ready`. Ready reports Unhealthy on master-key drift, DB disconnect or SQLite-in-production.
+- **Prometheus** metrics endpoint: `mail2snmp_*` counters and gauges for mails processed, traps sent / failed, queue depth, lease status, latencies.
+- **OpenTelemetry** traces: optional OTLP export via the `Otel` config section.
+- **Logging**: structured Serilog, rolling file with configurable retention, minimum level runtime-changeable.
+- **SQL Server and SQLite** both supported. SQL Server is the recommended backend for any clustered or HA deployment (Quartz clustered scheduling requires AdoJobStore).
+
+### Installer
+
+- MSI installer built with **WiX Toolset 5.0** for the Windows Worker + API + Web host with per-service account, firewall rules, and service start-up.
+
+### Test / CI
+
+- 104 unit tests (xUnit + NSubstitute + EF Core In-Memory) covering rule evaluation, credential encryption (including the J1 service-layer round-trip), flood protection, dedup cache, template engine, license validation, API key hashing, MailboxService ↔ real encryptor integration.
+- GitHub Actions CI workflow (windows-latest runner): restore, build Release, run tests, produce the MSI on tagged releases.
+- Stryker mutation testing configuration (`stryker-config.json`) for the Core project.
+- Six SQL Server integration tests that skip gracefully when Docker is unavailable.
+
+### Known limitations documented in this release
+
+- Server-side pagination is not implemented; the Razor pages do client-side filtering. Deployments with more than ~5000 entities per table will feel the difference. Server-side pagination is planned for a follow-up release.
+- `PlaintextCredentialMigrator` was removed before release because there are no production installs to migrate from a pre-encrypted state.
+- Docker-based SQL Server integration tests require a local Docker daemon.
+
+---
+
+## Development-wave history (pre-release)
+
+Each wave fixes the findings of a multi-agent comprehensive code review of the previous wave. Waves A–F built up the foundation; waves G onward were driven by reviews and are documented in the git log (commits 374d22a for T, 0044689 for U, etc.). Key waves worth calling out:
+
+## Wave L (commit ebde621) — 2026-04-07
 
 Seven fixes from the 5th comprehensive review pass.
 

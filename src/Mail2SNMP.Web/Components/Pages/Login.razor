@@ -41,7 +41,7 @@
             </form>
         </div>
         <div class="card-footer text-center text-muted small py-2">
-            Mail2SNMP v5.8
+            Mail2SNMP v@_version
         </div>
     </div>
 </div>
@@ -49,6 +49,16 @@
 @code {
     [SupplyParameterFromQuery(Name = "error")]
     private string? ErrorCode { get; set; }
+
+    // Read the product version from the running assembly so the footer stays
+    // in sync with Directory.Build.props without a manual string edit on every
+    // release. Falls back to "1.0.0" if the attribute is missing for any reason.
+    private static readonly string _version =
+        typeof(Login).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+            .FirstOrDefault()?.InformationalVersion?.Split('+')[0]
+        ?? "1.0.0";
 
     private string? _errorMessage;
 

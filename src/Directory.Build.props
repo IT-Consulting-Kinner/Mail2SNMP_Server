@@ -1,5 +1,17 @@
 <Project>
   <PropertyGroup>
+    <!-- Single source of truth for the product version. Every project below
+         src/ inherits this via Directory.Build.props without having to declare
+         it in its own .csproj, so the Login footer, CLI banner, assembly
+         info and installer all stay in sync. -->
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
+    <Product>Mail2SNMP Server</Product>
+    <Company>IT-Consulting Kinner</Company>
+    <Copyright>© IT-Consulting Kinner</Copyright>
+
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>

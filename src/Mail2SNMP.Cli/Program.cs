@@ -1340,7 +1340,13 @@ public class Program
 
     static void PrintUsage()
     {
-        Console.WriteLine("Mail2SNMP CLI v5.8\n");
+        // Read version from assembly so the banner tracks Directory.Build.props
+        // automatically on every release — no manual string edit required.
+        var version = typeof(Program).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+            .FirstOrDefault()?.InformationalVersion?.Split('+')[0] ?? "1.0.0";
+        Console.WriteLine($"Mail2SNMP CLI v{version}\n");
         Console.WriteLine("Database:");
         Console.WriteLine("  db migrate                       Apply EF Core migrations");
         Console.WriteLine("  db rollback                      Roll back last applied migration");
