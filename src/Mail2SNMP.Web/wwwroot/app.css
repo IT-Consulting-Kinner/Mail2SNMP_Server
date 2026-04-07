@@ -5,6 +5,21 @@ html, body {
     height: 100%;
 }
 
+/* T2: required-field marker. Forms should add `<span class="required-mark">*</span>`
+   next to the label of any required field; the CSS keeps the colour consistent
+   with the validation message colour. */
+.required-mark {
+    color: var(--bs-danger, #dc3545);
+    font-weight: 600;
+    margin-left: 0.15rem;
+}
+
+/* T1/T7: keep the search input filling its container slot when wrapped in a
+   sized div by the page. */
+.debounced-search {
+    width: 100%;
+}
+
 /* Sidebar layout */
 .sidebar {
     width: 240px;
@@ -112,16 +127,39 @@ h1:focus {
     border-color: #929292;
 }
 
-/* Responsive: stack sidebar below content on small screens */
+/* T4: Mobile sidebar — off-canvas drawer pattern controlled by a hidden checkbox.
+   The .sidebar-toggle-btn label flips #sidebar-toggle:checked, which is the
+   sibling combinator selector that opens the drawer. No JavaScript needed. */
 @media (max-width: 768px) {
     .sidebar {
-        width: 100%;
-        min-width: 100%;
-        height: auto;
-        max-height: 50vh;
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        width: 80%;
+        max-width: 280px;
+        z-index: 1050;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease-out;
+        box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
     }
 
-    .d-flex.vh-100 {
-        flex-direction: column;
+    #sidebar-toggle:checked ~ .d-flex .sidebar {
+        transform: translateX(0);
     }
+
+    .sidebar-toggle-btn {
+        top: 0;
+        left: 0;
+    }
+
+    /* Push the main content right of the toggle button so it doesn't overlap. */
+    main {
+        padding-top: 3.5rem !important;
+    }
+}
+
+/* T11: keep desktop layout untouched */
+@media (min-width: 769px) {
+    .sidebar-toggle-btn { display: none !important; }
 }

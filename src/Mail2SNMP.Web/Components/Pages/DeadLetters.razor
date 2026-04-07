@@ -2,11 +2,16 @@
 @rendermode InteractiveServer
 @inject IDeadLetterService DeadLetterService
 @inject IJSRuntime JS
+@inject ConfirmService Confirm
+@inject IOptions<HelpSettings> Help
 
 <PageTitle>Dead Letters - Mail2SNMP</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="mb-0">Dead Letters</h3>
+    <h3 class="mb-0">Dead Letters <HelpLink Url="@Help.Value.DeadLetters" /></h3>
+    <button class="btn btn-outline-success btn-sm" @onclick="ExportCsv" disabled="@(_entries == null || _entries.Count == 0)">
+        <i class="bi bi-download"></i> Export CSV
+    </button>
 </div>
 
 <AutoDismissAlert Type="danger"  @bind-Message="_error" />
@@ -134,7 +139,7 @@ else
             _error = "No pending entries to retry.";
             return;
         }
-        if (!await JS.TryConfirmAsync(
+        if (!await Confirm.AskAsync(
                 $"Retry {pending} pending dead letter entries? This may send many webhook requests."))
             return;
         _busy = true;
@@ -155,6 +160,38 @@ else
         }
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "retrying all entries"); }
         finally { _busy = false; }
+    }
+
+    // T15: CSV export — same pattern as AuditLog and Events.
+    private async Task ExportCsv()
+    {
+        if (_entries == null || _entries.Count == 0) return;
+        try
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("CreatedUtc,WebhookTargetId,EventId,Status,AttemptCount,NextRetryUtc,LastError");
+            foreach (var e in _entries)
+            {
+                sb.Append(e.CreatedUtc.ToString("o")).Append(',')
+                  .Append(e.WebhookTargetId).Append(',')
+                  .Append(e.EventId).Append(',')
+                  .Append(Csv(e.Status.ToString())).Append(',')
+                  .Append(e.AttemptCount).Append(',')
+                  .Append(e.NextRetryUtc?.ToString("o") ?? string.Empty).Append(',')
+                  .AppendLine(Csv(e.LastError));
+            }
+            var filename = $"deadletters-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv";
+            await JS.InvokeVoidAsync("mail2snmp.downloadText", filename, "text/csv;charset=utf-8", sb.ToString());
+        }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "exporting dead letters"); }
+    }
+
+    private static string Csv(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        if (value.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0)
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        return value;
     }
 
     private static string GetStatusColor(DeadLetterStatus s) => s switch

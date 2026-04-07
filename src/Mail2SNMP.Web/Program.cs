@@ -216,6 +216,17 @@ try
         .AddCheck<Mail2SNMP.Infrastructure.Security.MasterKeyHealthCheck>("master-key")
         .AddCheck<Mail2SNMP.Infrastructure.Security.SqliteProductionHealthCheck>("sqlite-production");
 
+    // T16: per-page documentation links bound from the Help section. Resolved
+    // via IOptions<HelpSettings> in the HelpLink component so customers can
+    // change the docs URL without recompiling.
+    builder.Services.Configure<HelpSettings>(builder.Configuration.GetSection("Help"));
+
+    // T3: themed confirmation dialog. The Razor pages keep calling
+    // JS.TryConfirmAsync() (which now delegates to this service so we don't
+    // have to touch every call site), and the global ConfirmDialog host in
+    // MainLayout renders the modal.
+    builder.Services.AddScoped<Mail2SNMP.Web.Components.Shared.ConfirmService>();
+
     // Swagger for API
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(c =>

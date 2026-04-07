@@ -238,6 +238,57 @@ public class HostingSettings
 }
 
 /// <summary>
+/// T16: Per-page documentation links surfaced as a "?" icon next to each page
+/// title. Configured in appsettings.json so a customer can swap their docs URL
+/// without recompiling. Each property is the URL for the corresponding page;
+/// when the value is empty the link is hidden.
+///
+/// Example:
+/// <code>
+/// "Help": {
+///   "BaseUrl": "https://docs.example.com/mail2snmp",
+///   "Mailboxes": "{base}/mailboxes",
+///   "Rules": "{base}/rules"
+/// }
+/// </code>
+/// The literal token <c>{base}</c> in any per-page URL is replaced with
+/// <see cref="BaseUrl"/> at read time so customers can either point everything
+/// at one CMS root or override individual pages.
+/// </summary>
+public class HelpSettings
+{
+    /// <summary>Optional base URL substituted into the literal token <c>{base}</c> in any per-page URL.</summary>
+    public string BaseUrl { get; set; } = string.Empty;
+
+    public string Mailboxes { get; set; } = string.Empty;
+    public string Rules { get; set; } = string.Empty;
+    public string Jobs { get; set; } = string.Empty;
+    public string Schedules { get; set; } = string.Empty;
+    public string SnmpTargets { get; set; } = string.Empty;
+    public string WebhookTargets { get; set; } = string.Empty;
+    public string Maintenance { get; set; } = string.Empty;
+    public string Events { get; set; } = string.Empty;
+    public string DeadLetters { get; set; } = string.Empty;
+    public string AuditLog { get; set; } = string.Empty;
+    public string ApiKeys { get; set; } = string.Empty;
+    public string Users { get; set; } = string.Empty;
+    public string Settings { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Resolves a raw configured URL by substituting <c>{base}</c> with
+    /// <see cref="BaseUrl"/>. Returns null when the input is empty so the
+    /// caller can hide the help icon entirely.
+    /// </summary>
+    public string? Resolve(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        return string.IsNullOrEmpty(BaseUrl)
+            ? raw
+            : raw.Replace("{base}", BaseUrl.TrimEnd('/'));
+    }
+}
+
+/// <summary>
 /// Simplified, admin-friendly logging configuration. Replaces the verbose Serilog
 /// JSON section. The host configures Serilog programmatically from these fields.
 /// </summary>

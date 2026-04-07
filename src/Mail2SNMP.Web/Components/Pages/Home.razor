@@ -28,6 +28,37 @@
 }
 else
 {
+    @* T6: First-time onboarding banner. Shown only while at least one of the
+       three pillar resources (mailbox / rule / target) is missing. Once all
+       three exist the banner disappears for good and the dashboard is back to
+       its normal state. The links jump straight to the relevant page so a new
+       admin can complete setup in four clicks. *@
+    @if (_dashboard.ActiveMailboxes == 0 || _dashboard.ActiveJobs == 0 || _missingTargets)
+    {
+        <div class="alert alert-primary border-primary border-2" role="alert">
+            <h5 class="alert-heading"><i class="bi bi-rocket-takeoff"></i> Get started with Mail2SNMP</h5>
+            <p class="mb-2 small">Welcome! Complete these steps to start turning emails into traps and webhooks:</p>
+            <ol class="mb-0 small">
+                <li>
+                    @if (_dashboard.ActiveMailboxes == 0) { <a href="/mailboxes">Add a mailbox</a> } else { <span class="text-success">✓ Mailbox added</span> }
+                    — the IMAP account Mail2SNMP polls.
+                </li>
+                <li>
+                    @if (_ruleCount == 0) { <a href="/rules">Create a rule</a> } else { <span class="text-success">✓ Rule created</span> }
+                    — what to match in incoming mail (subject, body, sender).
+                </li>
+                <li>
+                    @if (_missingTargets) { <a href="/snmp-targets">Add an SNMP target</a><text> or </text><a href="/webhook-targets">a webhook target</a> } else { <span class="text-success">✓ Target configured</span> }
+                    — where to send the notification.
+                </li>
+                <li>
+                    @if (_dashboard.ActiveJobs == 0) { <a href="/jobs">Create a job</a> } else { <span class="text-success">✓ Job created</span> }
+                    — wires the mailbox + rule + target together.
+                </li>
+            </ol>
+        </div>
+    }
+
     @* M2: License banner — visible when license is missing, expired, or expiring soon *@
     @if (_license != null)
     {
@@ -251,6 +282,8 @@ else
     private double _channelOverflow;
     private List<EventTrendPoint> _eventsTrend = new();
     private List<TopJobItem> _topJobs = new();
+    private int _ruleCount;
+    private bool _missingTargets;
 
     private record EventTrendPoint(DateTime Date, int Count);
     private record TopJobItem(string Name, int Count);
@@ -266,6 +299,13 @@ else
             var notifiedEvents = await EventService.GetAllAsync(EventState.Notified);
             var deadLetters = await DeadLetterService.GetAllAsync();
             var inMaintenance = await MaintenanceService.IsInMaintenanceAsync();
+
+            // T6: counts for the onboarding banner. Cheap because the lists
+            // are already loaded above.
+            _ruleCount = await Db.Rules.CountAsync();
+            var snmpCount = await Db.SnmpTargets.CountAsync(t => t.IsActive);
+            var webhookCount = await Db.WebhookTargets.CountAsync(t => t.IsActive);
+            _missingTargets = snmpCount == 0 && webhookCount == 0;
 
             _dashboard = new DashboardDto
             {

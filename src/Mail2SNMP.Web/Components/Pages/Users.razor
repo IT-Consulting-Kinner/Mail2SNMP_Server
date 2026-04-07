@@ -4,11 +4,13 @@
 @inject UserManager<AppUser> UserManager
 @inject RoleManager<IdentityRole> RoleManager
 @inject IJSRuntime JS
+@inject ConfirmService Confirm
+@inject IOptions<HelpSettings> Help
 
 <PageTitle>Users - Mail2SNMP</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="mb-0">Users</h3>
+    <h3 class="mb-0">Users <HelpLink Url="@Help.Value.Users" /></h3>
     <button class="btn btn-primary btn-sm" @onclick="ShowAddForm"><i class="bi bi-plus-circle"></i> Add User</button>
 </div>
 
@@ -26,8 +28,11 @@ else if (_users == null || _users.Count == 0)
 else
 {
     <div class="mb-3 d-flex">
-        <input type="text" class="form-control form-control-sm me-2" style="max-width:300px;"
-               placeholder="Search by name, username or email..." @bind="_searchTerm" @bind:event="oninput" />
+        @* T1: debounced *@
+        <div style="max-width:300px;" class="me-2 flex-grow-1">
+            <DebouncedSearchInput Value="_searchTerm" ValueChanged="v => _searchTerm = v"
+                                  Placeholder="Search by name, username or email…" />
+        </div>
         @if (!string.IsNullOrEmpty(_searchTerm))
         {
             <button class="btn btn-sm btn-outline-secondary" @onclick="() => _searchTerm = string.Empty">Clear</button>
@@ -87,7 +92,7 @@ else
 @if (_showForm)
 {
     <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-fullscreen-sm-down">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">@(_editingUser != null ? "Edit" : "Add") User</h5>
@@ -294,7 +299,7 @@ else
         _busy = true;
         try
         {
-            if (!await JS.TryConfirmAsync(
+            if (!await Confirm.AskAsync(
                     $"Delete user '{user.Email ?? user.UserName}'? This cannot be undone."))
                 return;
             await UserManager.DeleteAsync(user);

@@ -1,0 +1,69 @@
+@*
+  T1: Debounced search input. Wraps a regular text <input> and only fires the
+  Value-changed callback after the user stops typing for DelayMs milliseconds.
+  Without this every keystroke re-runs the LINQ filter and re-renders the
+  entire table over SignalR — fine for 50 rows, sluggish at 500+.
+
+  Usage:
+    <DebouncedSearchInput Value="@_searchTerm" ValueChanged="OnSearchChanged" Placeholder="Search..." />
+
+  The component never blocks input — the visible text updates instantly via
+  the bound _local field; only the parent's filter recomputation is delayed.
+*@
+
+@implements IDisposable
+
+<input type="text" class="@CssClass" placeholder="@Placeholder" value="@_local"
+       @oninput="OnInput" aria-label="@Placeholder" />
+
+@code {
+    /// <summary>The current search value (typically the parent's <c>_searchTerm</c>).</summary>
+    [Parameter] public string Value { get; set; } = string.Empty;
+
+    /// <summary>Fired AFTER the debounce delay with the latest typed value.</summary>
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>Debounce delay in milliseconds. Defaults to 250 — long enough to
+    /// catch a typed word, short enough to feel responsive.</summary>
+    [Parameter] public int DelayMs { get; set; } = 250;
+
+    [Parameter] public string Placeholder { get; set; } = "Search…";
+    [Parameter] public string CssClass { get; set; } = "form-control form-control-sm";
+
+    private string _local = string.Empty;
+    private int _seq;
+
+    protected override void OnParametersSet()
+    {
+        // Sync external value resets (e.g. clear button) into the local field
+        // unless the user is in the middle of typing — _seq will get bumped on
+        // the next keystroke and the racy update is discarded.
+        if (_local != Value && _seq == 0)
+            _local = Value;
+    }
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        _local = e.Value?.ToString() ?? string.Empty;
+        var mySeq = ++_seq;
+        try
+        {
+            await Task.Delay(DelayMs);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+        if (mySeq != _seq) return; // a newer keystroke arrived; this one is stale
+        _seq = 0;
+        if (_local != Value)
+            await ValueChanged.InvokeAsync(_local);
+    }
+
+    public void Dispose()
+    {
+        // Bump the sequence so any in-flight Task.Delay continuation drops the
+        // result instead of touching the parent after teardown.
+        _seq = -1;
+    }
+}

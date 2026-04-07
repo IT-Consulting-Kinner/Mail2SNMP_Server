@@ -4,11 +4,12 @@
 @inject IConfiguration Configuration
 @inject ILicenseProvider LicenseProvider
 @inject IAuditService AuditService
+@inject IOptions<HelpSettings> Help
 
 <PageTitle>Settings - Mail2SNMP</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h3 class="mb-0">Settings</h3>
+    <h3 class="mb-0">Settings <HelpLink Url="@Help.Value.Settings" /></h3>
     <AuthorizeView Policy="Admin">
         <Authorized>
             <button class="btn btn-outline-primary" @onclick="ReloadSettingsAsync" disabled="@_reloading">

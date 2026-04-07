@@ -6,11 +6,13 @@
 @inject ISnmpTargetService SnmpTargetService
 @inject IWebhookTargetService WebhookTargetService
 @inject IJSRuntime JS
+@inject ConfirmService Confirm
+@inject IOptions<HelpSettings> Help
 
 <PageTitle>Jobs - Mail2SNMP</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="mb-0">Jobs</h3>
+    <h3 class="mb-0">Jobs <HelpLink Url="@Help.Value.Jobs" /></h3>
     <button class="btn btn-primary btn-sm" @onclick="ShowAddForm"><i class="bi bi-plus-circle"></i> Add Job</button>
 </div>
 
@@ -37,8 +39,11 @@ else if (_jobs == null || _jobs.Count == 0)
 else
 {
     <div class="mb-3 d-flex">
-        <input type="text" class="form-control form-control-sm me-2" style="max-width:300px;"
-               placeholder="Search by name, mailbox or rule..." @bind="_searchTerm" @bind:event="oninput" />
+        @* T1: debounced *@
+        <div style="max-width:300px;" class="me-2 flex-grow-1">
+            <DebouncedSearchInput Value="_searchTerm" ValueChanged="v => _searchTerm = v"
+                                  Placeholder="Search by name, mailbox or rule…" />
+        </div>
         @if (!string.IsNullOrEmpty(_searchTerm))
         {
             <button class="btn btn-sm btn-outline-secondary" @onclick="() => _searchTerm = string.Empty">Clear</button>
@@ -113,7 +118,7 @@ else
 @if (_showForm)
 {
     <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-lg modal-fullscreen-sm-down">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">@(_editing != null ? "Edit" : "Add") Job</h5>
@@ -441,7 +446,7 @@ else
             // confirm that they intentionally created a no-op job.
             if (_selectedSnmpIds.Count == 0 && _selectedWebhookIds.Count == 0)
             {
-                var ok = await JS.TryConfirmAsync(
+                var ok = await Confirm.AskAsync(
                     "This job has NO notification targets assigned. Events will be created in the database " +
                     "but no SNMP traps or webhook calls will be sent. Save anyway?");
                 if (!ok)
@@ -508,7 +513,7 @@ else
         {
             var job = _jobs?.FirstOrDefault(j => j.Id == id);
             var name = job?.Name ?? $"#{id}";
-            if (!await JS.TryConfirmAsync($"Delete job '{name}'? This cannot be undone."))
+            if (!await Confirm.AskAsync($"Delete job '{name}'? This cannot be undone."))
                 return;
             await JobService.DeleteAsync(id);
             _success = "Job deleted.";

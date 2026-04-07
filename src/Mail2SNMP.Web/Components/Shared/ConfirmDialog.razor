@@ -1,0 +1,79 @@
+@*
+  T3: themed confirmation dialog host. Listens to ConfirmService.OnRequest
+  and renders a Bootstrap modal inline. Sits once in MainLayout so every
+  page can call Confirm.AskAsync(...) without each declaring its own host.
+
+  Esc and the backdrop close the dialog as "cancel" so the keyboard flow
+  matches the standard Bootstrap modal behaviour.
+*@
+
+@implements IDisposable
+@inject ConfirmService Confirm
+
+@if (_request is not null)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="confirm-title"
+         style="background: rgba(0,0,0,0.5);"
+         @onkeydown="HandleKeyDown" @onkeydown:preventDefault="false">
+        <div class="modal-dialog modal-dialog-centered modal-sm modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header @(_request.Danger ? "border-danger" : "")">
+                    <h5 class="modal-title" id="confirm-title">@_request.Title</h5>
+                    <button type="button" class="btn-close" aria-label="Cancel" @onclick="Cancel"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">@_request.Message</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="Cancel">@_request.CancelLabel</button>
+                    <button type="button" class="btn @(_request.Danger ? "btn-danger" : "btn-primary")"
+                            @onclick="ConfirmClick" autofocus>
+                        @_request.ConfirmLabel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private ConfirmRequest? _request;
+
+    protected override void OnInitialized()
+    {
+        Confirm.OnRequest += HandleRequestAsync;
+    }
+
+    private Task HandleRequestAsync(ConfirmRequest req)
+    {
+        _request = req;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") Cancel();
+    }
+
+    private void Cancel()
+    {
+        var req = _request;
+        _request = null;
+        req?.Result.TrySetResult(false);
+    }
+
+    private void ConfirmClick()
+    {
+        var req = _request;
+        _request = null;
+        req?.Result.TrySetResult(true);
+    }
+
+    public void Dispose()
+    {
+        Confirm.OnRequest -= HandleRequestAsync;
+        // If a request is still pending when the host is torn down (page navigation
+        // mid-dialog), resolve it as Cancel so the awaiting caller never hangs.
+        _request?.Result.TrySetResult(false);
+    }
+}

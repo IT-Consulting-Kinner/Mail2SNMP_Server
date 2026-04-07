@@ -1,0 +1,40 @@
+@*
+  T16: Per-page documentation link. Renders an "?" icon next to a page title
+  that links to the URL configured in appsettings.json (Help section). When
+  the URL is empty the icon is hidden entirely so a deployment without docs
+  shows nothing instead of a broken link.
+
+  Usage:
+    <HelpLink Url="@Help.Value.Mailboxes" />
+
+  The Url parameter is the RAW configured value; resolution of the {base}
+  placeholder happens here so the caller doesn't have to remember it.
+*@
+
+@inject IOptions<Mail2SNMP.Models.Configuration.HelpSettings> Help
+
+@if (_resolved is not null)
+{
+    <a href="@_resolved" target="_blank" rel="noopener" class="ms-2 text-muted text-decoration-none"
+       title="Open documentation for this page" aria-label="Open documentation for this page">
+        <i class="bi bi-question-circle"></i>
+    </a>
+}
+
+@code {
+    /// <summary>
+    /// The raw configured URL (typically <c>Help.Value.SomePage</c>). Resolved
+    /// against <see cref="HelpSettings.BaseUrl"/> so callers can write
+    /// <c>{base}/some-page</c> in appsettings.json.
+    /// </summary>
+    [Parameter, EditorRequired] public string? Url { get; set; }
+
+    private string? _resolved;
+
+    protected override void OnParametersSet()
+    {
+        _resolved = string.IsNullOrWhiteSpace(Url)
+            ? null
+            : Help.Value.Resolve(Url);
+    }
+}

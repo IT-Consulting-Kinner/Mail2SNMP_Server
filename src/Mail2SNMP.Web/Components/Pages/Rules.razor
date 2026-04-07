@@ -4,11 +4,13 @@
 @inject IRuleService RuleService
 @inject RuleEvaluator RuleEvaluator
 @inject IJSRuntime JS
+@inject ConfirmService Confirm
+@inject IOptions<HelpSettings> Help
 
 <PageTitle>Rules - Mail2SNMP</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="mb-0">Rules</h3>
+    <h3 class="mb-0">Rules <HelpLink Url="@Help.Value.Rules" /></h3>
     <button class="btn btn-primary btn-sm" @onclick="ShowAddForm"><i class="bi bi-plus-circle"></i> Add Rule</button>
 </div>
 
@@ -26,8 +28,11 @@ else if (_rules == null || _rules.Count == 0)
 else
 {
     <div class="mb-3 d-flex">
-        <input type="text" class="form-control form-control-sm me-2" style="max-width:300px;"
-               placeholder="Search by name or criteria..." @bind="_searchTerm" @bind:event="oninput" />
+        @* T1: debounced *@
+        <div style="max-width:300px;" class="me-2 flex-grow-1">
+            <DebouncedSearchInput Value="_searchTerm" ValueChanged="v => _searchTerm = v"
+                                  Placeholder="Search by name or criteria…" />
+        </div>
         @if (!string.IsNullOrEmpty(_searchTerm))
         {
             <button class="btn btn-sm btn-outline-secondary" @onclick="() => _searchTerm = string.Empty">Clear</button>
@@ -107,7 +112,7 @@ else
 @if (_showForm)
 {
     <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-fullscreen-sm-down">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">@(_editing != null ? "Edit" : "Add") Rule</h5>
@@ -184,7 +189,7 @@ else
 @if (_showTester && _testerRule != null)
 {
     <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-lg modal-fullscreen-sm-down">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title"><i class="bi bi-flask"></i> Test Rule: @_testerRule.Name</h5>
@@ -319,7 +324,7 @@ else
     private async Task BulkDelete()
     {
         if (_busy || _selected.Count == 0) return;
-        if (!await JS.TryConfirmAsync($"Delete {_selected.Count} rule(s)? This cannot be undone."))
+        if (!await Confirm.AskAsync($"Delete {_selected.Count} rule(s)? This cannot be undone."))
             return;
         _busy = true;
         var failed = 0;
@@ -418,7 +423,7 @@ else
         {
             var rule = _rules?.FirstOrDefault(r => r.Id == id);
             var name = rule?.Name ?? $"#{id}";
-            if (!await JS.TryConfirmAsync($"Delete rule '{name}'? This cannot be undone."))
+            if (!await Confirm.AskAsync($"Delete rule '{name}'? This cannot be undone."))
                 return;
             await RuleService.DeleteAsync(id);
             _success = "Rule deleted.";

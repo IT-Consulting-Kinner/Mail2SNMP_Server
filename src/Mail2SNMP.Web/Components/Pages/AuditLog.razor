@@ -3,10 +3,11 @@
 @rendermode InteractiveServer
 @inject IAuditService AuditService
 @inject IJSRuntime JS
+@inject IOptions<HelpSettings> Help
 
 <PageTitle>Audit Log - Mail2SNMP</PageTitle>
 
-<h3 class="mb-3">Audit Log</h3>
+<h3 class="mb-3">Audit Log <HelpLink Url="@Help.Value.AuditLog" /></h3>
 
 <AutoDismissAlert Type="danger" @bind-Message="_error" />
 

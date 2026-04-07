@@ -1,11 +1,16 @@
 @page "/events"
 @rendermode InteractiveServer
 @inject IEventService EventService
+@inject IJSRuntime JS
+@inject IOptions<HelpSettings> Help
 
 <PageTitle>Events - Mail2SNMP</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="mb-0">Events</h3>
+    <h3 class="mb-0">Events <HelpLink Url="@Help.Value.Events" /></h3>
+    <button class="btn btn-outline-success btn-sm" @onclick="ExportCsv" disabled="@(_events == null || _events.Count == 0)">
+        <i class="bi bi-download"></i> Export CSV
+    </button>
 </div>
 
 <AutoDismissAlert Type="danger"  @bind-Message="_error" />
@@ -174,6 +179,42 @@ else
         try { await EventService.ReplayAsync(id); _success = "Event replayed."; await LoadData(); }
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "the operation"); }
         finally { _busy = false; }
+    }
+
+    // T15: CSV export of the currently filtered event list. Mirrors the
+    // pattern from AuditLog.razor — RFC4180 quoting, downloadText JS interop,
+    // friendly error message on failure.
+    private async Task ExportCsv()
+    {
+        if (_events == null || _events.Count == 0) return;
+        try
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("CreatedUtc,JobId,RuleName,Severity,State,HitCount,Subject,MailFrom,MessageId");
+            foreach (var e in _events)
+            {
+                sb.Append(e.CreatedUtc.ToString("o")).Append(',')
+                  .Append(e.JobId).Append(',')
+                  .Append(Csv(e.RuleName)).Append(',')
+                  .Append(Csv(e.Severity.ToString())).Append(',')
+                  .Append(Csv(e.State.ToString())).Append(',')
+                  .Append(e.HitCount).Append(',')
+                  .Append(Csv(e.Subject)).Append(',')
+                  .Append(Csv(e.MailFrom)).Append(',')
+                  .AppendLine(Csv(e.MessageId));
+            }
+            var filename = $"events-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv";
+            await JS.InvokeVoidAsync("mail2snmp.downloadText", filename, "text/csv;charset=utf-8", sb.ToString());
+        }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "exporting events"); }
+    }
+
+    private static string Csv(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        if (value.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0)
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        return value;
     }
 
     private static string GetStateColor(EventState s) => s switch

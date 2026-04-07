@@ -4,11 +4,13 @@
 @inject IMaintenanceWindowService MaintenanceService
 @inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
+@inject ConfirmService Confirm
+@inject IOptions<HelpSettings> Help
 
 <PageTitle>Maintenance Windows - Mail2SNMP</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="mb-0">Maintenance Windows</h3>
+    <h3 class="mb-0">Maintenance Windows <HelpLink Url="@Help.Value.Maintenance" /></h3>
     <button class="btn btn-primary btn-sm" @onclick="ShowAddForm"><i class="bi bi-plus-circle"></i> Add Window</button>
 </div>
 
@@ -84,7 +86,7 @@ else
 @if (_showForm)
 {
     <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-fullscreen-sm-down">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Add Maintenance Window</h5>
@@ -213,7 +215,7 @@ else
         {
             var w = _windows?.FirstOrDefault(x => x.Id == id);
             var name = w?.Name ?? $"#{id}";
-            if (!await JS.TryConfirmAsync($"Delete maintenance window '{name}'? This cannot be undone."))
+            if (!await Confirm.AskAsync($"Delete maintenance window '{name}'? This cannot be undone."))
                 return;
             await MaintenanceService.DeleteAsync(id);
             _success = "Window deleted.";
