@@ -319,7 +319,7 @@ else
     private async Task BulkDelete()
     {
         if (_busy || _selected.Count == 0) return;
-        if (!await JS.InvokeAsync<bool>("confirm", $"Delete {_selected.Count} rule(s)? This cannot be undone."))
+        if (!await JS.TryConfirmAsync($"Delete {_selected.Count} rule(s)? This cannot be undone."))
             return;
         _busy = true;
         var failed = 0;
@@ -414,7 +414,7 @@ else
         if (_busy) return;
         var rule = _rules?.FirstOrDefault(r => r.Id == id);
         var name = rule?.Name ?? $"#{id}";
-        if (!await JS.InvokeAsync<bool>("confirm", $"Delete rule '{name}'? This cannot be undone."))
+        if (!await JS.TryConfirmAsync($"Delete rule '{name}'? This cannot be undone."))
             return;
         _busy = true;
         try { await RuleService.DeleteAsync(id); _success = "Rule deleted."; await LoadData(); }

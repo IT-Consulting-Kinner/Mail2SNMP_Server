@@ -134,7 +134,7 @@ else
             _error = "No pending entries to retry.";
             return;
         }
-        if (!await JS.InvokeAsync<bool>("confirm",
+        if (!await JS.TryConfirmAsync(
                 $"Retry {pending} pending dead letter entries? This may send many webhook requests."))
             return;
         _busy = true;

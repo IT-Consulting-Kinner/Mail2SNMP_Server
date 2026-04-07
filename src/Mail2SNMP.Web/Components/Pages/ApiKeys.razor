@@ -226,7 +226,7 @@ else
 
     private async Task Delete(int id)
     {
-        if (!await JS.InvokeAsync<bool>("confirm", "Delete this API key? Any clients using it will lose access immediately.")) return;
+        if (!await JS.TryConfirmAsync("Delete this API key? Any clients using it will lose access immediately.")) return;
         var k = await Db.ApiKeys.FindAsync(id);
         if (k == null) return;
         Db.ApiKeys.Remove(k);

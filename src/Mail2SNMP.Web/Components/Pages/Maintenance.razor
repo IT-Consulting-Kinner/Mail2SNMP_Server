@@ -209,7 +209,7 @@ else
         if (_busy) return;
         var w = _windows?.FirstOrDefault(x => x.Id == id);
         var name = w?.Name ?? $"#{id}";
-        if (!await JS.InvokeAsync<bool>("confirm", $"Delete maintenance window '{name}'? This cannot be undone."))
+        if (!await JS.TryConfirmAsync($"Delete maintenance window '{name}'? This cannot be undone."))
             return;
         _busy = true;
         try { await MaintenanceService.DeleteAsync(id); _success = "Window deleted."; await LoadData(); }

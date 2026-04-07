@@ -196,7 +196,7 @@ else
     private async Task BulkDelete()
     {
         if (_busy || _selected.Count == 0) return;
-        if (!await JS.InvokeAsync<bool>("confirm", $"Delete {_selected.Count} schedule(s)? This cannot be undone."))
+        if (!await JS.TryConfirmAsync($"Delete {_selected.Count} schedule(s)? This cannot be undone."))
             return;
         _busy = true;
         var failed = 0;
@@ -297,7 +297,7 @@ else
         if (_busy) return;
         var s = _schedules?.FirstOrDefault(x => x.Id == id);
         var name = s?.Name ?? $"#{id}";
-        if (!await JS.InvokeAsync<bool>("confirm", $"Delete schedule '{name}'? This cannot be undone."))
+        if (!await JS.TryConfirmAsync($"Delete schedule '{name}'? This cannot be undone."))
             return;
         _busy = true;
         try { await ScheduleService.DeleteAsync(id); _success = "Schedule deleted."; await LoadData(); }

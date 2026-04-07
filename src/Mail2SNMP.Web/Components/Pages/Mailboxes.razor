@@ -234,7 +234,7 @@ else
     private async Task BulkDelete()
     {
         if (_busy || _selected.Count == 0) return;
-        if (!await JS.InvokeAsync<bool>("confirm",
+        if (!await JS.TryConfirmAsync(
                 $"Delete {_selected.Count} mailbox(es)? This cannot be undone."))
             return;
         _busy = true;
@@ -388,7 +388,7 @@ else
         if (_busy) return;
         var mb = _mailboxes?.FirstOrDefault(m => m.Id == id);
         var name = mb?.Name ?? $"#{id}";
-        if (!await JS.InvokeAsync<bool>("confirm", $"Delete mailbox '{name}'? This cannot be undone."))
+        if (!await JS.TryConfirmAsync( $"Delete mailbox '{name}'? This cannot be undone."))
             return;
         _busy = true;
         try

@@ -427,19 +427,30 @@ else
     private async Task SaveJob()
     {
         if (_busy) return;
-        // M1: Warn the user when a job is saved without any notification target assigned.
-        // The job is still allowed (e.g. for "logging only" use cases) but the user must
-        // confirm that they intentionally created a no-op job.
-        if (_selectedSnmpIds.Count == 0 && _selectedWebhookIds.Count == 0)
-        {
-            var ok = await JS.InvokeAsync<bool>("confirm",
-                "This job has NO notification targets assigned. Events will be created in the database " +
-                "but no SNMP traps or webhook calls will be sent. Save anyway?");
-            if (!ok) return;
-        }
+        // P2: Set _busy BEFORE the no-targets confirmation dialog. Previously the
+        // flag was only flipped after the confirm returned, which left a window
+        // where a fast double-click on Save would race past the `if (_busy) return;`
+        // guard at the top and produce two parallel SaveJob calls. The button is
+        // also disabled="@_busy" (L2) but only re-renders after this method has
+        // already been entered, so the in-method guard is the real defence.
         _busy = true;
         try
         {
+            // M1: Warn the user when a job is saved without any notification target assigned.
+            // The job is still allowed (e.g. for "logging only" use cases) but the user must
+            // confirm that they intentionally created a no-op job.
+            if (_selectedSnmpIds.Count == 0 && _selectedWebhookIds.Count == 0)
+            {
+                var ok = await JS.TryConfirmAsync(
+                    "This job has NO notification targets assigned. Events will be created in the database " +
+                    "but no SNMP traps or webhook calls will be sent. Save anyway?");
+                if (!ok)
+                {
+                    _busy = false;
+                    return;
+                }
+            }
+
             if (_editing != null)
             {
                 _editing.Name = _form.Name; _editing.MailboxId = _form.MailboxId; _editing.RuleId = _form.RuleId;
@@ -489,7 +500,7 @@ else
         if (_busy) return;
         var job = _jobs?.FirstOrDefault(j => j.Id == id);
         var name = job?.Name ?? $"#{id}";
-        if (!await JS.InvokeAsync<bool>("confirm", $"Delete job '{name}'? This cannot be undone."))
+        if (!await JS.TryConfirmAsync( $"Delete job '{name}'? This cannot be undone."))
             return;
         _busy = true;
         try { await JobService.DeleteAsync(id); _success = "Job deleted."; await LoadData(); }

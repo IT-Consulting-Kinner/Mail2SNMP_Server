@@ -290,7 +290,7 @@ else
     private async Task Delete(AppUser user)
     {
         if (_busy) return;
-        if (!await JS.InvokeAsync<bool>("confirm",
+        if (!await JS.TryConfirmAsync(
                 $"Delete user '{user.Email ?? user.UserName}'? This cannot be undone."))
             return;
         _busy = true;
