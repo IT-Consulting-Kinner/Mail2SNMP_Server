@@ -289,13 +289,14 @@ else
 
     private async Task Delete(AppUser user)
     {
+        // Q1: see Jobs.Delete — _busy must be set BEFORE the confirm dialog.
         if (_busy) return;
-        if (!await JS.TryConfirmAsync(
-                $"Delete user '{user.Email ?? user.UserName}'? This cannot be undone."))
-            return;
         _busy = true;
         try
         {
+            if (!await JS.TryConfirmAsync(
+                    $"Delete user '{user.Email ?? user.UserName}'? This cannot be undone."))
+                return;
             await UserManager.DeleteAsync(user);
             _success = "User deleted.";
             await LoadData();

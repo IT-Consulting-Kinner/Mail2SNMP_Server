@@ -319,13 +319,19 @@ else
 
     private async Task Delete(int id)
     {
+        // Q1: see Jobs.Delete — _busy must be set BEFORE the confirm dialog.
         if (_busy) return;
-        var t = _targets?.FirstOrDefault(x => x.Id == id);
-        var name = t?.Name ?? $"#{id}";
-        if (!await JS.TryConfirmAsync($"Delete webhook target '{name}'? This cannot be undone."))
-            return;
         _busy = true;
-        try { await WebhookTargetService.DeleteAsync(id); _success = "Target deleted."; await LoadData(); }
+        try
+        {
+            var t = _targets?.FirstOrDefault(x => x.Id == id);
+            var name = t?.Name ?? $"#{id}";
+            if (!await JS.TryConfirmAsync($"Delete webhook target '{name}'? This cannot be undone."))
+                return;
+            await WebhookTargetService.DeleteAsync(id);
+            _success = "Target deleted.";
+            await LoadData();
+        }
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "deleting the item"); }
         finally { _busy = false; }
     }

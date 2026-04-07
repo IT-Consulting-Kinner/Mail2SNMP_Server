@@ -214,24 +214,44 @@ else
         finally { _busy = false; }
     }
 
+    // Q2: Toggle and Delete previously had no _busy tracking at all, so the
+    // disabled="@_busy" markup on their buttons was cosmetic. A fast double-
+    // click could run two parallel SaveChangesAsync calls on the same key.
+    // Both methods now follow the same pattern as every other action method:
+    // guard with `if (_busy) return;`, set _busy=true, run inside try/finally.
+
     private async Task Toggle(int id)
     {
-        var k = await Db.ApiKeys.FindAsync(id);
-        if (k == null) return;
-        k.IsActive = !k.IsActive;
-        await Db.SaveChangesAsync();
-        _success = $"Key '{k.Name}' is now {(k.IsActive ? "active" : "disabled")}.";
-        await Load();
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            var k = await Db.ApiKeys.FindAsync(id);
+            if (k == null) return;
+            k.IsActive = !k.IsActive;
+            await Db.SaveChangesAsync();
+            _success = $"Key '{k.Name}' is now {(k.IsActive ? "active" : "disabled")}.";
+            await Load();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
     }
 
     private async Task Delete(int id)
     {
-        if (!await JS.TryConfirmAsync("Delete this API key? Any clients using it will lose access immediately.")) return;
-        var k = await Db.ApiKeys.FindAsync(id);
-        if (k == null) return;
-        Db.ApiKeys.Remove(k);
-        await Db.SaveChangesAsync();
-        _success = "Key deleted.";
-        await Load();
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            if (!await JS.TryConfirmAsync("Delete this API key? Any clients using it will lose access immediately.")) return;
+            var k = await Db.ApiKeys.FindAsync(id);
+            if (k == null) return;
+            Db.ApiKeys.Remove(k);
+            await Db.SaveChangesAsync();
+            _success = "Key deleted.";
+            await Load();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
     }
 }

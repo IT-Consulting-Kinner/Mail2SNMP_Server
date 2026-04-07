@@ -497,13 +497,23 @@ else
 
     private async Task Delete(int id)
     {
+        // Q1: set _busy BEFORE the confirm dialog so a fast double-click on
+        // Delete cannot produce two parallel DeleteAsync calls. The previous
+        // ordering left a window between the confirm and the assignment in
+        // which the in-method guard was useless. The finally always resets
+        // the flag, including on the cancel-return path.
         if (_busy) return;
-        var job = _jobs?.FirstOrDefault(j => j.Id == id);
-        var name = job?.Name ?? $"#{id}";
-        if (!await JS.TryConfirmAsync( $"Delete job '{name}'? This cannot be undone."))
-            return;
         _busy = true;
-        try { await JobService.DeleteAsync(id); _success = "Job deleted."; await LoadData(); }
+        try
+        {
+            var job = _jobs?.FirstOrDefault(j => j.Id == id);
+            var name = job?.Name ?? $"#{id}";
+            if (!await JS.TryConfirmAsync($"Delete job '{name}'? This cannot be undone."))
+                return;
+            await JobService.DeleteAsync(id);
+            _success = "Job deleted.";
+            await LoadData();
+        }
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "deleting the item"); }
         finally { _busy = false; }
     }

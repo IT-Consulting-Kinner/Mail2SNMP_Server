@@ -385,14 +385,16 @@ else
 
     private async Task Delete(int id)
     {
+        // Q1: see Jobs.Delete — set _busy BEFORE the confirm so a fast double-click
+        // cannot race past the in-method guard.
         if (_busy) return;
-        var mb = _mailboxes?.FirstOrDefault(m => m.Id == id);
-        var name = mb?.Name ?? $"#{id}";
-        if (!await JS.TryConfirmAsync( $"Delete mailbox '{name}'? This cannot be undone."))
-            return;
         _busy = true;
         try
         {
+            var mb = _mailboxes?.FirstOrDefault(m => m.Id == id);
+            var name = mb?.Name ?? $"#{id}";
+            if (!await JS.TryConfirmAsync($"Delete mailbox '{name}'? This cannot be undone."))
+                return;
             await MailboxService.DeleteAsync(id);
             _success = "Mailbox deleted.";
             await LoadData();

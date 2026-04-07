@@ -411,13 +411,19 @@ else
 
     private async Task Delete(int id)
     {
+        // Q1: see Jobs.Delete — _busy must be set BEFORE the confirm dialog.
         if (_busy) return;
-        var rule = _rules?.FirstOrDefault(r => r.Id == id);
-        var name = rule?.Name ?? $"#{id}";
-        if (!await JS.TryConfirmAsync($"Delete rule '{name}'? This cannot be undone."))
-            return;
         _busy = true;
-        try { await RuleService.DeleteAsync(id); _success = "Rule deleted."; await LoadData(); }
+        try
+        {
+            var rule = _rules?.FirstOrDefault(r => r.Id == id);
+            var name = rule?.Name ?? $"#{id}";
+            if (!await JS.TryConfirmAsync($"Delete rule '{name}'? This cannot be undone."))
+                return;
+            await RuleService.DeleteAsync(id);
+            _success = "Rule deleted.";
+            await LoadData();
+        }
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "deleting the item"); }
         finally { _busy = false; }
     }
