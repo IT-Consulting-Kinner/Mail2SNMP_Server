@@ -136,9 +136,15 @@ jobs:
         id: msi
         shell: bash
         run: |
+          # azure/trusted-signing-action requires an ABSOLUTE path in `files:`
+          # — relative paths raise "file path … is not rooted". We turn the
+          # find result into a full Windows-style path via cygpath so the
+          # .NET SignTool wrapper inside the action accepts it.
           MSI=$(find installer -name "*.msi" | head -1)
-          echo "path=${MSI}" >> "$GITHUB_OUTPUT"
+          MSI_ABS=$(cygpath -w "$(readlink -f "$MSI")")
+          echo "path=${MSI_ABS}" >> "$GITHUB_OUTPUT"
           echo "name=Mail2SNMP-${{ steps.version.outputs.version }}.msi" >> "$GITHUB_OUTPUT"
+          echo "Resolved MSI path: ${MSI_ABS}"
 
       # ── Azure Trusted Signing — MSI outer wrapper ─────────────────────────
       # Re-use the Azure login from the binary pre-sign step above; the access
