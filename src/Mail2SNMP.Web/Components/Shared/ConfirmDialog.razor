@@ -46,6 +46,12 @@
 
     private Task HandleRequestAsync(ConfirmRequest req)
     {
+        // U1: if a second AskAsync call arrives while the first dialog is still
+        // open, auto-resolve the first request as "cancel" before replacing it.
+        // Without this the first caller's TaskCompletionSource would never
+        // complete and its await would hang forever. Two concurrent confirm
+        // dialogs make no visual sense anyway — the newest wins.
+        _request?.Result.TrySetResult(false);
         _request = req;
         return InvokeAsync(StateHasChanged);
     }

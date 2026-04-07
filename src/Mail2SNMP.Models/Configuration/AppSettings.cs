@@ -278,13 +278,23 @@ public class HelpSettings
     /// Resolves a raw configured URL by substituting <c>{base}</c> with
     /// <see cref="BaseUrl"/>. Returns null when the input is empty so the
     /// caller can hide the help icon entirely.
+    ///
+    /// U2: also returns null when the per-page URL still contains an
+    /// unreplaced <c>{base}</c> placeholder after substitution — which
+    /// happens when <see cref="BaseUrl"/> is empty but a per-page URL
+    /// references <c>{base}/…</c>. Without the guard we would emit an
+    /// &lt;a&gt; tag whose href is the literal string "{base}/mailboxes",
+    /// which the browser resolves to the current page with that literal
+    /// as a relative path — a broken link in either case.
     /// </summary>
     public string? Resolve(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
-        return string.IsNullOrEmpty(BaseUrl)
+        var resolved = string.IsNullOrEmpty(BaseUrl)
             ? raw
             : raw.Replace("{base}", BaseUrl.TrimEnd('/'));
+        if (resolved.Contains("{base}", StringComparison.Ordinal)) return null;
+        return resolved;
     }
 }
 
