@@ -31,6 +31,14 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build-and-test
     runs-on: windows-latest
+    # Gating the job on the "production" GitHub environment causes the
+    # OIDC token issued by GitHub to carry the subject claim
+    #   repo:IT-Consulting-Kinner/Mail2SNMP_Server:environment:production
+    # which the Azure App Registration has a matching Federated Credential
+    # for. This is the canonical workaround for Azure FIC not supporting
+    # wildcards on refs/tags/v* — one credential covers every future release
+    # tag without having to add a new FIC per version.
+    environment: production
     permissions:
       contents: write
       # Azure Trusted Signing uses workload-identity federation; the action
