@@ -338,44 +338,56 @@ public class MailPollingService : BackgroundService
                     var from = message.From?.ToString() ?? string.Empty;
                     var subject = message.Subject ?? string.Empty;
                     var body = message.TextBody ?? message.HtmlBody ?? string.Empty;
+
+                    // O1: build a stable claim key. RFC 5322 makes the Message-ID
+                    // header optional, so a small fraction of mails arrive without
+                    // one. Without a fallback those mails would skip the N3 atomic-
+                    // claim path entirely and a 4-node cluster would re-run rule
+                    // evaluation + notifications four times for each (only the
+                    // duplicate Event would be caught by EventDedup). The synthetic
+                    // key is deterministic across nodes — every node sees the same
+                    // (UID, internal-date) tuple from the same IMAP folder, so the
+                    // ProcessedMails UNIQUE(MessageId, MailboxId) constraint still
+                    // closes the race exactly like the headered case.
                     var messageId = message.MessageId;
+                    var claimKey = !string.IsNullOrEmpty(messageId)
+                        ? messageId
+                        : $"synthetic:{uid}:{message.Date.UtcDateTime:yyyyMMddHHmmss}";
 
-                    // N3: Atomic claim. Previously we did SELECT-then-process-then-INSERT,
-                    // which left a TOCTOU window where two nodes could both pass the SELECT
-                    // and run the entire processing pipeline before the UNIQUE constraint
-                    // tripped on the second INSERT. EventDedup caught the duplicate event
-                    // but rule evaluation, IMAP traffic and notification queueing all ran
-                    // twice. Now we INSERT a placeholder ProcessedMail row FIRST and only
-                    // proceed if the insert succeeded — the loser of the race catches the
-                    // UNIQUE-constraint exception and skips the email entirely.
-                    if (!string.IsNullOrEmpty(messageId))
+                    // N3 + O1: Atomic claim. Previously we did SELECT-then-process-
+                    // then-INSERT, which left a TOCTOU window where two nodes could
+                    // both pass the SELECT and run the entire processing pipeline
+                    // before the UNIQUE constraint tripped on the second INSERT.
+                    // Now we INSERT a placeholder ProcessedMail row FIRST and only
+                    // proceed if the insert succeeded — the loser of the race
+                    // catches the UNIQUE-constraint exception and skips the email
+                    // entirely. The claim key falls back to a synthetic value when
+                    // Message-ID is missing (see above).
+                    dbContext.ProcessedMails.Add(new ProcessedMail
                     {
-                        dbContext.ProcessedMails.Add(new ProcessedMail
-                        {
-                            MessageId = messageId,
-                            MailboxId = mailbox.Id,
-                            From = from,
-                            Subject = subject,
-                            ReceivedUtc = message.Date.UtcDateTime,
-                            ProcessedUtc = DateTime.UtcNow
-                        });
-                        try
-                        {
-                            await dbContext.SaveChangesAsync(ct);
-                        }
-                        catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true)
-                        {
-                            // Another instance already claimed this email — skip without processing.
-                            // Detach the failed-insert entry so the next iteration starts clean.
-                            foreach (var entry in dbContext.ChangeTracker.Entries<ProcessedMail>().ToList())
-                                entry.State = EntityState.Detached;
+                        MessageId = claimKey,
+                        MailboxId = mailbox.Id,
+                        From = from,
+                        Subject = subject,
+                        ReceivedUtc = message.Date.UtcDateTime,
+                        ProcessedUtc = DateTime.UtcNow
+                    });
+                    try
+                    {
+                        await dbContext.SaveChangesAsync(ct);
+                    }
+                    catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true)
+                    {
+                        // Another instance already claimed this email — skip without processing.
+                        // Detach the failed-insert entry so the next iteration starts clean.
+                        foreach (var entry in dbContext.ChangeTracker.Entries<ProcessedMail>().ToList())
+                            entry.State = EntityState.Detached;
 
-                            _logger.LogDebug(
-                                "Email already claimed by another instance (MessageId={MessageId}, Mailbox={Name}). Skipping.",
-                                messageId, mailbox.Name);
-                            await folder.AddFlagsAsync(uid, MessageFlags.Seen, true, ct);
-                            continue;
-                        }
+                        _logger.LogDebug(
+                            "Email already claimed by another instance (ClaimKey={ClaimKey}, Mailbox={Name}). Skipping.",
+                            claimKey, mailbox.Name);
+                        await folder.AddFlagsAsync(uid, MessageFlags.Seen, true, ct);
+                        continue;
                     }
 
                     // Build headers dictionary
