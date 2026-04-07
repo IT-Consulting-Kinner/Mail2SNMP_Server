@@ -33,6 +33,10 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+      # Azure Trusted Signing uses workload-identity federation; the action
+      # exchanges this token for an Azure AD access token. Without id-token:write
+      # the federated credential cannot be issued and signing fails.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -78,6 +82,39 @@ jobs:
           $content = $content -replace 'Version="1\.0\.0\.0"', "Version=`"${{ steps.version.outputs.version_four }}`""
           Set-Content $file $content
 
+      # ── Azure Trusted Signing — binary pre-sign ────────────────────────────
+      # Sign every first-party EXE and DLL in the publish output BEFORE the MSI
+      # is built. Without this the MSI is a signed wrapper around unsigned
+      # binaries, and Defender/SmartScreen rejects the extracted Worker service
+      # on first start even though the MSI itself is trusted. The same Azure
+      # Trusted Signing identity + certificate profile is used for the binaries
+      # and the MSI, so there is only one signer in the final Authenticode
+      # chain.
+      - name: Azure login (OIDC) — for binary signing
+        uses: azure/login@v2
+        with:
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Sign Worker binaries with Azure Trusted Signing
+        uses: azure/trusted-signing-action@v0.5.1
+        with:
+          endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_TRUSTED_SIGNING_PROFILE }}
+          files-folder: ./publish/worker
+          files-folder-filter: exe,dll
+          files-folder-recurse: true
+          # Exclude the hundreds of shared third-party DLLs we don't own. The
+          # regex only matches files whose name starts with "Mail2SNMP." so
+          # Microsoft.*, Serilog.*, MailKit.* etc. stay untouched (they're
+          # already signed by their original publisher).
+          files-folder-filter-regex: '^Mail2SNMP\.'
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
       - name: Restore Installer dependencies
         run: dotnet restore installer/Mail2SNMP.Installer/Mail2SNMP.Installer.wixproj
 
@@ -94,6 +131,37 @@ jobs:
           MSI=$(find installer -name "*.msi" | head -1)
           echo "path=${MSI}" >> "$GITHUB_OUTPUT"
           echo "name=Mail2SNMP-${{ steps.version.outputs.version }}.msi" >> "$GITHUB_OUTPUT"
+
+      # ── Azure Trusted Signing — MSI outer wrapper ─────────────────────────
+      # Re-use the Azure login from the binary pre-sign step above; the access
+      # token is still valid at this point so no second azure/login call is
+      # needed. Sign the MSI as the outer Authenticode wrapper — Defender and
+      # SmartScreen check both the MSI itself and the binaries it installs,
+      # and Wave R/S hardened the binary signing so the whole chain is now
+      # covered end-to-end.
+      - name: Sign MSI with Azure Trusted Signing
+        uses: azure/trusted-signing-action@v0.5.1
+        with:
+          endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_TRUSTED_SIGNING_PROFILE }}
+          files: ${{ steps.msi.outputs.path }}
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Verify MSI signature
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature -FilePath "${{ steps.msi.outputs.path }}"
+          Write-Host "Status:        $($sig.Status)"
+          Write-Host "Signer:        $($sig.SignerCertificate.Subject)"
+          Write-Host "Issuer:        $($sig.SignerCertificate.Issuer)"
+          Write-Host "TimestamperBy: $($sig.TimeStamperCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') {
+            Write-Error "MSI signature is not valid: $($sig.Status) — $($sig.StatusMessage)"
+            exit 1
+          }
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
