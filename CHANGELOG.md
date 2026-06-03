@@ -2,6 +2,50 @@
 
 All notable changes to Mail2SNMP Server. Entries are grouped by **release** and by the development **waves** that made up each release. Each wave fixes the findings of a multi-agent comprehensive code review of the previous wave; the wave pattern is documented in the repo's development history.
 
+## 1.0.1 — 2026-04-07 (Security)
+
+Security patch addressing 10 findings from a fresh independent audit (Wave V).
+**All deployments of 1.0.0 should upgrade.** Two of the findings are HIGH-severity
+access-control gaps in the management UI.
+
+- **V1 [HIGH]** Broken access control: seven write-capable Blazor pages
+  (Mailboxes, Rules, Jobs, Schedules, SNMP Targets, Webhook Targets, Dead
+  Letters) lacked an `[Authorize]` attribute, so a **ReadOnly** user could
+  create/edit/delete configuration and trigger dead-letter retries through the
+  UI — operations the REST API restricts to Admin/Operator. Fixed with
+  page-level authorization, role-gated buttons (`AuthorizeView`), and
+  server-side role guards in every mutating handler, mirroring the API's
+  per-operation policy model.
+- **V2 [HIGH]** Deactivated users (`IsActive = false`) could still authenticate
+  and existing sessions kept working, because `IsActive` was never enforced.
+  Login now rejects inactive accounts and a cookie `OnValidatePrincipal`
+  terminates live sessions of disabled/deleted users.
+- **V3 [MEDIUM]** SSRF guard was bypassable via DNS rebinding (TOCTOU). Outbound
+  webhook/update HTTP clients now resolve once and pin the socket to the
+  validated IP via a guarded `SocketsHttpHandler` connect callback.
+- **V4 [MEDIUM]** Master-key file ACL now also grants the running service
+  identity, and the docs recommend running the Worker under a least-privilege
+  virtual service account instead of LocalSystem.
+- **V5 [MEDIUM]** CSV formula injection: Events/AuditLog/DeadLetters exports now
+  neutralize leading `= + - @ TAB CR` before RFC4180 quoting.
+- **V6 [MEDIUM]** Dead-letter webhook retries are now HMAC-signed identically to
+  first-attempt deliveries (Enterprise), so receivers enforcing signature
+  verification no longer reject retries.
+- **V7 [LOW]** Login user-enumeration timing oracle equalized with a dummy hash.
+- **V8 [LOW]** Untrusted email subject/from/body are bounded (500 / 256 / 1 MB)
+  before rule evaluation and storage (SQLite ignores column length caps).
+- **V9 [LOW]** Master-key file permissions are re-tightened on load, not only on
+  creation.
+- **V10 [LOW]** CLI warns when a password is passed via `--password`; `.gitignore`
+  now excludes `master.key`, `*.key`, `*.pem`.
+
+Verified clean (no change needed): JWT license validation (RS256 pinned, no
+algorithm-confusion or kid/jku abuse), SQL parameterization, template-engine
+JSON escaping (no SSTI), ReDoS timeout, absence of `MarkupString`/XSS, no secret
+logging, no DI captive dependencies, IMAP TLS validated by default.
+
+Build clean; 104/104 unit tests pass.
+
 ## 1.0.0 — 2026-04-07
 
 **First public release** of Mail2SNMP Server — a Windows service that converts incoming email into SNMP traps and webhook notifications based on operator-defined rules, with a Blazor Server management UI and a REST API for automation.
