@@ -33,6 +33,11 @@ docs/api/
 tools/license_signing_key.pem
 tools/Mail2SNMP_Server_LicGen/
 license.key
+# V10: never let a master key or any *.key / *.pem land in the repo, e.g. if an
+# operator runs `credentials rotate-key --new-key-file ./master.key` from the tree.
+master.key
+*.key
+*.pem
 
 # Local tooling
 .claude/

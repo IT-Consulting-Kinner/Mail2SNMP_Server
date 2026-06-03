@@ -21,6 +21,12 @@ public static class MasterKeyProvider
         if (File.Exists(keyFilePath))
         {
             logger.LogInformation("Loading master key from {Path}", keyFilePath);
+            // V9: re-apply restrictive permissions on every load. A key file
+            // restored from backup, copied manually, or written by an older
+            // build may carry loose/inherited ACLs; re-tightening here is
+            // idempotent and ensures the on-disk key is always locked down even
+            // if it was not created by this process.
+            SetRestrictivePermissions(keyFilePath, logger);
             return File.ReadAllBytes(keyFilePath);
         }
 
@@ -95,8 +101,32 @@ public static class MasterKeyProvider
             FileSystemRights.FullControl,
             AccessControlType.Allow));
 
+        // V4: also grant the current process identity. The service ships running
+        // as LocalSystem (covered by the SYSTEM rule), but operators are
+        // encouraged to run it under a least-privilege virtual service account
+        // (e.g. "NT SERVICE\\Mail2SnmpWorker") — see docs/articles/security.
+        // Granting the running identity here means the key file stays readable
+        // by the service after such a change, instead of locking the service out
+        // of its own key (which would otherwise require a manual ACL edit).
+        try
+        {
+            using var current = WindowsIdentity.GetCurrent();
+            if (current.User is not null &&
+                current.User.Value != new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null).Value)
+            {
+                security.AddAccessRule(new FileSystemAccessRule(
+                    current.User,
+                    FileSystemRights.FullControl,
+                    AccessControlType.Allow));
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Could not add current identity to master key ACL (non-fatal).");
+        }
+
         fileInfo.SetAccessControl(security);
-        logger.LogInformation("Master key file ACL set: SYSTEM + Administrators only");
+        logger.LogInformation("Master key file ACL set: SYSTEM + Administrators + service identity only");
     }
 
     /// <summary>

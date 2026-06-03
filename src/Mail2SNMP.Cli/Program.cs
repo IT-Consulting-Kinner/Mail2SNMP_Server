@@ -243,6 +243,11 @@ public class Program
                 if (args[i] == "--display-name") displayName = args[i + 1];
                 if (args[i] == "--password") cliPassword = args[i + 1];
             }
+            // V10: passing a password as a command-line argument leaks it into
+            // shell history and the process list. Warn and recommend the masked
+            // interactive prompt (omit --password to be prompted securely).
+            if (cliPassword is not null)
+                Console.Error.WriteLine("WARNING: --password on the command line is visible in shell history and process listings. Omit it to be prompted securely.");
 
             // Interactive prompts for missing values
             if (string.IsNullOrWhiteSpace(email))
@@ -356,6 +361,9 @@ public class Program
                 if (args[i] == "--email") email = args[i + 1];
                 if (args[i] == "--password") cliPw = args[i + 1];
             }
+            // V10: see create-admin — discourage password-on-command-line.
+            if (cliPw is not null)
+                Console.Error.WriteLine("WARNING: --password on the command line is visible in shell history and process listings. Omit it to be prompted securely.");
 
             if (string.IsNullOrWhiteSpace(email))
             {
@@ -664,6 +672,9 @@ public class Program
         }
         // Handle --no-ssl as a standalone flag (no value)
         if (args.Contains("--no-ssl")) useSsl = false;
+        // V10: discourage mailbox password on the command line.
+        if (password is not null)
+            Console.Error.WriteLine("WARNING: --password on the command line is visible in shell history and process listings. Omit it to be prompted securely.");
 
         // Interactive prompts for missing values
         if (string.IsNullOrWhiteSpace(name))

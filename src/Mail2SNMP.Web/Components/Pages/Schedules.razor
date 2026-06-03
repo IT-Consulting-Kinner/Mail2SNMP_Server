@@ -1,5 +1,6 @@
 @page "/schedules"
 @rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "ReadOnly")]
 @inject IScheduleService ScheduleService
 @inject IJobService JobService
 @inject IJSRuntime JS
@@ -10,7 +11,9 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Schedules <HelpLink Url="@Help.Value.Schedules" /></h3>
-    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm"><i class="bi bi-plus-circle"></i> Add Schedule</button>
+    <AuthorizeView Policy="Admin"><Authorized>
+        <button class="btn btn-primary btn-sm" @onclick="ShowAddForm"><i class="bi bi-plus-circle"></i> Add Schedule</button>
+    </Authorized></AuthorizeView>
 </div>
 
 <AutoDismissAlert Type="danger"  @bind-Message="_error" />
@@ -53,8 +56,12 @@ else
     {
         <div class="alert alert-secondary d-flex align-items-center py-2 mb-2">
             <span class="me-3"><strong>@_selected.Count</strong> selected</span>
-            <button class="btn btn-sm btn-outline-warning me-1" @onclick="BulkToggle" disabled="@_busy"><i class="bi bi-toggle-on"></i> Toggle</button>
-            <button class="btn btn-sm btn-outline-danger me-1" @onclick="BulkDelete" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
+            <AuthorizeView Policy="Operator"><Authorized>
+                <button class="btn btn-sm btn-outline-warning me-1" @onclick="BulkToggle" disabled="@_busy"><i class="bi bi-toggle-on"></i> Toggle</button>
+            </Authorized></AuthorizeView>
+            <AuthorizeView Policy="Admin"><Authorized>
+                <button class="btn btn-sm btn-outline-danger me-1" @onclick="BulkDelete" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
+            </Authorized></AuthorizeView>
             <button class="btn btn-sm btn-outline-secondary ms-auto" @onclick="() => _selected.Clear()">Clear selection</button>
         </div>
     }
@@ -94,9 +101,15 @@ else
                     <td>@(s.NextRunUtc?.ToString("g") ?? "N/A")</td>
                     <td>@(s.LastRunUtc?.ToString("g") ?? "Never")</td>
                     <td>
-                        <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(s)" disabled="@_busy"><i class="bi bi-pencil"></i> Edit</button>
-                        <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => Toggle(s.Id)" disabled="@_busy"><i class="bi bi-toggle-on"></i> Toggle</button>
-                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(s.Id)" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
+                        <AuthorizeView Policy="Admin"><Authorized>
+                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(s)" disabled="@_busy"><i class="bi bi-pencil"></i> Edit</button>
+                        </Authorized></AuthorizeView>
+                        <AuthorizeView Policy="Operator"><Authorized>
+                            <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => Toggle(s.Id)" disabled="@_busy"><i class="bi bi-toggle-on"></i> Toggle</button>
+                        </Authorized></AuthorizeView>
+                        <AuthorizeView Policy="Admin"><Authorized>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(s.Id)" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
+                        </Authorized></AuthorizeView>
                     </td>
                 </tr>
             }
@@ -158,6 +171,9 @@ else
 }
 
 @code {
+    // V1: server-side authorization guards (config CRUD = Admin, toggle = Operator).
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
     private IReadOnlyList<Schedule>? _schedules;
     private IReadOnlyList<Job>? _jobs;
     private bool _showForm;
@@ -185,6 +201,7 @@ else
     private async Task BulkToggle()
     {
         if (_busy || _selected.Count == 0) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin", "Operator")) { _error = "Operator role required."; return; }
         _busy = true;
         try
         {
@@ -201,6 +218,7 @@ else
     private async Task BulkDelete()
     {
         if (_busy || _selected.Count == 0) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin")) { _error = "Administrator role required."; return; }
         if (!await Confirm.AskAsync($"Delete {_selected.Count} schedule(s)? This cannot be undone."))
             return;
         _busy = true;
@@ -261,6 +279,7 @@ else
     private async Task Save()
     {
         if (_busy) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin")) { _error = "Administrator role required."; return; }
         _busy = true;
         try
         {
@@ -291,6 +310,7 @@ else
     private async Task Toggle(int id)
     {
         if (_busy) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin", "Operator")) { _error = "Operator role required."; return; }
         _busy = true;
         try { await ScheduleService.ToggleAsync(id); _success = "Schedule toggled."; await LoadData(); }
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "toggling the item"); }
@@ -301,6 +321,7 @@ else
     {
         // Q1: see Jobs.Delete — _busy must be set BEFORE the confirm dialog.
         if (_busy) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin")) { _error = "Administrator role required."; return; }
         _busy = true;
         try
         {

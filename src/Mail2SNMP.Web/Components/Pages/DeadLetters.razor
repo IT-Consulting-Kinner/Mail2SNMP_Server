@@ -1,5 +1,6 @@
 @page "/dead-letters"
 @rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "Operator")]
 @inject IDeadLetterService DeadLetterService
 @inject IJSRuntime JS
 @inject ConfirmService Confirm
@@ -81,7 +82,9 @@ else
 <nav class="d-flex justify-content-between align-items-center" aria-label="Pagination">
     <div>
         <small class="text-muted me-3">Showing @((_currentPage - 1) * _pageSize + 1)–@Math.Min(_currentPage * _pageSize, _entries.Count) of @_entries.Count entries</small>
-        <button class="btn btn-warning btn-sm" @onclick="RetryAll" disabled="@_busy">Retry All Pending</button>
+        <AuthorizeView Policy="Admin"><Authorized>
+            <button class="btn btn-warning btn-sm" @onclick="RetryAll" disabled="@_busy">Retry All Pending</button>
+        </Authorized></AuthorizeView>
     </div>
     @if (totalPages > 1)
     {
@@ -99,6 +102,9 @@ else
 }
 
 @code {
+    // V1: page floor is Operator; Retry-All is Admin (mirrors the REST API).
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
     private IReadOnlyList<DeadLetterEntry>? _entries;
     private string? _error;
     private string? _success;
@@ -133,6 +139,7 @@ else
     private async Task RetryAll()
     {
         if (_busy) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin")) { _error = "Administrator role required."; return; }
         var pending = _entries?.Count(e => e.Status == DeadLetterStatus.Pending) ?? 0;
         if (pending == 0)
         {
@@ -186,13 +193,8 @@ else
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "exporting dead letters"); }
     }
 
-    private static string Csv(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        if (value.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0)
-            return "\"" + value.Replace("\"", "\"\"") + "\"";
-        return value;
-    }
+    // V5: shared helper also neutralizes spreadsheet formula injection.
+    private static string Csv(string? value) => CsvCell.Quote(value);
 
     private static string GetStatusColor(DeadLetterStatus s) => s switch
     {

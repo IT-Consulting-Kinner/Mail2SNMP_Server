@@ -170,12 +170,7 @@ else
         }
     }
 
-    // RFC4180-style minimal CSV quoting: escape quotes by doubling, wrap if comma/quote/newline present.
-    private static string Csv(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        var needsQuote = value.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0;
-        var escaped = value.Replace("\"", "\"\"");
-        return needsQuote ? $"\"{escaped}\"" : escaped;
-    }
+    // V5: delegate to the shared helper which also neutralizes spreadsheet
+    // formula injection (leading = + - @ TAB CR) in addition to RFC4180 quoting.
+    private static string Csv(string? value) => CsvCell.Quote(value);
 }

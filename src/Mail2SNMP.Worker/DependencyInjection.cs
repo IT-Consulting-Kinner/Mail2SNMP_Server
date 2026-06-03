@@ -82,8 +82,16 @@ public static class WorkerDependencyInjection
         // Named HttpClients for worker background services. Using named clients allows
         // the IHttpClientFactory to manage handler lifetimes correctly and avoids the
         // anti-pattern of creating one HttpClient per call (socket exhaustion).
-        services.AddHttpClient("DeadLetterRetry", c => c.Timeout = TimeSpan.FromSeconds(30));
-        services.AddHttpClient("UpdateCheck", c => c.Timeout = TimeSpan.FromSeconds(15));
+        //
+        // V3: SSRF-guarded handlers (connect-time IP validation + pinning).
+        // - DeadLetterRetry honors the webhook private-target opt-out.
+        // - UpdateCheck never permits private targets: the update feed is a
+        //   public vendor endpoint, so allowPrivate is hard-false.
+        var allowPrivateWebhook = configuration.GetValue<bool>("Security:AllowPrivateWebhookTargets");
+        services.AddHttpClient("DeadLetterRetry", c => c.Timeout = TimeSpan.FromSeconds(30))
+            .ConfigurePrimaryHttpMessageHandler(() => Mail2SNMP.Infrastructure.Security.SsrfGuard.CreateGuardedHandler(allowPrivateWebhook));
+        services.AddHttpClient("UpdateCheck", c => c.Timeout = TimeSpan.FromSeconds(15))
+            .ConfigurePrimaryHttpMessageHandler(() => Mail2SNMP.Infrastructure.Security.SsrfGuard.CreateGuardedHandler(allowPrivate: false));
 
         // Hosted services
         services.AddHostedService<HeartbeatService>();

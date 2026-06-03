@@ -70,6 +70,26 @@ try
         options.ExpireTimeSpan = TimeSpan.FromMinutes(60);
         options.LoginPath = "/login";
         options.AccessDeniedPath = "/access-denied";
+
+        // V2: terminate live sessions of deactivated users. IsActive is a custom
+        // property unknown to ASP.NET Identity, so the default pipeline ignores
+        // it. On every request we revalidate the principal: if the backing user
+        // has been disabled (or deleted) since the cookie was issued, reject the
+        // principal and force a fresh sign-in. Validation is throttled to once
+        // per 30s per cookie so this is not a per-request DB hit.
+        options.Events.OnValidatePrincipal = async context =>
+        {
+            var userId = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId)) return;
+            var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager<AppUser>>();
+            var user = await userManager.FindByIdAsync(userId);
+            if (user is null || !user.IsActive)
+            {
+                context.RejectPrincipal();
+                var signInManager = context.HttpContext.RequestServices.GetRequiredService<SignInManager<AppUser>>();
+                await signInManager.SignOutAsync();
+            }
+        };
     });
 
     // Server-side session store: stores the full auth ticket in the DB so the cookie stays small.
@@ -456,6 +476,12 @@ try
             : Results.NotFound();
     }).AllowAnonymous();
 
+    // V7: precompute a dummy PBKDF2 hash once at startup. The login handler
+    // verifies an attacker-supplied password against this on the unknown-user
+    // path so its timing matches the known-user path (anti-enumeration).
+    var timingHasher = new PasswordHasher<AppUser>();
+    var dummyPasswordHash = timingHasher.HashPassword(new AppUser(), "timing-equalization-dummy");
+
     // Login endpoint (form POST from Login.razor)
     app.MapPost("/account/login", async (
         HttpContext httpContext,
@@ -470,16 +496,35 @@ try
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
             return Results.Redirect("/login?error=missing");
 
-        var user = await userManager.FindByEmailAsync(email);
-        if (user is null)
-            return Results.Redirect("/login?error=invalid");
-
-        var result = await signInManager.PasswordSignInAsync(
-            user, password, rememberMe, lockoutOnFailure: true);
-
         // Capture client context for audit trail
         var clientIp = httpContext.Connection.RemoteIpAddress?.ToString();
         var clientAgent = httpContext.Request.Headers.UserAgent.ToString();
+
+        var user = await userManager.FindByEmailAsync(email);
+        if (user is null)
+        {
+            // V7: equalize timing against the valid-user path. Without this, an
+            // unknown email returns immediately while a known email runs the full
+            // PBKDF2 verification, yielding a measurable user-enumeration oracle.
+            // Hashing a throwaway password against a dummy hash burns comparable
+            // CPU so both branches take similar time. The result is discarded.
+            timingHasher.VerifyHashedPassword(new AppUser(), dummyPasswordHash, password);
+            return Results.Redirect("/login?error=invalid");
+        }
+
+        // V2: a deactivated account must not be able to authenticate, even with
+        // the correct password. Surfaces as the same generic "invalid" message
+        // path semantics but with its own error code for a clearer hint.
+        if (!user.IsActive)
+        {
+            var auditInactive = httpContext.RequestServices.GetRequiredService<IAuditService>();
+            await auditInactive.LogAsync(ActorType.System, email, "User.LoginInactive", "User", user.Id,
+                result: AuditResult.Failure, ipAddress: clientIp, userAgent: clientAgent, ct: default);
+            return Results.Redirect("/login?error=inactive");
+        }
+
+        var result = await signInManager.PasswordSignInAsync(
+            user, password, rememberMe, lockoutOnFailure: true);
 
         if (result.Succeeded)
         {

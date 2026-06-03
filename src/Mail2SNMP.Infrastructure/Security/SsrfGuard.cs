@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 
 namespace Mail2SNMP.Infrastructure.Security;
@@ -94,6 +95,68 @@ public static class SsrfGuard
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// V3: Builds a <see cref="SocketsHttpHandler"/> whose ConnectCallback
+    /// resolves the target host once and connects directly to that validated IP
+    /// address. This eliminates the DNS-rebinding TOCTOU window: the pre-flight
+    /// <see cref="IsSafeOutboundUrl"/> check and HttpClient's own resolution used
+    /// to be two independent DNS lookups, so an attacker controlling DNS with a
+    /// low TTL could return a public IP to the guard and a private one (e.g. the
+    /// cloud metadata endpoint) to the actual request. Now there is exactly one
+    /// resolution, it is validated, and the socket is pinned to it.
+    /// </summary>
+    public static SocketsHttpHandler CreateGuardedHandler(bool allowPrivate)
+    {
+        return new SocketsHttpHandler
+        {
+            // Keep the platform defaults for pooling/redirects; only override how
+            // the underlying TCP connection is established.
+            ConnectCallback = async (context, cancellationToken) =>
+            {
+                var host = context.DnsEndPoint.Host;
+                var port = context.DnsEndPoint.Port;
+
+                IPAddress[] addresses;
+                try
+                {
+                    addresses = await Dns.GetHostAddressesAsync(host, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    throw new HttpRequestException($"SSRF guard: DNS resolution for '{host}' failed.", ex);
+                }
+
+                if (addresses.Length == 0)
+                    throw new HttpRequestException($"SSRF guard: host '{host}' resolved to no addresses.");
+
+                // Reject if ANY resolved address is private (matches IsSafeOutboundUrl).
+                if (!allowPrivate)
+                {
+                    foreach (var probe in addresses)
+                        if (IsPrivate(probe))
+                            throw new HttpRequestException(
+                                $"SSRF guard: refusing to connect — host '{host}' resolves to a " +
+                                $"private/loopback/link-local address ({probe}).");
+                }
+
+                // Pin the connection to a resolved-and-validated address so the OS
+                // does not perform a second (rebind-vulnerable) resolution.
+                var target = addresses[0];
+                var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+                try
+                {
+                    await socket.ConnectAsync(target, port, cancellationToken);
+                    return new NetworkStream(socket, ownsSocket: true);
+                }
+                catch
+                {
+                    socket.Dispose();
+                    throw;
+                }
+            }
+        };
     }
 
     /// <summary>

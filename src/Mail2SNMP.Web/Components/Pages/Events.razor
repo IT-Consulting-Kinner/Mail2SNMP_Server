@@ -1,5 +1,6 @@
 @page "/events"
 @rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "ReadOnly")]
 @inject IEventService EventService
 @inject IJSRuntime JS
 @inject IOptions<HelpSettings> Help
@@ -75,19 +76,27 @@ else
                     <td>@evt.HitCount</td>
                     <td class="small">@evt.CreatedUtc.ToString("g")</td>
                     <td>
-                        @if (evt.State == EventState.New || evt.State == EventState.Notified)
-                        {
-                            <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => Acknowledge(evt.Id)" disabled="@_busy"><i class="bi bi-check"></i> Ack</button>
-                        }
-                        @if (evt.State != EventState.Resolved && evt.State != EventState.Suppressed)
-                        {
-                            <button class="btn btn-outline-success btn-sm me-1" @onclick="() => Resolve(evt.Id)" disabled="@_busy"><i class="bi bi-check2-all"></i> Resolve</button>
-                        }
-                        @if (evt.State != EventState.Suppressed)
-                        {
-                            <button class="btn btn-outline-secondary btn-sm me-1" @onclick="() => Suppress(evt.Id)" disabled="@_busy"><i class="bi bi-volume-mute"></i> Suppress</button>
-                        }
-                        <button class="btn btn-outline-info btn-sm" @onclick="() => Replay(evt.Id)" disabled="@_busy"><i class="bi bi-arrow-clockwise"></i> Replay</button>
+                        @* V1: Ack/Resolve/Replay are Operator actions, Suppress is Admin —
+                           mirroring the REST API's per-operation policies. *@
+                        <AuthorizeView Policy="Operator"><Authorized>
+                            @if (evt.State == EventState.New || evt.State == EventState.Notified)
+                            {
+                                <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => Acknowledge(evt.Id)" disabled="@_busy"><i class="bi bi-check"></i> Ack</button>
+                            }
+                            @if (evt.State != EventState.Resolved && evt.State != EventState.Suppressed)
+                            {
+                                <button class="btn btn-outline-success btn-sm me-1" @onclick="() => Resolve(evt.Id)" disabled="@_busy"><i class="bi bi-check2-all"></i> Resolve</button>
+                            }
+                        </Authorized></AuthorizeView>
+                        <AuthorizeView Policy="Admin"><Authorized>
+                            @if (evt.State != EventState.Suppressed)
+                            {
+                                <button class="btn btn-outline-secondary btn-sm me-1" @onclick="() => Suppress(evt.Id)" disabled="@_busy"><i class="bi bi-volume-mute"></i> Suppress</button>
+                            }
+                        </Authorized></AuthorizeView>
+                        <AuthorizeView Policy="Operator"><Authorized>
+                            <button class="btn btn-outline-info btn-sm" @onclick="() => Replay(evt.Id)" disabled="@_busy"><i class="bi bi-arrow-clockwise"></i> Replay</button>
+                        </Authorized></AuthorizeView>
                     </td>
                 </tr>
             }
@@ -112,6 +121,9 @@ else
 }
 
 @code {
+    // V1: server-side authorization guards. Ack/Resolve/Replay = Operator, Suppress = Admin.
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
     private IReadOnlyList<Event>? _events;
     private EventState? _stateFilter;
     private string? _error;
@@ -145,11 +157,21 @@ else
         await LoadData();
     }
 
+    // V1: resolve the real signed-in username for the audit actor instead of the
+    // hard-coded "web-user", so acknowledge/resolve actions are attributable.
+    private async Task<string> CurrentUserAsync()
+    {
+        if (AuthState is null) return "web-user";
+        var state = await AuthState;
+        return state.User.Identity?.Name ?? "web-user";
+    }
+
     private async Task Acknowledge(long id)
     {
         if (_busy) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin", "Operator")) { _error = "Operator role required."; return; }
         _busy = true;
-        try { await EventService.AcknowledgeAsync(id, "web-user"); _success = "Event acknowledged."; await LoadData(); }
+        try { await EventService.AcknowledgeAsync(id, await CurrentUserAsync()); _success = "Event acknowledged."; await LoadData(); }
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "the operation"); }
         finally { _busy = false; }
     }
@@ -157,8 +179,9 @@ else
     private async Task Resolve(long id)
     {
         if (_busy) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin", "Operator")) { _error = "Operator role required."; return; }
         _busy = true;
-        try { await EventService.ResolveAsync(id, "web-user"); _success = "Event resolved."; await LoadData(); }
+        try { await EventService.ResolveAsync(id, await CurrentUserAsync()); _success = "Event resolved."; await LoadData(); }
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "the operation"); }
         finally { _busy = false; }
     }
@@ -166,6 +189,7 @@ else
     private async Task Suppress(long id)
     {
         if (_busy) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin")) { _error = "Administrator role required."; return; }
         _busy = true;
         try { await EventService.SuppressAsync(id); _success = "Event suppressed."; await LoadData(); }
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "the operation"); }
@@ -175,6 +199,7 @@ else
     private async Task Replay(long id)
     {
         if (_busy) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin", "Operator")) { _error = "Operator role required."; return; }
         _busy = true;
         try { await EventService.ReplayAsync(id); _success = "Event replayed."; await LoadData(); }
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "the operation"); }
@@ -209,13 +234,7 @@ else
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "exporting events"); }
     }
 
-    private static string Csv(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        if (value.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0)
-            return "\"" + value.Replace("\"", "\"\"") + "\"";
-        return value;
-    }
+    private static string Csv(string? value) => CsvCell.Quote(value);
 
     private static string GetStateColor(EventState s) => s switch
     {

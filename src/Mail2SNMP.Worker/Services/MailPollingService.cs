@@ -335,9 +335,19 @@ public class MailPollingService : BackgroundService
                 {
                     var message = await folder.GetMessageAsync(uid, ct);
 
-                    var from = message.From?.ToString() ?? string.Empty;
-                    var subject = message.Subject ?? string.Empty;
-                    var body = message.TextBody ?? message.HtmlBody ?? string.Empty;
+                    // V8: bound untrusted email fields before they reach rule
+                    // evaluation, the database, the UI and CSV exports. The DB
+                    // column lengths (HasMaxLength) are a no-op on SQLite, so an
+                    // attacker could otherwise store a multi-megabyte subject.
+                    // 500/256 match the SQL Server column caps; the body is bounded
+                    // to 1 MB for rule matching to prevent memory blow-up on a
+                    // crafted giant message.
+                    const int MaxSubjectChars = 500;
+                    const int MaxFromChars = 256;
+                    const int MaxBodyChars = 1_048_576;
+                    var from = Truncate(message.From?.ToString() ?? string.Empty, MaxFromChars);
+                    var subject = Truncate(message.Subject ?? string.Empty, MaxSubjectChars);
+                    var body = Truncate(message.TextBody ?? message.HtmlBody ?? string.Empty, MaxBodyChars);
 
                     // O1: build a stable claim key. RFC 5322 makes the Message-ID
                     // header optional, so a small fraction of mails arrive without
@@ -581,4 +591,9 @@ public class MailPollingService : BackgroundService
             }
         }
     }
+
+    // V8: hard cap on untrusted string length. Returns the input unchanged when
+    // within the limit, otherwise the first <paramref name="max"/> characters.
+    private static string Truncate(string value, int max)
+        => string.IsNullOrEmpty(value) || value.Length <= max ? value : value[..max];
 }

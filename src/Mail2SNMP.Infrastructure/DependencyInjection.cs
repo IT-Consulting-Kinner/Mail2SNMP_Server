@@ -33,8 +33,16 @@ public static class DependencyInjection
         // IHttpClientFactory so we never create raw HttpClient instances.
         // - "WebhookTest"  : short timeout for the manual "Test" button (10 s)
         // - "WebhookSend"  : production timeout for fire-and-forget delivery (30 s)
-        services.AddHttpClient("WebhookTest", c => c.Timeout = TimeSpan.FromSeconds(10));
-        services.AddHttpClient("WebhookSend", c => c.Timeout = TimeSpan.FromSeconds(30));
+        //
+        // V3: both clients use an SSRF-guarded SocketsHttpHandler. The handler's
+        // ConnectCallback resolves the host once and connects to that validated
+        // IP — closing the DNS-rebinding TOCTOU window where the pre-flight
+        // SsrfGuard check and the HttpClient's own resolution could disagree.
+        var allowPrivateWebhook = configuration.GetValue<bool>("Security:AllowPrivateWebhookTargets");
+        services.AddHttpClient("WebhookTest", c => c.Timeout = TimeSpan.FromSeconds(10))
+            .ConfigurePrimaryHttpMessageHandler(() => Security.SsrfGuard.CreateGuardedHandler(allowPrivateWebhook));
+        services.AddHttpClient("WebhookSend", c => c.Timeout = TimeSpan.FromSeconds(30))
+            .ConfigurePrimaryHttpMessageHandler(() => Security.SsrfGuard.CreateGuardedHandler(allowPrivateWebhook));
 
         // Database with automatic CRUD audit interceptor (v5.8)
         var dbSettings = configuration.GetSection("Database").Get<DatabaseSettings>() ?? new DatabaseSettings();

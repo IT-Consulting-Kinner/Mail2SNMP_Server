@@ -1,5 +1,6 @@
 @page "/webhook-targets"
 @rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "ReadOnly")]
 @inject IWebhookTargetService WebhookTargetService
 @inject IJSRuntime JS
 @inject ConfirmService Confirm
@@ -9,7 +10,9 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Webhook Targets <HelpLink Url="@Help.Value.WebhookTargets" /></h3>
-    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm"><i class="bi bi-plus-circle"></i> Add Target</button>
+    <AuthorizeView Policy="Admin"><Authorized>
+        <button class="btn btn-primary btn-sm" @onclick="ShowAddForm"><i class="bi bi-plus-circle"></i> Add Target</button>
+    </Authorized></AuthorizeView>
 </div>
 
 <AutoDismissAlert Type="danger"  @bind-Message="_error" />
@@ -52,9 +55,11 @@ else
     {
         <div class="alert alert-secondary d-flex align-items-center py-2 mb-2">
             <span class="me-3"><strong>@_selected.Count</strong> selected</span>
-            <button class="btn btn-sm btn-outline-success me-1" @onclick="BulkActivate" disabled="@_busy"><i class="bi bi-check-circle"></i> Activate</button>
-            <button class="btn btn-sm btn-outline-secondary me-1" @onclick="BulkDeactivate" disabled="@_busy"><i class="bi bi-pause-circle"></i> Deactivate</button>
-            <button class="btn btn-sm btn-outline-danger me-1" @onclick="BulkDelete" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
+            <AuthorizeView Policy="Admin"><Authorized>
+                <button class="btn btn-sm btn-outline-success me-1" @onclick="BulkActivate" disabled="@_busy"><i class="bi bi-check-circle"></i> Activate</button>
+                <button class="btn btn-sm btn-outline-secondary me-1" @onclick="BulkDeactivate" disabled="@_busy"><i class="bi bi-pause-circle"></i> Deactivate</button>
+                <button class="btn btn-sm btn-outline-danger me-1" @onclick="BulkDelete" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
+            </Authorized></AuthorizeView>
             <button class="btn btn-sm btn-outline-secondary ms-auto" @onclick="() => _selected.Clear()">Clear selection</button>
         </div>
     }
@@ -92,9 +97,15 @@ else
                     <td><span class="badge @(t.IsActive ? "bg-success" : "bg-secondary")">@(t.IsActive ? "Active" : "Inactive")</span></td>
                     <td>@t.CreatedUtc.ToString("g")</td>
                     <td>
-                        <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(t)" disabled="@_busy"><i class="bi bi-pencil"></i> Edit</button>
-                        <button class="btn btn-outline-info btn-sm me-1" @onclick="() => Test(t.Id)" disabled="@_busy"><i class="bi bi-flask"></i> Test</button>
-                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(t.Id)" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
+                        <AuthorizeView Policy="Admin"><Authorized>
+                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(t)" disabled="@_busy"><i class="bi bi-pencil"></i> Edit</button>
+                        </Authorized></AuthorizeView>
+                        <AuthorizeView Policy="Operator"><Authorized>
+                            <button class="btn btn-outline-info btn-sm me-1" @onclick="() => Test(t.Id)" disabled="@_busy"><i class="bi bi-flask"></i> Test</button>
+                        </Authorized></AuthorizeView>
+                        <AuthorizeView Policy="Admin"><Authorized>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(t.Id)" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
+                        </Authorized></AuthorizeView>
                     </td>
                 </tr>
             }
@@ -164,6 +175,9 @@ else
 }
 
 @code {
+    // V1: server-side authorization guards.
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
     private IReadOnlyList<WebhookTarget>? _targets;
     private bool _showForm;
     private WebhookTarget? _editing;
@@ -193,6 +207,7 @@ else
     private async Task BulkSetActive(bool active)
     {
         if (_busy || _selected.Count == 0) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin")) { _error = "Administrator role required."; return; }
         _busy = true;
         try
         {
@@ -212,6 +227,7 @@ else
     private async Task BulkDelete()
     {
         if (_busy || _selected.Count == 0) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin")) { _error = "Administrator role required."; return; }
         if (!await Confirm.AskAsync($"Delete {_selected.Count} webhook target(s)? This cannot be undone."))
             return;
         _busy = true;
@@ -276,6 +292,7 @@ else
     private async Task Save()
     {
         if (_busy) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin")) { _error = "Administrator role required."; return; }
         _busy = true;
         try
         {
@@ -309,6 +326,7 @@ else
     private async Task Test(int id)
     {
         if (_busy) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin", "Operator")) { _error = "Operator role required."; return; }
         _busy = true;
         _success = null;
         _error = null;
@@ -326,6 +344,7 @@ else
     {
         // Q1: see Jobs.Delete — _busy must be set BEFORE the confirm dialog.
         if (_busy) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin")) { _error = "Administrator role required."; return; }
         _busy = true;
         try
         {

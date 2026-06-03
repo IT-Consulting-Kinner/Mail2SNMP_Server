@@ -1,5 +1,6 @@
 @page "/jobs"
 @rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "ReadOnly")]
 @inject IJobService JobService
 @inject IMailboxService MailboxService
 @inject IRuleService RuleService
@@ -13,7 +14,9 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Jobs <HelpLink Url="@Help.Value.Jobs" /></h3>
-    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm"><i class="bi bi-plus-circle"></i> Add Job</button>
+    <AuthorizeView Policy="Admin"><Authorized>
+        <button class="btn btn-primary btn-sm" @onclick="ShowAddForm"><i class="bi bi-plus-circle"></i> Add Job</button>
+    </Authorized></AuthorizeView>
 </div>
 
 <AutoDismissAlert Type="danger"  @bind-Message="_error" />
@@ -104,9 +107,15 @@ else
                     <td>@job.DedupWindowMinutes</td>
                     <td><span class="badge @(job.IsActive ? "bg-success" : "bg-secondary")">@(job.IsActive ? "Active" : "Inactive")</span></td>
                     <td>
-                        <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(job)" disabled="@_busy"><i class="bi bi-pencil"></i> Edit</button>
-                        <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => DryRun(job.Id)" disabled="@_busy"><i class="bi bi-play-circle"></i> Dry Run</button>
-                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(job.Id)" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
+                        <AuthorizeView Policy="Admin"><Authorized>
+                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(job)" disabled="@_busy"><i class="bi bi-pencil"></i> Edit</button>
+                        </Authorized></AuthorizeView>
+                        <AuthorizeView Policy="Operator"><Authorized>
+                            <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => DryRun(job.Id)" disabled="@_busy"><i class="bi bi-play-circle"></i> Dry Run</button>
+                        </Authorized></AuthorizeView>
+                        <AuthorizeView Policy="Admin"><Authorized>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(job.Id)" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
+                        </Authorized></AuthorizeView>
                     </td>
                 </tr>
             }
@@ -326,6 +335,9 @@ else
 }
 
 @code {
+    // V1: server-side authorization guards (config CRUD = Admin, DryRun = Operator).
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
     private IReadOnlyList<Job>? _jobs;
     private IReadOnlyList<Mailbox>? _mailboxes;
     private IReadOnlyList<Rule>? _rules;
@@ -432,6 +444,7 @@ else
     private async Task SaveJob()
     {
         if (_busy) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin")) { _error = "Administrator role required."; return; }
         // P2: Set _busy BEFORE the no-targets confirmation dialog. Previously the
         // flag was only flipped after the confirm returned, which left a window
         // where a fast double-click on Save would race past the `if (_busy) return;`
@@ -491,6 +504,7 @@ else
     private async Task DryRun(int id)
     {
         if (_busy) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin", "Operator")) { _error = "Operator role required."; return; }
         _busy = true;
         try
         {
@@ -508,6 +522,7 @@ else
         // which the in-method guard was useless. The finally always resets
         // the flag, including on the cancel-return path.
         if (_busy) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin")) { _error = "Administrator role required."; return; }
         _busy = true;
         try
         {

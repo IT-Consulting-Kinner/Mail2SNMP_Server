@@ -51,3 +51,35 @@ dotnet publish src/Mail2SNMP.Worker/Mail2SNMP.Worker.csproj -c Release -r win-x6
 # Build the MSI (requires WiX v5)
 dotnet build installer/Mail2SNMP.Installer/Mail2SNMP.Installer.wixproj -c Release -p:PublishDir=%cd%/publish/worker
 ```
+
+## Least-privilege service account (security hardening)
+
+By default the MSI installs the Worker service to run as **LocalSystem**. This
+is the simplest configuration but `LocalSystem` is the most privileged local
+account — a compromise of the worker process (which parses untrusted email and
+makes outbound HTTP calls) would yield full SYSTEM rights.
+
+For hardened deployments, run the service under a dedicated **virtual service
+account** instead:
+
+```powershell
+# Point the installed service at a virtual service account
+sc.exe config Mail2SnmpWorker obj= "NT SERVICE\Mail2SnmpWorker"
+
+# Grant that account the rights it actually needs:
+#   - read/write the data + log directories under %ProgramData%\IT-Consulting Kinner\Mail2SNMP_Server
+#   - read the master key file
+icacls "%ProgramData%\IT-Consulting Kinner\Mail2SNMP_Server" /grant "NT SERVICE\Mail2SnmpWorker:(OI)(CI)M"
+```
+
+The application already adds the **running identity** to the master key file's
+ACL when it (re)tightens permissions on startup, so once the service account is
+changed and the service restarted, it will retain access to the key without a
+manual ACL edit. Verify with:
+
+```powershell
+icacls "%ProgramData%\IT-Consulting Kinner\Mail2SNMP_Server\Key\master.key"
+```
+
+The ACL should list only `SYSTEM`, `Administrators`, and your service account —
+no inherited or `Users` entries.

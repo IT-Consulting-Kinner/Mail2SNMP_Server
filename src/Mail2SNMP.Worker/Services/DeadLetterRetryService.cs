@@ -141,6 +141,14 @@ public class DeadLetterRetryService : BackgroundService
         // so we never create raw HttpClient instances per iteration (avoids socket exhaustion).
         var httpClient = httpClientFactory.CreateClient("DeadLetterRetry");
 
+        // V6: the live delivery path (WebhookNotificationChannel) signs Enterprise
+        // payloads with HMAC-SHA256. The retry path must do the same, otherwise a
+        // receiver that enforces signature verification rejects every retry (and
+        // any accepted retry arrives unauthenticated). Resolve the encryptor and
+        // license once per batch.
+        var encryptor = scope.ServiceProvider.GetRequiredService<Mail2SNMP.Core.Interfaces.ICredentialEncryptor>();
+        var license = scope.ServiceProvider.GetRequiredService<Mail2SNMP.Core.Interfaces.ILicenseProvider>();
+
         foreach (var entry in entries)
         {
             ct.ThrowIfCancellationRequested();
@@ -177,6 +185,34 @@ public class DeadLetterRetryService : BackgroundService
                 // Retry the webhook delivery — dispose content + response explicitly
                 // to release sockets and buffers immediately.
                 using var content = new StringContent(entry.PayloadJson, Encoding.UTF8, "application/json");
+
+                // V6: re-apply the HMAC-SHA256 signature for Enterprise targets,
+                // matching WebhookNotificationChannel.SendWebhookAsync so signed
+                // first-attempt and signed-retry are byte-for-byte consistent.
+                if (license.IsEnterprise() && !string.IsNullOrEmpty(entry.WebhookTarget.EncryptedSecret))
+                {
+                    try
+                    {
+                        var secret = encryptor.Decrypt(entry.WebhookTarget.EncryptedSecret);
+                        var bodyBytes = Encoding.UTF8.GetBytes(entry.PayloadJson);
+                        var hmac = System.Security.Cryptography.HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), bodyBytes);
+                        content.Headers.Add("X-Mail2SNMP-Signature", "sha256=" + Convert.ToHexString(hmac).ToLowerInvariant());
+                        content.Headers.Add("X-Mail2SNMP-Timestamp", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString());
+                    }
+                    catch (Exception sigEx)
+                    {
+                        // A decrypt failure (master-key drift) must not silently send an
+                        // unsigned payload to a receiver that expects a signature.
+                        _logger.LogError(sigEx,
+                            "DeadLetter {Id}: failed to sign retry for target {Name}. Skipping this attempt.",
+                            entry.Id, entry.WebhookTarget.Name);
+                        entry.Status = DeadLetterStatus.Pending;
+                        entry.LockedUntilUtc = null;
+                        entry.LockedByInstanceId = null;
+                        continue;
+                    }
+                }
+
                 using var response = await httpClient.PostAsync(entry.WebhookTarget.Url, content, ct);
                 response.EnsureSuccessStatusCode();
 
