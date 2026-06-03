@@ -10,7 +10,9 @@ Mail2SNMP is a Windows service that monitors email mailboxes and converts matchi
 - **Auto-acknowledge**: events older than `Events:AutoAcknowledgeAfterMinutes` are auto-acknowledged and a paired clear-trap is sent.
 - **Recurring maintenance windows**: cron-driven (`RecurringCron`) maintenance windows suppress notifications during planned outages.
 - **AES-256-GCM credential encryption**: mailbox passwords, SNMP v3 auth/priv passwords and webhook secrets are stored encrypted; master key managed by the OS file system. CLI command `mail2snmp credentials rotate-key` re-encrypts everything atomically.
+- **Role-based access control**: `ReadOnly` / `Operator` / `Admin` roles enforced consistently across the REST API **and** the Blazor UI (per-page authorization + server-side checks on every mutating action). Deactivating a user immediately blocks new logins and terminates live sessions.
 - **API key authentication**: `X-Api-Key` header with `read` / `write` / `admin` scopes for automation; manage via Web UI → API Keys.
+- **Outbound SSRF protection**: webhook and update-feed requests are blocked from reaching loopback / link-local / private / cloud-metadata addresses (DNS-rebinding-safe); opt in for internal targets via `Security:AllowPrivateWebhookTargets`.
 - **Health & metrics**: `/health/live`, `/health/ready` and Prometheus metrics on `/metrics`.
 - **OpenTelemetry tracing** (optional, configure `Otel:Enabled`).
 - **Bulk export**: download `mailboxes / rules / jobs / schedules / targets / maintenance windows` as a single JSON bundle (encrypted credentials are intentionally omitted).

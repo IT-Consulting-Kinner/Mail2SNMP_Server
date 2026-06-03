@@ -164,6 +164,25 @@ When set to a positive value, `AutoAcknowledgeService` scans every minute for ev
 
 When Mail2SNMP runs behind nginx / HAProxy / IIS ARR, list every reverse-proxy IP here so the rate limiter and audit log see the real client IP from `X-Forwarded-For`. Without this, every login attempt looks like it came from the proxy and the per-IP rate limit becomes a global limit.
 
+### Webhook SSRF protection
+
+```json
+"Security": {
+  "AllowPrivateWebhookTargets": false
+}
+```
+
+By default Mail2SNMP refuses to deliver webhooks (and update-feed checks) to
+loopback, link-local (incl. the cloud metadata endpoint `169.254.169.254`),
+RFC 1918, CGNAT and IPv6 ULA addresses. The guard resolves the target host and
+pins the connection to the validated IP, so it cannot be bypassed by DNS
+rebinding. Leave this **`false`** in any internet-facing or cloud deployment.
+
+Set it to `true` only when you legitimately need to deliver webhooks to an
+internal host (e.g. an on-prem Splunk/Teams relay on a private network). The
+update-check feed is always required to be a public HTTPS URL and is never
+exempted by this flag.
+
 ### OpenTelemetry
 
 ```json

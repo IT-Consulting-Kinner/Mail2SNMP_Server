@@ -52,8 +52,13 @@ Multiple scopes can be combined comma-separated, e.g. `read,write`.
 | Role | Permissions |
 |------|-------------|
 | ReadOnly | View all resources, dashboard |
-| Operator | ReadOnly + test connections, acknowledge/resolve events, retry dead letters |
-| Admin | Full access including create/modify/delete |
+| Operator | ReadOnly + test connections, acknowledge/resolve events, retry dead letters, dry-run jobs, toggle schedules |
+| Admin | Full access including create/modify/delete, suppress events, retry-all dead letters, user & API-key management |
+
+The same role model is enforced in the **Web UI** (since 1.0.1), not only on the
+REST API: pages are gated per role and every mutating action re-checks the
+caller's role server-side, so a ReadOnly user cannot modify configuration
+through the browser either.
 
 ## Endpoints
 
