@@ -65,38 +65,18 @@ public class KeepAliveService : BackgroundService
             {
                 using var scope = _scopeFactory.CreateScope();
 
-                // Cluster split-brain prevention: only the primary worker sends KeepAlive.
-                // Primary = the worker with the lexicographically smallest InstanceId
-                // among all currently active leases. If only one worker is running,
-                // it is implicitly the primary.
+                // Peer-review: use the shared PrimaryElection helper instead of an
+                // inline copy. Cluster split-brain prevention — only the elected
+                // primary (lexicographically smallest active InstanceId) sends
+                // KeepAlive; a single worker is implicitly primary. This was the
+                // fourth open-coded copy the helper was created to eliminate (N5).
                 var leaseService = scope.ServiceProvider.GetRequiredService<IWorkerLeaseService>();
-                var leases = await leaseService.GetActiveLeasesAsync(stoppingToken);
-
-                // N5: previously this defaulted to isPrimary=true when leases.Count == 0,
-                // which produced 4 duplicate KeepAlive traps if all heartbeats happened
-                // to be transiently expired (DB hang etc.). Now we skip the trap unless
-                // the lease list ACTUALLY contains this instance — that proves we are
-                // a member of the cluster, and the lexicographic comparison then picks
-                // exactly one primary.
-                var self = leases.FirstOrDefault(l =>
-                    string.Equals(l.InstanceId, _instanceId, StringComparison.Ordinal));
-                if (self == null)
-                {
-                    _logger.LogDebug(
-                        "KeepAlive skipped — this instance ({This}) is not in the active lease list yet.",
-                        _instanceId);
-                    await Task.Delay(interval, stoppingToken);
-                    continue;
-                }
-                var primary = leases
-                    .OrderBy(l => l.InstanceId, StringComparer.Ordinal)
-                    .First();
-                var isPrimary = string.Equals(primary.InstanceId, _instanceId, StringComparison.Ordinal);
+                var isPrimary = await PrimaryElection.IsPrimaryAsync(leaseService, _instanceId, stoppingToken);
                 if (!isPrimary)
                 {
                     _logger.LogDebug(
-                        "KeepAlive skipped — this instance ({This}) is not the primary ({Primary}).",
-                        _instanceId, primary.InstanceId);
+                        "KeepAlive skipped — this instance ({This}) is not the cluster primary.",
+                        _instanceId);
                 }
 
                 if (isPrimary)

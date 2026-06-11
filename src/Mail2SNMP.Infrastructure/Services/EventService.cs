@@ -306,11 +306,18 @@ public class EventService : IEventService
             .FirstOrDefaultAsync(e => e.Id == id, ct)
             ?? throw new KeyNotFoundException($"Event {id} not found.");
 
+        // Peer-review m5: defend the Job / Mailbox navigations like every other
+        // path does (MailPollingService, JobService.DryRunAsync). The FK is
+        // Restrict so this should not happen, but a raw NullReferenceException
+        // here would be a worse failure than a clear, friendly error.
+        if (evt.Job is null)
+            throw new InvalidOperationException($"Event {id} has no associated job — cannot replay.");
+
         var context = new Models.DTOs.NotificationContext
         {
             EventId = evt.Id,
             JobName = evt.Job.Name,
-            Mailbox = evt.Job.Mailbox.Name,
+            Mailbox = evt.Job.Mailbox?.Name ?? string.Empty,
             From = evt.MailFrom ?? "",
             Subject = evt.Subject ?? "",
             Severity = evt.Severity,

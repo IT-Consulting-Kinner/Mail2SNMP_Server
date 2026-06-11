@@ -9,20 +9,45 @@ namespace Mail2SNMP.Infrastructure.Data;
 
 /// <summary>
 /// EF Core SaveChanges interceptor that automatically creates AuditEvent entries
-/// for all CRUD operations on tracked entities (v5.8: consistent, automatic audit trail).
-/// Excluded entities: AuditEvent (to prevent recursion), ProcessedMail (high-volume telemetry),
-/// EventDedup (internal dedup state), AuthTicket (session housekeeping), WorkerLease (heartbeat noise).
+/// for CRUD operations on tracked entities that are NOT already audited explicitly
+/// by the service layer.
+///
+/// Peer-review P-1: this interceptor previously double-audited every config/event
+/// mutation, because the services (MailboxService, SnmpTargetService, …,
+/// EventService) ALSO call <c>_audit.LogAsync(...)</c> with richer, semantic action
+/// names (e.g. "Event.Acknowledged" vs. a generic "Event.Updated") and sometimes
+/// the real actor. The clear ownership rule now is:
+///   - Config + Event entities (and the Job↔target join tables) are audited
+///     EXPLICITLY by their services — excluded here to avoid duplicate rows.
+///   - Everything else (e.g. ApiKey, AppUser, Setting) has no explicit service
+///     audit, so the interceptor remains its automatic safety-net trail.
+/// Plus the original exclusions: AuditEvent (recursion), ProcessedMail/EventDedup/
+/// AuthTicket/WorkerLease (high-volume / internal housekeeping noise).
 /// </summary>
 public class AuditSaveChangesInterceptor : SaveChangesInterceptor
 {
-    // Entity types that are excluded from automatic CRUD audit to prevent recursion or noise.
+    // Entity types that are excluded from automatic CRUD audit to prevent recursion,
+    // noise, or duplication with explicit service-layer audit calls.
     private static readonly HashSet<Type> ExcludedTypes = new()
     {
+        // Recursion / high-volume / internal housekeeping.
         typeof(AuditEvent),
         typeof(ProcessedMail),
         typeof(EventDedup),
         typeof(AuthTicket),
-        typeof(WorkerLease)
+        typeof(WorkerLease),
+        // P-1: explicitly audited by the service layer — excluded to avoid the
+        // double-write (interceptor row + service row for the same operation).
+        typeof(Mailbox),
+        typeof(SnmpTarget),
+        typeof(WebhookTarget),
+        typeof(Rule),
+        typeof(Job),
+        typeof(JobSnmpTarget),
+        typeof(JobWebhookTarget),
+        typeof(Schedule),
+        typeof(MaintenanceWindow),
+        typeof(Event)
     };
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)

@@ -49,11 +49,15 @@ public class SqlServerIntegrationTests : IAsyncLifetime
 
     private void SkipIfNoDocker()
     {
-        if (!_dockerAvailable)
-            throw new SkipException("Docker is not available. Skipping SQL Server integration test.");
+        // Peer-review: use Xunit.SkippableFact's Skip.IfNot so the test is reported
+        // as SKIPPED (not FAILED) when Docker is unavailable. The previous custom
+        // SkipException was a plain Exception with no xUnit integration, so these
+        // tests actually FAILED on machines without Docker (the suite showed
+        // "Fehler: 6, übersprungen: 0" — i.e. 6 failures, 0 skips).
+        Skip.IfNot(_dockerAvailable, "Docker is not available. Skipping SQL Server integration test.");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Migrations_ApplySuccessfully()
     {
         SkipIfNoDocker();
@@ -61,7 +65,7 @@ public class SqlServerIntegrationTests : IAsyncLifetime
         Assert.NotEmpty(applied);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Mailbox_CRUD_SqlServer()
     {
         SkipIfNoDocker();
@@ -102,7 +106,7 @@ public class SqlServerIntegrationTests : IAsyncLifetime
         Assert.Null(deleted);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Rule_WithEnums_PersistsCorrectly()
     {
         SkipIfNoDocker();
@@ -127,7 +131,7 @@ public class SqlServerIntegrationTests : IAsyncLifetime
         Assert.Equal(Severity.Critical, loaded.Severity);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Job_WithRelationships_PersistsCorrectly()
     {
         SkipIfNoDocker();
@@ -163,7 +167,7 @@ public class SqlServerIntegrationTests : IAsyncLifetime
         Assert.Equal("none", loaded.Channels);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task AuditEvent_CanBeStored()
     {
         SkipIfNoDocker();
@@ -185,7 +189,7 @@ public class SqlServerIntegrationTests : IAsyncLifetime
         Assert.Equal(1, count);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task ConcurrentAccess_NoDeadlocks()
     {
         SkipIfNoDocker();
@@ -218,10 +222,3 @@ public class SqlServerIntegrationTests : IAsyncLifetime
     }
 }
 
-/// <summary>
-/// xUnit skip exception — when thrown, the test is reported as Skipped rather than Failed.
-/// </summary>
-public class SkipException : Exception
-{
-    public SkipException(string message) : base(message) { }
-}

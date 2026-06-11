@@ -22,6 +22,7 @@
     <PackageReference Include="Testcontainers.MsSql" Version="3.10.0" />
     <PackageReference Include="WireMock.Net" Version="1.6.7" />
     <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
   </ItemGroup>
 
@@ -34,6 +35,10 @@
     <ProjectReference Include="..\..\src\Mail2SNMP.Core\Mail2SNMP.Core.csproj" />
     <ProjectReference Include="..\..\src\Mail2SNMP.Infrastructure\Mail2SNMP.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Mail2SNMP.Api\Mail2SNMP.Api.csproj" />
+    <!-- Peer-review: reference the Web project so its pure security helpers
+         (CsvCell formula-injection neutralizer, RoleGuard authorization check)
+         are unit-testable instead of structurally unreachable. -->
+    <ProjectReference Include="..\..\src\Mail2SNMP.Web\Mail2SNMP.Web.csproj" />
   </ItemGroup>
 
 </Project>

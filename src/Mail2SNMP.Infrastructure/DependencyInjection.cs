@@ -126,7 +126,13 @@ public static class DependencyInjection
 
         // Notification channels
         services.AddScoped<INotificationChannel, SnmpNotificationChannel>();
-        services.AddHttpClient<WebhookNotificationChannel>();
+        // Peer-review m4: WebhookNotificationChannel resolves its HttpClient via
+        // IHttpClientFactory.CreateClient("WebhookSend"), NOT via a typed client,
+        // so the previous AddHttpClient<WebhookNotificationChannel>() only added a
+        // stray transient registration of the same concrete type with a different
+        // lifetime. The scoped INotificationChannel registration below is the one
+        // resolved through IEnumerable<INotificationChannel>; the typed-client line
+        // was dead and confusing, so it's removed.
         services.AddScoped<INotificationChannel, WebhookNotificationChannel>();
 
         return services;
