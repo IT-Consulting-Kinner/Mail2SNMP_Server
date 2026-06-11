@@ -1,4 +1,5 @@
 using Mail2SNMP.Api.Endpoints;
+using Mail2SNMP.Api.Setup;
 using Mail2SNMP.Core.Interfaces;
 using Mail2SNMP.Infrastructure;
 using Mail2SNMP.Infrastructure.Data;
@@ -45,20 +46,8 @@ try
         Log.Information("All-in-One mode enabled: Worker services and REST API endpoints will run in this process");
     }
 
-    // Identity
-    builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
-    {
-        options.Password.RequireDigit = true;
-        options.Password.RequiredLength = 12;
-        options.Password.RequireNonAlphanumeric = true;
-        options.Password.RequireUppercase = true;
-        options.Password.RequireLowercase = true;
-        options.Lockout.MaxFailedAccessAttempts = 5;
-        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
-        options.User.RequireUniqueEmail = true;
-    })
-    .AddEntityFrameworkStores<Mail2SnmpDbContext>()
-    .AddDefaultTokenProviders();
+    // Identity (P-2: shared bootstrap — see AuthSetup. Host-specific cookie config below.)
+    builder.Services.AddMail2SnmpIdentityCore();
 
     // Cookie authentication
     builder.Services.ConfigureApplicationCookie(options =>
@@ -92,140 +81,22 @@ try
         };
     });
 
-    // Server-side session store: stores the full auth ticket in the DB so the cookie stays small.
-    // Critical for OIDC scenarios where tokens contain many claims.
-    builder.Services.AddOptions<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>(
-        IdentityConstants.ApplicationScheme)
-        .PostConfigure<Microsoft.AspNetCore.Authentication.Cookies.ITicketStore>((options, store) =>
-            options.SessionStore = store);
+    // Server-side session store + X-Api-Key scheme (P-2: shared bootstrap).
+    builder.Services.AddMail2SnmpTicketStore();
+    builder.Services.AddMail2SnmpApiKeyScheme();
 
-    // G6: API-Key authentication scheme (header X-Api-Key) — additive to cookie auth.
-    builder.Services.AddAuthentication()
-        .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, Mail2SNMP.Infrastructure.Security.ApiKeyAuthenticationHandler>(
-            Mail2SNMP.Infrastructure.Security.ApiKeyAuthenticationHandler.SchemeName, _ => { });
-
-    // OIDC/SSO authentication (Enterprise only — requires license + Oidc config section)
+    // OIDC/SSO authentication (Enterprise only — P-2: shared bootstrap).
     var oidcSettings = builder.Configuration.GetSection("Oidc").Get<OidcSettings>();
-    if (oidcSettings is not null && !string.IsNullOrEmpty(oidcSettings.Authority) && !string.IsNullOrEmpty(oidcSettings.ClientId))
-    {
-        // R3: refuse to start with an OIDC Authority that is not HTTPS. Plain
-        // HTTP would expose the entire OAuth flow (auth code, ID token) to a
-        // network observer; the OIDC spec mandates TLS for non-loopback URLs.
-        if (!Uri.TryCreate(oidcSettings.Authority, UriKind.Absolute, out var oidcAuthorityUri) ||
-            oidcAuthorityUri.Scheme != Uri.UriSchemeHttps)
-        {
-            throw new InvalidOperationException(
-                $"Oidc:Authority must be an https:// URL. Got '{oidcSettings.Authority}'.");
-        }
+    var oidcEnabled = builder.Services.TryAddMail2SnmpOidc(oidcSettings);
+    if (oidcEnabled)
+        Log.Information("OIDC/SSO authentication configured (Authority: {Authority})", oidcSettings!.Authority);
 
-        builder.Services.AddAuthentication()
-            .AddOpenIdConnect("Oidc", options =>
-            {
-                options.Authority = oidcSettings.Authority;
-                options.ClientId = oidcSettings.ClientId;
-                options.ClientSecret = oidcSettings.ClientSecret;
-                options.ResponseType = OpenIdConnectResponseType.Code;
-                options.SaveTokens = true;
-                options.GetClaimsFromUserInfoEndpoint = true;
-                options.Scope.Add("openid");
-                options.Scope.Add("profile");
-                options.Scope.Add("email");
-
-                options.TokenValidationParameters.RoleClaimType = oidcSettings.RoleClaimType;
-
-                options.Events = new OpenIdConnectEvents
-                {
-                    OnTokenValidated = async context =>
-                    {
-                        // Gate OIDC behind Enterprise license at runtime
-                        var license = context.HttpContext.RequestServices.GetRequiredService<ILicenseProvider>();
-                        if (!license.IsEnterprise())
-                        {
-                            context.Fail("OIDC/SSO requires an Enterprise license.");
-                            return;
-                        }
-
-                        // Map external role claims to local ASP.NET roles
-                        var claimsIdentity = context.Principal?.Identity as System.Security.Claims.ClaimsIdentity;
-                        if (claimsIdentity is not null)
-                        {
-                            // Build set of claim types that carry role information:
-                            // RoleClaimType ("roles") + AdditionalRoleClaimTypes ("role")
-                            var roleClaimTypes = oidcSettings.AdditionalRoleClaimTypes
-                                .Append(oidcSettings.RoleClaimType)
-                                .Distinct(StringComparer.OrdinalIgnoreCase)
-                                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                            var roleClaims = context.Principal!.Claims
-                                .Where(c => roleClaimTypes.Contains(c.Type))
-                                .ToList();
-
-                            foreach (var claim in roleClaims)
-                            {
-                                if (claim.Value.Equals(oidcSettings.AdminClaimValue, StringComparison.OrdinalIgnoreCase))
-                                    claimsIdentity.AddClaim(new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, "Admin"));
-                                else if (claim.Value.Equals(oidcSettings.OperatorClaimValue, StringComparison.OrdinalIgnoreCase))
-                                    claimsIdentity.AddClaim(new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, "Operator"));
-                            }
-
-                            // Default to ReadOnly if no role was mapped from external claims
-                            if (!claimsIdentity.HasClaim(c => c.Type == System.Security.Claims.ClaimTypes.Role))
-                                claimsIdentity.AddClaim(new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, "ReadOnly"));
-                        }
-
-                        // Cookie size mitigation: strip all claims except the essentials
-                        if (claimsIdentity is not null)
-                        {
-                            var retainedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                            {
-                                System.Security.Claims.ClaimTypes.Role,
-                                System.Security.Claims.ClaimTypes.NameIdentifier
-                            };
-                            foreach (var retainedType in oidcSettings.RetainedClaimTypes)
-                                retainedTypes.Add(retainedType);
-
-                            var claimsToRemove = claimsIdentity.Claims
-                                .Where(c => !retainedTypes.Contains(c.Type))
-                                .ToList();
-                            foreach (var claim in claimsToRemove)
-                                claimsIdentity.TryRemoveClaim(claim);
-                        }
-
-                        await Task.CompletedTask;
-                    }
-                };
-            });
-
-        Log.Information("OIDC/SSO authentication configured (Authority: {Authority})", oidcSettings.Authority);
-    }
-
-    // J5: Authorization policies must accept BOTH the cookie scheme (for browser/UI)
-    // and the X-Api-Key scheme (for automation calling the API endpoints in All-in-One
-    // mode). The previous version only consulted the default cookie scheme, so API key
-    // requests against /api/v1/* in All-in-One returned 401 even though the handler
-    // was registered. The fallback policy still pulls from the default scheme so Razor
-    // pages keep behaving identically for browser users.
-    var webAuthSchemes = new[]
-    {
-        IdentityConstants.ApplicationScheme,
-        Mail2SNMP.Infrastructure.Security.ApiKeyAuthenticationHandler.SchemeName
-    };
-    builder.Services.AddAuthorizationBuilder()
-        .AddPolicy("Admin", policy => policy
-            .AddAuthenticationSchemes(webAuthSchemes)
-            .RequireAuthenticatedUser()
-            .RequireRole("Admin"))
-        .AddPolicy("Operator", policy => policy
-            .AddAuthenticationSchemes(webAuthSchemes)
-            .RequireAuthenticatedUser()
-            .RequireRole("Admin", "Operator"))
-        .AddPolicy("ReadOnly", policy => policy
-            .AddAuthenticationSchemes(webAuthSchemes)
-            .RequireAuthenticatedUser()
-            .RequireRole("Admin", "Operator", "ReadOnly"))
-        .SetFallbackPolicy(new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
-            .RequireAuthenticatedUser()
-            .Build());
+    // J5: policies accept the cookie scheme (browser/UI) and the X-Api-Key scheme
+    // (automation hitting /api/v1/* in All-in-One mode). The OIDC flow culminates in
+    // a cookie sign-in, so the cookie scheme covers it — no "Oidc" scheme needed here.
+    // addFallbackPolicy:true keeps Razor pages requiring authentication by default.
+    builder.Services.AddMail2SnmpRolePolicies(
+        Mail2SNMP.Api.Setup.AuthSetup.BuildAuthSchemes(oidcEnabled: false), addFallbackPolicy: true);
 
     // Cascading auth state for Blazor components
     builder.Services.AddCascadingAuthenticationState();
