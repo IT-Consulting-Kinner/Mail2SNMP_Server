@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <!-- Single source of truth for the Entity Framework Core version. Every
+         project — under src/ and tests/ alike — references the EF Core packages
+         via $(EfCoreVersion) so the runtime assembly version can never drift.
+         A drifting version (e.g. a floating 8.0.* resolving higher than the
+         pinned providers) caused MSB3277 "conflicts between different versions
+         of Microsoft.EntityFrameworkCore" warnings, and once a CS1705 hard
+         error during refactoring. Bump this one value to move every project in
+         lockstep. -->
+    <EfCoreVersion>8.0.25</EfCoreVersion>
+  </PropertyGroup>
+</Project>

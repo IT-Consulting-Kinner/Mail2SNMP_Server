@@ -1,4 +1,9 @@
 <Project>
+  <!-- Import the repo-root props so src/ projects also inherit $(EfCoreVersion).
+       MSBuild stops at the first Directory.Build.props found walking up, so
+       without this explicit import the root one would never be seen here. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
   <PropertyGroup>
     <!-- Single source of truth for the product version. Every project below
          src/ inherits this via Directory.Build.props without having to declare
