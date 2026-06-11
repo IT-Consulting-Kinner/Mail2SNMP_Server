@@ -2,6 +2,60 @@
 
 All notable changes to Mail2SNMP Server. Entries are grouped by **release** and by the development **waves** that made up each release. Each wave fixes the findings of a multi-agent comprehensive code review of the previous wave; the wave pattern is documented in the repo's development history.
 
+## 1.0.2 — 2026-06-11 (Quality)
+
+Maintenance release. No functional or security behaviour changes — this ships
+the **Wave W** peer-review fixes, the new high-value test coverage, two
+structural refactors, and a build-system cleanup. **All 1.0.1 deployments can
+upgrade safely; no migration or config change is required.**
+
+### Wave W — peer-review fixes
+
+- **P-1** `AuditSaveChangesInterceptor` no longer double-audits entities the
+  services already audit explicitly (Mailbox, SnmpTarget, WebhookTarget, Rule,
+  Job, the Job↔target join tables, Schedule, MaintenanceWindow, Event) — the
+  interceptor's exclusion list was widened so each change is recorded once.
+- **m4** Removed a dead `AddHttpClient<WebhookNotificationChannel>()` typed-client
+  registration; the channel resolves its client via `CreateClient("WebhookSend")`.
+- **N5** `KeepAliveService` now uses the shared `PrimaryElection.IsPrimaryAsync`
+  helper instead of a fourth open-coded copy of the cluster primary-election
+  logic.
+- **m5** `EventService.ReplayAsync` guards the `Job` navigation with a clear
+  `InvalidOperationException` instead of risking a raw `NullReferenceException`.
+
+### Wave W — test quality
+
+- The six SQL Server integration tests now use `[SkippableFact]` + `Skip.IfNot`,
+  so they are reported as **skipped** (not **failed**) when Docker is
+  unavailable. The previous home-grown `SkipException` had no xUnit integration,
+  so the suite reported 6 failures on every Docker-less run.
+- New high-value tests for previously-untested security/correctness surfaces:
+  the outbound **SSRF guard** decision table; **license-token forgery**
+  (alg=none downgrade and foreign-key RS256 both fall back to Community); the
+  **event state machine** (illegal transitions throw; duplicate MessageId
+  increments HitCount); **worker-lease cluster** consensus and expired-lease
+  reaping; the **real `WebhookNotificationChannel`** end-to-end against WireMock
+  (success, 5xx dead-letter, SSRF-block dead-letter); and the `CsvCell`
+  formula-injection and `RoleGuard` role-enforcement helpers.
+- Test count: **104 → 155 passing**, 6 properly skipped.
+
+### Wave W — refactors
+
+- **P-2** Extracted the duplicated authentication/authorization bootstrap shared
+  by the API and Web hosts into `AuthSetup` (Identity, X-Api-Key scheme, OIDC
+  handler with its role-claim mapping, role policies). The two copies had
+  already drifted once; a single definition prevents that class of bug.
+- **P-3** Split the 1393-line CLI `Program.cs` god-file into partial-class files
+  grouped by command area (Db / System / User / Entity / Test). Pure relocation,
+  no behaviour change.
+
+### Build
+
+- Pinned EF Core to a single repo-wide `$(EfCoreVersion)`, eliminating the
+  floating `8.0.*` → 8.0.27 skew that produced MSB3277 version-conflict warnings.
+
+Build clean (0 MSB3277); 155/155 unit tests pass, 6 skipped.
+
 ## 1.0.1 — 2026-04-07 (Security)
 
 Security patch addressing 10 findings from a fresh independent audit (Wave V).
