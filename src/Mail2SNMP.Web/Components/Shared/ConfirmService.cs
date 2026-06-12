@@ -4,7 +4,7 @@ namespace Mail2SNMP.Web.Components.Shared;
 /// T3: themed confirmation dialog. The previous <c>JS.TryConfirmAsync</c> path
 /// used the browser's native <c>confirm()</c> dialog which ignores the app's
 /// dark theme and looks jarring. This service is a singleton-per-circuit
-/// (registered Scoped) that the global <see cref="ConfirmDialog"/> host in
+/// (registered Scoped) that the global <c>ConfirmDialog</c> host in
 /// MainLayout subscribes to. Razor pages call <see cref="AskAsync"/> exactly
 /// like before; the dialog renders inline with the rest of the app, respects
 /// the theme and supports Esc to cancel.
@@ -17,7 +17,7 @@ public class ConfirmService
 {
     /// <summary>
     /// Raised by <see cref="AskAsync"/> when a page wants to show a dialog.
-    /// The <see cref="ConfirmDialog"/> host listens, displays the modal,
+    /// The <c>ConfirmDialog</c> host listens, displays the modal,
     /// and completes the supplied <see cref="TaskCompletionSource{Boolean}"/>
     /// with the user's choice.
     /// </summary>
