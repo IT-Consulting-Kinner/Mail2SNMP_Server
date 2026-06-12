@@ -49,6 +49,15 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
         typeof(Event)
     };
 
+    /// <summary>
+    /// Synchronous SaveChanges hook: appends an <see cref="AuditEvent"/> row for each non-excluded
+    /// added/modified/deleted entity before the changes are persisted, so the audit rows are written
+    /// in the same transaction. Modified-entity details record changed property <em>names</em> only —
+    /// never values — to avoid leaking secrets.
+    /// </summary>
+    /// <param name="eventData">Interception data carrying the <see cref="DbContext"/> being saved.</param>
+    /// <param name="result">The interception result passed through to the base implementation.</param>
+    /// <returns>The result produced by the base interceptor.</returns>
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
         if (eventData.Context is not null)
@@ -56,6 +65,15 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
         return base.SavingChanges(eventData, result);
     }
 
+    /// <summary>
+    /// Asynchronous counterpart to <see cref="SavingChanges"/>: appends an <see cref="AuditEvent"/> row for
+    /// each non-excluded added/modified/deleted entity before the changes are persisted, recording changed
+    /// property names only (never values).
+    /// </summary>
+    /// <param name="eventData">Interception data carrying the <see cref="DbContext"/> being saved.</param>
+    /// <param name="result">The interception result passed through to the base implementation.</param>
+    /// <param name="cancellationToken">Token forwarded to the base implementation.</param>
+    /// <returns>The result produced by the base interceptor.</returns>
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
     {

@@ -22,6 +22,15 @@ public class WebhookTargetService : IWebhookTargetService
     private readonly bool _allowPrivateTargets;
     private readonly ILogger<WebhookTargetService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebhookTargetService"/> class.
+    /// </summary>
+    /// <param name="db">The database context used to read and persist webhook targets.</param>
+    /// <param name="audit">The audit service used to record target changes.</param>
+    /// <param name="httpClientFactory">The factory that supplies the named <c>WebhookTest</c> HTTP client.</param>
+    /// <param name="encryptor">The credential encryptor used to protect the target secret at rest.</param>
+    /// <param name="configuration">Application configuration; reads <c>Security:AllowPrivateWebhookTargets</c> to control the SSRF guard.</param>
+    /// <param name="logger">The logger for test-delivery and SSRF diagnostics.</param>
     public WebhookTargetService(
         Mail2SnmpDbContext db,
         IAuditService audit,

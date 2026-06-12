@@ -6,5 +6,12 @@ namespace Mail2SNMP.Core.Exceptions;
 /// </summary>
 public class DependencyException : InvalidOperationException
 {
+    /// <summary>
+    /// Initializes a new instance with a message describing the concrete blocking dependency.
+    /// </summary>
+    /// <param name="message">
+    /// Human-readable description of the reference that prevents deletion
+    /// (e.g. "Mailbox is used by Job 'Critical Alerts'"). Surfaced to API callers, so it must not leak secrets.
+    /// </param>
     public DependencyException(string message) : base(message) { }
 }

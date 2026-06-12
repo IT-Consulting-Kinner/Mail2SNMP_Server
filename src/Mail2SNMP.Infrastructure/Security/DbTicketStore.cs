@@ -17,6 +17,14 @@ public class DbTicketStore : ITicketStore
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DbTicketStore> _logger;
 
+    /// <summary>
+    /// Initializes the ticket store.
+    /// </summary>
+    /// <param name="scopeFactory">
+    /// Factory used to create a fresh DI scope (and thus a fresh <see cref="Mail2SnmpDbContext"/>) per operation,
+    /// since this store is a singleton consumed by the cookie middleware while the context is scoped.
+    /// </param>
+    /// <param name="logger">Logger for ticket lifecycle events (store, renew, expire, remove).</param>
     public DbTicketStore(IServiceScopeFactory scopeFactory, ILogger<DbTicketStore> logger)
     {
         _scopeFactory = scopeFactory;

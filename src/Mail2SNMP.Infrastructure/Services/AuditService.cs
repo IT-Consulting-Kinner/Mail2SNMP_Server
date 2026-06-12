@@ -15,6 +15,11 @@ public class AuditService : IAuditService
     private readonly Mail2SnmpDbContext _db;
     private readonly ILogger<AuditService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AuditService"/> class.
+    /// </summary>
+    /// <param name="db">The database context used to read and persist audit events.</param>
+    /// <param name="logger">The logger that mirrors each audit entry at debug level.</param>
     public AuditService(Mail2SnmpDbContext db, ILogger<AuditService> logger)
     {
         _db = db;

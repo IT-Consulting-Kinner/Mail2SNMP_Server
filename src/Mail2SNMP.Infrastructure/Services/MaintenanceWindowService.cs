@@ -13,6 +13,11 @@ public class MaintenanceWindowService : IMaintenanceWindowService
     private readonly Mail2SnmpDbContext _db;
     private readonly IAuditService _audit;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MaintenanceWindowService"/> class.
+    /// </summary>
+    /// <param name="db">The database context used to read and persist maintenance windows.</param>
+    /// <param name="audit">The audit service used to record window creation.</param>
     public MaintenanceWindowService(Mail2SnmpDbContext db, IAuditService audit)
     {
         _db = db;

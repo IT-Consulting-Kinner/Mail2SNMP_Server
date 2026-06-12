@@ -6,6 +6,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Mail2SNMP.Cli;
 
+/// <summary>
+/// Partial of the CLI entry-point program that implements the configuration-entity
+/// commands: <c>add-mailbox</c>, <c>add-rule</c> and <c>list-jobs</c>.
+/// </summary>
 public partial class Program
 {
     /// <summary>

@@ -32,8 +32,29 @@ public class WebhookNotificationChannel : INotificationChannel
     private readonly bool _allowPrivateTargets;
     private readonly ILogger<WebhookNotificationChannel> _logger;
 
+    /// <summary>
+    /// Stable channel discriminator ('webhook') used to select this channel from the registered
+    /// <see cref="INotificationChannel"/> set. Must remain constant: persisted job/channel
+    /// assignments reference channels by this value.
+    /// </summary>
     public string ChannelName => "webhook";
 
+    /// <summary>
+    /// Initializes the channel with its collaborators.
+    /// </summary>
+    /// <param name="db">Database context used to load active webhook targets.</param>
+    /// <param name="encryptor">Decryptor for the AES-GCM-encrypted per-target HMAC signing secret.</param>
+    /// <param name="license">License gate; HMAC request signing is applied only under an Enterprise license.</param>
+    /// <param name="deadLetterService">Persists failed deliveries as dead letters (Enterprise additionally retries them).</param>
+    /// <param name="templateEngine">Renders the JSON payload body from the configured template.</param>
+    /// <param name="floodProtection">Per-target rate limiter enforcing each target's maximum requests-per-minute.</param>
+    /// <param name="dedupCache">Suppresses duplicate webhooks for the same target/event pair.</param>
+    /// <param name="httpClientFactory">Supplies the named "WebhookSend" <see cref="System.Net.Http.HttpClient"/> with correctly managed handler lifetime.</param>
+    /// <param name="configuration">
+    /// Read for <c>Security:AllowPrivateWebhookTargets</c>. When false (the default), the SSRF guard blocks
+    /// delivery to loopback / link-local / RFC1918 / cloud-metadata addresses so cloud deployments are safe by default.
+    /// </param>
+    /// <param name="logger">Diagnostic logger for delivery failures, SSRF blocks, and malformed configuration.</param>
     public WebhookNotificationChannel(
         Mail2SnmpDbContext db,
         ICredentialEncryptor encryptor,

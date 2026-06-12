@@ -20,6 +20,12 @@ public class KeepAliveService : BackgroundService
     private readonly ILogger<KeepAliveService> _logger;
     private readonly string _instanceId;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="KeepAliveService"/> class.
+    /// </summary>
+    /// <param name="scopeFactory">Factory used to create a scope per iteration for resolving the lease service and SNMP channel.</param>
+    /// <param name="settings">The keep-alive options, including whether the feature is enabled and the send interval.</param>
+    /// <param name="logger">The logger for keep-alive and leadership diagnostics.</param>
     public KeepAliveService(
         IServiceScopeFactory scopeFactory,
         IOptions<KeepAliveSettings> settings,

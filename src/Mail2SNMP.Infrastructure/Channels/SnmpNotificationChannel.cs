@@ -29,12 +29,37 @@ public class SnmpNotificationChannel : INotificationChannel
     private readonly NotificationDedupCache _dedupCache;
     private readonly ILogger<SnmpNotificationChannel> _logger;
 
+    /// <summary>
+    /// Stable channel discriminator ('snmp') used to select this channel from the registered
+    /// <see cref="INotificationChannel"/> set. Must remain constant: persisted job/channel
+    /// assignments reference channels by this value.
+    /// </summary>
     public string ChannelName => "snmp";
 
     // Mail2SNMP MIB OIDs (Enterprise Number 61376, registered to IT-Consulting Kinner)
+
+    /// <summary>
+    /// Trap OID for the <c>mail2SNMPEventCreatedNotification</c> notification, sent when a new
+    /// event is raised. Carries the eventID, eventName, eventSeverity, and eventMessage varbinds.
+    /// </summary>
     public const string EventCreatedOid   = "1.3.6.1.4.1.61376.1.2.0.1";
+
+    /// <summary>
+    /// Trap OID for the <c>mail2SNMPEventConfirmedNotification</c> notification, sent when an
+    /// event is acknowledged. Carries only the eventID varbind.
+    /// </summary>
     public const string EventConfirmedOid = "1.3.6.1.4.1.61376.1.2.0.2";
+
+    /// <summary>
+    /// Trap OID for the <c>mail2SNMPKeepAliveNotification</c> heartbeat trap (no varbinds),
+    /// sent to targets with keep-alive enabled so monitoring systems can detect a dead server.
+    /// </summary>
     public const string KeepAliveOid      = "1.3.6.1.4.1.61376.1.2.0.3";
+
+    /// <summary>
+    /// Trap OID for the <c>mail2SNMPUpdateNotification</c> notification, sent to advertise that a
+    /// newer Mail2SNMP release is available; version details are carried in the eventMessage varbind.
+    /// </summary>
     public const string UpdateOid         = "1.3.6.1.4.1.61376.1.2.0.4";
 
     // MIB object identifiers (varbinds)
@@ -43,6 +68,16 @@ public class SnmpNotificationChannel : INotificationChannel
     private const string EventSeverityOid = "1.3.6.1.4.1.61376.1.1.1.1.3";
     private const string EventMessageOid  = "1.3.6.1.4.1.61376.1.1.1.1.4";
 
+    /// <summary>
+    /// Initializes the channel with its collaborators.
+    /// </summary>
+    /// <param name="db">Database context used to load active SNMP targets and resolve job-assigned targets.</param>
+    /// <param name="encryptor">Decryptor for the AES-GCM-encrypted community strings and SNMPv3 auth/priv passwords at send time.</param>
+    /// <param name="license">License gate; SNMPv3 (AuthPriv) targets are skipped unless an Enterprise license is active.</param>
+    /// <param name="templateEngine">Used to render and length-truncate strings so they fit SNMP <c>OctetString</c> limits.</param>
+    /// <param name="floodProtection">Per-target rate limiter enforcing each target's maximum traps-per-minute.</param>
+    /// <param name="dedupCache">Suppresses duplicate traps for the same target/event pair.</param>
+    /// <param name="logger">Diagnostic logger; trap delivery failures are logged rather than thrown (traps are fire-and-forget UDP).</param>
     public SnmpNotificationChannel(
         Mail2SnmpDbContext db,
         ICredentialEncryptor encryptor,

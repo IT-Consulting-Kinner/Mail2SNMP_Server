@@ -17,11 +17,26 @@ namespace Mail2SNMP.Infrastructure.Security;
 /// </summary>
 public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {
+    /// <summary>
+    /// Name of the authentication scheme ("ApiKey") under which a successful principal is issued.
+    /// Referenced by <c>AddAuthentication</c> registration and by any <c>[Authorize(AuthenticationSchemes = ...)]</c> usage.
+    /// </summary>
     public const string SchemeName = "ApiKey";
+
+    /// <summary>
+    /// HTTP request header ("X-Api-Key") carrying the plaintext API key presented by the caller.
+    /// </summary>
     public const string HeaderName = "X-Api-Key";
 
     private readonly Mail2SnmpDbContext _db;
 
+    /// <summary>
+    /// Initializes the handler.
+    /// </summary>
+    /// <param name="options">Monitor for the scheme options supplied by the authentication framework.</param>
+    /// <param name="logger">Logger factory supplied by the authentication framework.</param>
+    /// <param name="encoder">URL encoder supplied by the authentication framework.</param>
+    /// <param name="db">Database context used to look up the presented key by its hash.</param>
     public ApiKeyAuthenticationHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
         ILoggerFactory logger,
@@ -31,6 +46,23 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         _db = db;
     }
 
+    /// <summary>
+    /// Validates the API key from the <see cref="HeaderName"/> header and, on success, builds the
+    /// authenticated principal.
+    /// </summary>
+    /// <remarks>
+    /// The presented key is never compared in plaintext: it is SHA-256 hashed (see <see cref="HashKey"/>)
+    /// and matched against the stored hash via the unique index. The key must be active and unexpired.
+    /// On success the principal carries the key name, one <c>scope</c> claim per configured scope, and
+    /// mapped roles (<c>Admin</c>/<c>Operator</c>/<c>ReadOnly</c>) so existing role/policy gates accept
+    /// scoped keys. <c>LastUsedUtc</c> is updated best-effort and debounced to at most once per five
+    /// minutes; a failure to persist it never fails authentication.
+    /// </remarks>
+    /// <returns>
+    /// <see cref="AuthenticateResult.NoResult"/> when no header is present;
+    /// <see cref="AuthenticateResult.Fail(string)"/> for an empty, unknown, inactive, or expired key;
+    /// otherwise <see cref="AuthenticateResult.Success"/> with the issued ticket.
+    /// </returns>
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         if (!Request.Headers.TryGetValue(HeaderName, out var headerValue))

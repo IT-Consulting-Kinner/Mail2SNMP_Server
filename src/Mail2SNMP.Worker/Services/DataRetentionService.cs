@@ -18,6 +18,12 @@ public class DataRetentionService : BackgroundService
     private readonly RetentionSettings _retentionSettings;
     private readonly TimeSpan _interval = TimeSpan.FromHours(1);
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DataRetentionService"/> class.
+    /// </summary>
+    /// <param name="scopeFactory">Factory used to create a scope per cleanup cycle for resolving the database context.</param>
+    /// <param name="logger">The logger for cleanup-cycle diagnostics.</param>
+    /// <param name="configuration">Application configuration; the <c>Events</c> and <c>Retention</c> sections supply the per-category retention thresholds.</param>
     public DataRetentionService(
         IServiceScopeFactory scopeFactory,
         ILogger<DataRetentionService> logger,

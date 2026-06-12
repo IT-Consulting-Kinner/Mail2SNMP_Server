@@ -14,6 +14,12 @@ public class AesGcmCredentialEncryptor : ICredentialEncryptor
     private const int NonceSize = 12;
     private const int TagSize = 16;
 
+    /// <summary>
+    /// Initializes the encryptor with the symmetric master key.
+    /// </summary>
+    /// <param name="masterKey">The AES-256 master key; must be exactly 32 bytes (256 bits).</param>
+    /// <param name="logger">Logger used by <see cref="TryDecrypt"/> to record decryption failures (e.g. master-key mismatch).</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="masterKey"/> is not 32 bytes long.</exception>
     public AesGcmCredentialEncryptor(byte[] masterKey, ILogger<AesGcmCredentialEncryptor> logger)
     {
         if (masterKey.Length != 32)

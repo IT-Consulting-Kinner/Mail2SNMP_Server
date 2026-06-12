@@ -30,6 +30,13 @@ public class EventService : IEventService
         [EventState.Expired] = new(),
     };
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EventService"/> class.
+    /// </summary>
+    /// <param name="db">The database context used to read and persist events.</param>
+    /// <param name="audit">The audit service used to record state-change actions.</param>
+    /// <param name="channels">The available notification channels, used to emit SNMP confirm/replay traps.</param>
+    /// <param name="logger">The logger for diagnostic and dedup-suppression messages.</param>
     public EventService(Mail2SnmpDbContext db, IAuditService audit, IEnumerable<INotificationChannel> channels, ILogger<EventService> logger)
     {
         _db = db;

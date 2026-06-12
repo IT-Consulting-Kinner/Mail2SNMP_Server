@@ -20,6 +20,12 @@ public class ImapPollingJob : IJob
     private readonly ILogger<ImapPollingJob> _logger;
     private readonly int _channelCapacity;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImapPollingJob"/> class.
+    /// </summary>
+    /// <param name="channel">The bounded channel into which poll work items are written.</param>
+    /// <param name="logger">The logger for enqueue and channel-overflow diagnostics.</param>
+    /// <param name="imapSettings">IMAP options supplying the channel bounded capacity used for the pre-write capacity check.</param>
     public ImapPollingJob(
         Channel<MailWorkItem> channel,
         ILogger<ImapPollingJob> logger,

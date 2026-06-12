@@ -16,6 +16,12 @@ public class WorkerLeaseService : IWorkerLeaseService
     private readonly ILogger<WorkerLeaseService> _logger;
     private static readonly TimeSpan LeaseTimeout = TimeSpan.FromSeconds(90);
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WorkerLeaseService"/> class.
+    /// </summary>
+    /// <param name="db">The database context backing the distributed lease table.</param>
+    /// <param name="license">The license provider that determines the allowed worker-instance count and edition.</param>
+    /// <param name="logger">The logger for lease acquisition, renewal, and cluster-consensus diagnostics.</param>
     public WorkerLeaseService(Mail2SnmpDbContext db, ILicenseProvider license, ILogger<WorkerLeaseService> logger)
     {
         _db = db;

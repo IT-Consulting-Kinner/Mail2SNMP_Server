@@ -20,12 +20,31 @@ public class MasterKeyHealthCheck : IHealthCheck
     private readonly ICredentialEncryptor _encryptor;
     private readonly Mail2SnmpDbContext _db;
 
+    /// <summary>
+    /// Initializes the health check.
+    /// </summary>
+    /// <param name="encryptor">Encryptor exercised by the self round-trip probe and the drift probe.</param>
+    /// <param name="db">Database context queried for a sample stored credential to detect cluster master-key drift.</param>
     public MasterKeyHealthCheck(ICredentialEncryptor encryptor, Mail2SnmpDbContext db)
     {
         _encryptor = encryptor;
         _db = db;
     }
 
+    /// <summary>
+    /// Runs the two-stage master-key probe.
+    /// </summary>
+    /// <param name="context">Health-check context supplied by the health-check framework.</param>
+    /// <param name="cancellationToken">Token to cancel the database drift probe.</param>
+    /// <returns>
+    /// <see cref="HealthCheckResult.Unhealthy(string, System.Exception, System.Collections.Generic.IReadOnlyDictionary{string, object})"/>
+    /// if the encryptor cannot round-trip its own probe value, or if a real stored credential fails to decrypt
+    /// (indicating this instance holds a different <c>master.key</c> than the one that encrypted the database —
+    /// cluster drift); <see cref="HealthCheckResult.Degraded(string, System.Exception, System.Collections.Generic.IReadOnlyDictionary{string, object})"/>
+    /// when the self-probe passed but the drift query could not reach the database (transient errors never
+    /// fail the check); otherwise <see cref="HealthCheckResult.Healthy(string, System.Collections.Generic.IReadOnlyDictionary{string, object})"/>.
+    /// An Unhealthy result blocks the <c>/health/ready</c> readiness endpoint.
+    /// </returns>
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         // Step 1: self probe — does the encryptor round-trip its own output?

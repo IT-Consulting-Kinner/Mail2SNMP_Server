@@ -215,5 +215,14 @@ finally
 // Marker class for WebApplicationFactory<Program> in integration tests
 namespace Mail2SNMP.Api
 {
+    /// <summary>
+    /// Public marker partial for the top-level program entry point, exposed so that
+    /// integration tests can reference it via <c>WebApplicationFactory&lt;Program&gt;</c>.
+    /// </summary>
+    /// <remarks>
+    /// The actual host configuration lives in the top-level statements of this file;
+    /// this declaration exists only to give the implicitly-generated <c>Program</c>
+    /// class a public surface for the test host.
+    /// </remarks>
     public partial class Program { }
 }

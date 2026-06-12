@@ -19,6 +19,12 @@ public class ScheduleSyncService : BackgroundService
     // Track last known schedule states to detect changes
     private readonly Dictionary<int, (int IntervalMinutes, bool IsActive)> _lastKnown = new();
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ScheduleSyncService"/> class.
+    /// </summary>
+    /// <param name="scopeFactory">Factory used to create a scope per sync for resolving the schedule service.</param>
+    /// <param name="schedulerFactory">The Quartz scheduler factory used to create, reschedule, and delete jobs.</param>
+    /// <param name="logger">The logger for schedule-sync diagnostics.</param>
     public ScheduleSyncService(
         IServiceScopeFactory scopeFactory,
         ISchedulerFactory schedulerFactory,

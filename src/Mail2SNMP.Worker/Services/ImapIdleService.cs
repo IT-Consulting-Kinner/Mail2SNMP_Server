@@ -29,6 +29,13 @@ public class ImapIdleService : BackgroundService
     private static readonly TimeSpan IdleRefreshInterval = TimeSpan.FromMinutes(25); // RFC 2177: <29min
     private static readonly TimeSpan ReconnectBackoff = TimeSpan.FromSeconds(15);
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImapIdleService"/> class.
+    /// </summary>
+    /// <param name="scopeFactory">Factory used to create scopes for resolving the lease service, database context, and credential encryptor.</param>
+    /// <param name="channel">The bounded channel into which work items are enqueued when new mail arrives.</param>
+    /// <param name="configuration">Application configuration; reads <c>Imap:UseIdle</c> and the <c>Imap</c> settings section.</param>
+    /// <param name="logger">The logger for IDLE-session and leadership diagnostics.</param>
     public ImapIdleService(
         IServiceScopeFactory scopeFactory,
         Channel<MailWorkItem> channel,
@@ -42,6 +49,12 @@ public class ImapIdleService : BackgroundService
         _enabled = configuration.GetValue<bool>("Imap:UseIdle");
     }
 
+    /// <summary>
+    /// Runs the IDLE supervisor loop. Returns immediately when <c>Imap:UseIdle</c> is disabled; otherwise,
+    /// while this instance is the elected cluster primary, maintains one persistent IMAP IDLE connection per
+    /// active mailbox and releases them when leadership is lost or the host shuts down.
+    /// </summary>
+    /// <param name="stoppingToken">Token signalled when the host is shutting down.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!_enabled)

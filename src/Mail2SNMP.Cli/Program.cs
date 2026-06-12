@@ -8,8 +8,27 @@ using Microsoft.Extensions.Logging;
 
 namespace Mail2SNMP.Cli;
 
+/// <summary>
+/// Entry point of the <c>mail2snmp</c> command-line tool. <see cref="Main"/> builds a
+/// minimal DI container (configuration, infrastructure services, ASP.NET Identity for
+/// the user-management commands) and dispatches the first argument to the matching
+/// command handler. The handlers are organised across partial-class files under
+/// <c>Commands/</c> (Db / System / User / Entity / Test command groups).
+/// </summary>
 public partial class Program
 {
+    /// <summary>
+    /// Parses the command word from <paramref name="args"/>, builds the service provider,
+    /// and runs the corresponding handler. Unknown or empty input prints the usage banner.
+    /// </summary>
+    /// <param name="args">
+    /// Raw process arguments. <c>args[0]</c> selects the command (e.g. <c>db</c>, <c>user</c>,
+    /// <c>add-mailbox</c>); the remainder are passed through to the handler.
+    /// </param>
+    /// <returns>
+    /// A process exit code: <c>0</c> on success, non-zero on failure or invalid usage.
+    /// Unhandled exceptions are caught and reported as exit code <c>1</c>.
+    /// </returns>
     public static async Task<int> Main(string[] args)
     {
         if (args.Length == 0)

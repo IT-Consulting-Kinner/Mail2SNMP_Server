@@ -11,6 +11,16 @@ namespace Mail2SNMP.Api.Endpoints;
 /// </summary>
 public static class BulkExportEndpoints
 {
+    /// <summary>
+    /// Registers the <c>/api/v1/bulk</c> route group.
+    /// </summary>
+    /// <remarks>
+    /// Maps <c>GET /export</c>, which serialises mailboxes, rules, SNMP and webhook
+    /// targets, jobs, schedules and maintenance windows into a downloadable JSON bundle
+    /// with all encrypted credential fields omitted. The whole group requires the
+    /// <c>Operator</c> policy.
+    /// </remarks>
+    /// <param name="app">The route builder to register the endpoint on.</param>
     public static void MapBulkExportEndpoints(this IEndpointRouteBuilder app)
     {
         var grp = app.MapGroup("/api/v1/bulk").RequireAuthorization("Operator");

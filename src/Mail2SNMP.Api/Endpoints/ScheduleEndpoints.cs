@@ -4,8 +4,24 @@ using Mail2SNMP.Models.Entities;
 
 namespace Mail2SNMP.Api.Endpoints;
 
+/// <summary>
+/// REST API endpoints for managing schedules that run jobs at fixed polling intervals.
+/// </summary>
 public static class ScheduleEndpoints
 {
+    /// <summary>
+    /// Registers the <c>/api/v1/schedules</c> route group.
+    /// </summary>
+    /// <remarks>
+    /// Maps <c>GET /</c> (list) and <c>GET /{id}</c> (fetch one), both requiring the
+    /// <c>ReadOnly</c> policy, and <c>PUT /{id}/toggle</c> (enable/disable) requiring
+    /// the <c>Operator</c> policy. The mutating operations <c>POST /</c> (create),
+    /// <c>PUT /{id}</c> (update) and <c>DELETE /{id}</c> (delete) all require the
+    /// <c>Admin</c> policy. Create and update payloads are validated by
+    /// <see cref="Filters.ValidationFilter{T}"/>.
+    /// </remarks>
+    /// <param name="endpoints">The route builder to register the endpoints on.</param>
+    /// <returns>The same <paramref name="endpoints"/> builder, for chaining.</returns>
     public static IEndpointRouteBuilder MapScheduleEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/v1/schedules")

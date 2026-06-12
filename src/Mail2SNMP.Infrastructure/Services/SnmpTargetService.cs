@@ -23,6 +23,13 @@ public class SnmpTargetService : ISnmpTargetService
     private readonly ICredentialEncryptor _encryptor;
     private readonly ILogger<SnmpTargetService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SnmpTargetService"/> class.
+    /// </summary>
+    /// <param name="db">The database context used to read and persist SNMP targets.</param>
+    /// <param name="audit">The audit service used to record target changes.</param>
+    /// <param name="encryptor">The credential encryptor used to protect v3 auth/priv passwords and community strings at rest.</param>
+    /// <param name="logger">The logger for test-trap and credential-decryption diagnostics.</param>
     public SnmpTargetService(Mail2SnmpDbContext db, IAuditService audit, ICredentialEncryptor encryptor, ILogger<SnmpTargetService> logger)
     {
         _db = db;

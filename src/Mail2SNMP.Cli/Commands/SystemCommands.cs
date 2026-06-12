@@ -11,6 +11,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Mail2SNMP.Cli;
 
+/// <summary>
+/// Partial of the CLI entry-point program that implements the system command groups:
+/// <c>config validate</c>, <c>license show|reload</c>, <c>diagnostics</c> and <c>backup</c>.
+/// </summary>
 public partial class Program
 {
     static Task<int> HandleConfig(string[] args, IServiceProvider sp, IConfiguration config)

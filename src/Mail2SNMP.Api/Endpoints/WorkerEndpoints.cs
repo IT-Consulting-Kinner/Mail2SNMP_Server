@@ -7,6 +7,17 @@ namespace Mail2SNMP.Api.Endpoints;
 /// </summary>
 public static class WorkerEndpoints
 {
+    /// <summary>
+    /// Registers the <c>/api/v1/workers</c> route group.
+    /// </summary>
+    /// <remarks>
+    /// Maps <c>GET /</c> (list active worker leases) requiring the <c>ReadOnly</c>
+    /// policy, and the lease-release operations <c>DELETE /{instanceId}</c> (release one
+    /// worker's lease) and <c>DELETE /</c> (release all leases), both requiring the
+    /// <c>Admin</c> policy.
+    /// </remarks>
+    /// <param name="endpoints">The route builder to register the endpoints on.</param>
+    /// <returns>The same <paramref name="endpoints"/> builder, for chaining.</returns>
     public static IEndpointRouteBuilder MapWorkerEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/v1/workers")

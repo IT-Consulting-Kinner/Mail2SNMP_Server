@@ -8,6 +8,11 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Mail2SNMP.Cli;
 
+/// <summary>
+/// Partial of the CLI entry-point program that implements the operational/test commands:
+/// <c>worker status</c>, <c>test-connection</c>, <c>dry-run</c>, <c>test-snmp</c>,
+/// <c>test-mail</c> and <c>deadletter</c>.
+/// </summary>
 public partial class Program
 {
     static async Task<int> HandleWorker(string[] args, IServiceProvider sp)

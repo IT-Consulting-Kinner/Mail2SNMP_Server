@@ -5,6 +5,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Mail2SNMP.Cli;
 
+/// <summary>
+/// Partial of the CLI entry-point program that implements the <c>db</c> command group
+/// (schema migration, rollback and status).
+/// </summary>
 public partial class Program
 {
     static async Task<int> HandleDb(string[] args, IServiceProvider sp)

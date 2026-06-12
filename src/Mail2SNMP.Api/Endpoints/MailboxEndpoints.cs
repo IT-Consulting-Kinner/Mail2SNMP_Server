@@ -6,8 +6,23 @@ using Mail2SNMP.Models.Entities;
 
 namespace Mail2SNMP.Api.Endpoints;
 
+/// <summary>
+/// REST API endpoints for managing IMAP mailbox connections that jobs poll for incoming mail.
+/// </summary>
 public static class MailboxEndpoints
 {
+    /// <summary>
+    /// Registers the <c>/api/v1/mailboxes</c> route group.
+    /// </summary>
+    /// <remarks>
+    /// Maps <c>GET /</c> (list) and <c>POST /{id}/test</c> (connection test, <c>Operator</c>);
+    /// <c>GET /</c> requires the <c>ReadOnly</c> policy. The mutating operations
+    /// <c>POST /</c> (create), <c>PUT /{id}</c> (update) and <c>DELETE /{id}</c> (delete)
+    /// all require the <c>Admin</c> policy. Create and update payloads are validated by
+    /// <see cref="Filters.ValidationFilter{T}"/>.
+    /// </remarks>
+    /// <param name="endpoints">The route builder to register the endpoints on.</param>
+    /// <returns>The same <paramref name="endpoints"/> builder, for chaining.</returns>
     public static IEndpointRouteBuilder MapMailboxEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/v1/mailboxes")

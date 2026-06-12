@@ -28,6 +28,13 @@ public class MailPollingService : BackgroundService
     private readonly int _consumerCount;
     private readonly ImapSettings _imapSettings;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MailPollingService"/> class.
+    /// </summary>
+    /// <param name="channel">The bounded channel from which mail work items are consumed.</param>
+    /// <param name="scopeFactory">Factory used to create a scope per work item for resolving scoped services.</param>
+    /// <param name="logger">The logger for consumer and IMAP-processing diagnostics.</param>
+    /// <param name="configuration">Application configuration; the <c>Imap</c> section supplies the consumer count, connection limit, and timeouts.</param>
     public MailPollingService(
         Channel<MailWorkItem> channel,
         IServiceScopeFactory scopeFactory,
@@ -80,6 +87,10 @@ public class MailPollingService : BackgroundService
     // handle would leak across hot-reloads or test restarts. Override Dispose to
     // release it explicitly. Safe to call multiple times — SemaphoreSlim.Dispose
     // is idempotent.
+    /// <summary>
+    /// Disposes the IMAP concurrency semaphore that the <see cref="BackgroundService"/> base class does not
+    /// own, preventing a kernel handle leak across host restarts. Safe to call multiple times.
+    /// </summary>
     public override void Dispose()
     {
         _imapSemaphore.Dispose();

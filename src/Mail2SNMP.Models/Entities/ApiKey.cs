@@ -10,6 +10,7 @@ namespace Mail2SNMP.Models.Entities;
 /// </summary>
 public class ApiKey
 {
+    /// <summary>Surrogate primary key. Identity column assigned by the database.</summary>
     public int Id { get; set; }
 
     /// <summary>Friendly name shown in the management UI.</summary>
@@ -33,11 +34,18 @@ public class ApiKey
     /// </summary>
     public string Scopes { get; set; } = "read";
 
+    /// <summary>Whether the key is accepted for authentication. Defaults to <c>true</c>; set <c>false</c> to revoke without deleting.</summary>
     public bool IsActive { get; set; } = true;
 
+    /// <summary>UTC timestamp when the key was created. Defaults to <see cref="DateTime.UtcNow"/> at construction.</summary>
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+
+    /// <summary>UTC time after which the key is rejected, or <c>null</c> for a key that never expires.</summary>
     public DateTime? ExpiresUtc { get; set; }
+
+    /// <summary>UTC time the key was last successfully used to authenticate, or <c>null</c> if never used.</summary>
     public DateTime? LastUsedUtc { get; set; }
 
+    /// <summary>Identity (username) of the operator who created the key. Retained for audit.</summary>
     public string CreatedBy { get; set; } = string.Empty;
 }

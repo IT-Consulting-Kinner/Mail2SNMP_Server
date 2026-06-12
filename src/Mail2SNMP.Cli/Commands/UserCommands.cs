@@ -8,6 +8,11 @@ using Microsoft.Extensions.Logging;
 
 namespace Mail2SNMP.Cli;
 
+/// <summary>
+/// Partial of the CLI entry-point program that implements the <c>user</c> command group
+/// (create-admin, reset-password, list, activate/deactivate) and the <c>credentials</c>
+/// master-key rotation command.
+/// </summary>
 public partial class Program
 {
     /// <summary>

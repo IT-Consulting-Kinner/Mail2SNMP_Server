@@ -15,6 +15,11 @@ public class DeadLetterService : IDeadLetterService
     private readonly Mail2SnmpDbContext _db;
     private readonly ILogger<DeadLetterService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DeadLetterService"/> class.
+    /// </summary>
+    /// <param name="db">The database context used to read and persist dead-letter entries.</param>
+    /// <param name="logger">The logger for dead-letter creation and retry diagnostics.</param>
     public DeadLetterService(Mail2SnmpDbContext db, ILogger<DeadLetterService> logger)
     {
         _db = db;

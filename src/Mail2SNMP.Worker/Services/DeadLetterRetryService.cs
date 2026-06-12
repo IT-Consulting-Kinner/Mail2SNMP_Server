@@ -23,6 +23,12 @@ public class DeadLetterRetryService : BackgroundService
     private readonly TimeSpan _initialDelay;
     private readonly bool _allowPrivateTargets;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DeadLetterRetryService"/> class.
+    /// </summary>
+    /// <param name="scopeFactory">Factory used to create a scope per batch for resolving scoped services.</param>
+    /// <param name="logger">The logger for claim, retry, and abandonment diagnostics.</param>
+    /// <param name="configuration">Application configuration; the <c>DeadLetter</c> section supplies the poll interval, batch size, attempt limit, lock duration, and backoff, and <c>Security:AllowPrivateWebhookTargets</c> controls the SSRF guard.</param>
     public DeadLetterRetryService(
         IServiceScopeFactory scopeFactory,
         ILogger<DeadLetterRetryService> logger,

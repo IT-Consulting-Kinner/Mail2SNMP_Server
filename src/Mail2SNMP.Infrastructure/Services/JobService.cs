@@ -20,6 +20,14 @@ public class JobService : IJobService
     private readonly RuleEvaluator _ruleEvaluator;
     private readonly ILogger<JobService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="JobService"/> class.
+    /// </summary>
+    /// <param name="db">The database context used to read and persist jobs and their target assignments.</param>
+    /// <param name="license">The license provider that enforces the maximum job count.</param>
+    /// <param name="audit">The audit service used to record job changes.</param>
+    /// <param name="ruleEvaluator">The rule evaluator used to test rule matches during a dry run.</param>
+    /// <param name="logger">The logger for dry-run diagnostics.</param>
     public JobService(Mail2SnmpDbContext db, ILicenseProvider license, IAuditService audit, RuleEvaluator ruleEvaluator, ILogger<JobService> logger)
     {
         _db = db;

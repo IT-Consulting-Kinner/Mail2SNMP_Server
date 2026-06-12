@@ -23,6 +23,15 @@ public class MailboxService : IMailboxService
     private readonly ImapSettings _imapSettings;
     private readonly ILogger<MailboxService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MailboxService"/> class.
+    /// </summary>
+    /// <param name="db">The database context used to read and persist mailbox configurations.</param>
+    /// <param name="license">The license provider that enforces the maximum mailbox count.</param>
+    /// <param name="audit">The audit service used to record mailbox changes.</param>
+    /// <param name="credentialEncryptor">The credential encryptor used to protect the mailbox password at rest.</param>
+    /// <param name="imapSettings">IMAP options, including the connection-test timeout.</param>
+    /// <param name="logger">The logger for connection-test and credential-decryption diagnostics.</param>
     public MailboxService(
         Mail2SnmpDbContext db,
         ILicenseProvider license,

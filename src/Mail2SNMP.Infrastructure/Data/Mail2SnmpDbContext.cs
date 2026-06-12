@@ -9,25 +9,65 @@ namespace Mail2SNMP.Infrastructure.Data;
 /// </summary>
 public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
 {
+    /// <summary>
+    /// Initializes a new instance of the context with the supplied options (provider,
+    /// connection string, command timeout, etc.) configured during dependency injection.
+    /// </summary>
+    /// <param name="options">The EF Core options used to configure this context.</param>
     public Mail2SnmpDbContext(DbContextOptions<Mail2SnmpDbContext> options) : base(options) { }
 
+    /// <summary>Configured IMAP mailboxes that are polled for incoming mail.</summary>
     public DbSet<Mailbox> Mailboxes => Set<Mailbox>();
+
+    /// <summary>Matching rules whose criteria decide which e-mails trigger a job.</summary>
     public DbSet<Rule> Rules => Set<Rule>();
+
+    /// <summary>Jobs that bind a mailbox and rule to one or more notification targets.</summary>
     public DbSet<Job> Jobs => Set<Job>();
+
+    /// <summary>Quartz schedule definitions that drive periodic execution of jobs.</summary>
     public DbSet<Schedule> Schedules => Set<Schedule>();
+
+    /// <summary>SNMP trap destinations (host, version, credentials) that receive notifications.</summary>
     public DbSet<SnmpTarget> SnmpTargets => Set<SnmpTarget>();
+
+    /// <summary>Webhook (HTTP) destinations that receive notifications.</summary>
     public DbSet<WebhookTarget> WebhookTargets => Set<WebhookTarget>();
+
+    /// <summary>Events (alarms) raised by jobs, tracked through their lifecycle state.</summary>
     public DbSet<Event> Events => Set<Event>();
+
+    /// <summary>Deduplication records that suppress repeat events within the dedup window.</summary>
     public DbSet<EventDedup> EventDedups => Set<EventDedup>();
+
+    /// <summary>Append-only audit log of user/system actions for compliance and forensics.</summary>
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+
+    /// <summary>Maintenance windows during which notifications are suppressed for a scope.</summary>
     public DbSet<MaintenanceWindow> MaintenanceWindows => Set<MaintenanceWindow>();
+
+    /// <summary>Failed webhook deliveries parked for retry (the dead-letter queue).</summary>
     public DbSet<DeadLetterEntry> DeadLetterEntries => Set<DeadLetterEntry>();
+
+    /// <summary>Tracking records of already-processed e-mails, used for IMAP message-id dedup.</summary>
     public DbSet<ProcessedMail> ProcessedMails => Set<ProcessedMail>();
+
+    /// <summary>Distributed worker leases used to coordinate a single active worker across instances.</summary>
     public DbSet<WorkerLease> WorkerLeases => Set<WorkerLease>();
+
+    /// <summary>Persisted authentication tickets backing the cookie/session ticket store.</summary>
     public DbSet<AuthTicket> AuthTickets => Set<AuthTicket>();
+
+    /// <summary>Join table assigning SNMP targets to jobs (many-to-many).</summary>
     public DbSet<JobSnmpTarget> JobSnmpTargets => Set<JobSnmpTarget>();
+
+    /// <summary>Join table assigning webhook targets to jobs (many-to-many).</summary>
     public DbSet<JobWebhookTarget> JobWebhookTargets => Set<JobWebhookTarget>();
+
+    /// <summary>Persisted key/value application settings stored in the database.</summary>
     public DbSet<Setting> Settings => Set<Setting>();
+
+    /// <summary>API keys used for header-based REST authentication (stored hashed).</summary>
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
 
     /// <summary>

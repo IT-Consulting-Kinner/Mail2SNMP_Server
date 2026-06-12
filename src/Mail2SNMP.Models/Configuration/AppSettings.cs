@@ -111,8 +111,25 @@ public class DatabaseSettings
 /// </summary>
 public class ImapSettings
 {
+    /// <summary>
+    /// Maximum number of IMAP connections opened concurrently across all mailboxes
+    /// (a connection-pool / semaphore ceiling). Higher values poll more mailboxes in
+    /// parallel at the cost of open sockets and server-side connection limits. Default 10.
+    /// </summary>
     public int MaxConcurrentConnections { get; set; } = 10;
+
+    /// <summary>
+    /// Bounded capacity of the in-memory channel that buffers fetched mail items between
+    /// the IMAP producers and the consumer tasks. When full, new work items are dropped
+    /// and counted by the channel-overflow metric, so size this to your peak burst.
+    /// Default 20.
+    /// </summary>
     public int ChannelBoundedCapacity { get; set; } = 20;
+
+    /// <summary>
+    /// Number of consumer tasks that drain the channel and process mail items in parallel.
+    /// Default 5.
+    /// </summary>
     public int ConsumerTasks { get; set; } = 5;
 
     /// <summary>
@@ -152,10 +169,37 @@ public class ImapSettings
 /// </summary>
 public class EventSettings
 {
+    /// <summary>
+    /// Default time window (in minutes) during which an incoming event with the same
+    /// dedup key as a recent one is treated as a duplicate and suppressed rather than
+    /// raising a new event. Applied per job unless the job overrides it. Default 30.
+    /// </summary>
     public int DefaultDedupWindowMinutes { get; set; } = 30;
+
+    /// <summary>
+    /// Default cap on the number of events a single job may create per rolling hour;
+    /// events beyond the cap are rate-limited (dropped) to protect downstream targets.
+    /// Applied per job unless overridden. Default 50.
+    /// </summary>
     public int DefaultMaxEventsPerHour { get; set; } = 50;
+
+    /// <summary>
+    /// Default maximum number of simultaneously active (non-terminal) events a job may
+    /// hold open before new ones are throttled. Applied per job unless overridden.
+    /// Default 200.
+    /// </summary>
     public int DefaultMaxActiveEvents { get; set; } = 200;
+
+    /// <summary>
+    /// Number of days after which a still-active event is automatically expired
+    /// (moved to a terminal state) by the maintenance pass. Default 30.
+    /// </summary>
     public int AutoExpireDays { get; set; } = 30;
+
+    /// <summary>
+    /// Number of days a resolved/terminal event is retained in the database before
+    /// it is purged by data retention. Default 90.
+    /// </summary>
     public int ResolvedRetentionDays { get; set; } = 90;
 
     /// <summary>
@@ -173,9 +217,27 @@ public class EventSettings
 /// </summary>
 public class RetentionSettings
 {
+    /// <summary>
+    /// Number of days processed-mail tracking records (used for IMAP dedup) are kept
+    /// before deletion. Default 30.
+    /// </summary>
     public int ProcessedMailDays { get; set; } = 30;
+
+    /// <summary>
+    /// Number of days audit-log entries are retained before deletion. Default 365.
+    /// </summary>
     public int AuditEventDays { get; set; } = 365;
+
+    /// <summary>
+    /// Number of days dead-letter (failed webhook delivery) entries are retained
+    /// before deletion. Default 7.
+    /// </summary>
     public int DeadLetterDays { get; set; } = 7;
+
+    /// <summary>
+    /// Hard cap on the total number of audit entries; the oldest are trimmed once this
+    /// count is exceeded, independent of <see cref="AuditEventDays"/>. Default 5,000,000.
+    /// </summary>
     public int MaxAuditEntries { get; set; } = 5_000_000;
 }
 
@@ -184,7 +246,17 @@ public class RetentionSettings
 /// </summary>
 public class SessionSettings
 {
+    /// <summary>
+    /// Sliding inactivity timeout (in minutes) for an authenticated UI session; each
+    /// request resets the clock and the session expires after this much idle time.
+    /// Default 60.
+    /// </summary>
     public int SlidingExpiryMinutes { get; set; } = 60;
+
+    /// <summary>
+    /// Absolute maximum lifetime (in hours) of a session regardless of activity, after
+    /// which re-authentication is required. Default 8.
+    /// </summary>
     public int AbsoluteExpiryHours { get; set; } = 8;
 }
 
@@ -193,8 +265,21 @@ public class SessionSettings
 /// </summary>
 public class OidcSettings
 {
+    /// <summary>
+    /// OIDC authority (issuer) base URL used for discovery of the identity provider's
+    /// endpoints. When null/empty, SSO is effectively disabled. No default.
+    /// </summary>
     public string? Authority { get; set; }
+
+    /// <summary>
+    /// OAuth2 / OIDC client identifier registered with the identity provider. No default.
+    /// </summary>
     public string? ClientId { get; set; }
+
+    /// <summary>
+    /// OAuth2 / OIDC client secret. Sensitive — keep out of source control and prefer a
+    /// secrets store. No default.
+    /// </summary>
     public string? ClientSecret { get; set; }
 
     /// <summary>
@@ -208,7 +293,16 @@ public class OidcSettings
     /// </summary>
     public string[] AdditionalRoleClaimTypes { get; set; } = new[] { "role" };
 
+    /// <summary>
+    /// External claim value that maps an authenticated SSO user to the local Admin role.
+    /// Default "Mail2SNMP.Admin".
+    /// </summary>
     public string AdminClaimValue { get; set; } = "Mail2SNMP.Admin";
+
+    /// <summary>
+    /// External claim value that maps an authenticated SSO user to the local Operator role.
+    /// Default "Mail2SNMP.Operator".
+    /// </summary>
     public string OperatorClaimValue { get; set; } = "Mail2SNMP.Operator";
 
     /// <summary>
@@ -223,6 +317,10 @@ public class OidcSettings
 /// </summary>
 public class MetricsSettings
 {
+    /// <summary>
+    /// When true, the Prometheus scrape endpoint (/metrics) is exposed. When false
+    /// (the default), no metrics endpoint is mapped. Default false.
+    /// </summary>
     public bool Enabled { get; set; }
 }
 
@@ -234,6 +332,12 @@ public class MetricsSettings
 /// </summary>
 public class HostingSettings
 {
+    /// <summary>
+    /// When true, the Web host also runs the background Worker services (Quartz scheduler,
+    /// mail polling, dead-letter retry, data retention) and maps the REST API endpoints in
+    /// the same process, so no separate Worker/API processes are needed. When false (the
+    /// default), those responsibilities are expected to run as separate hosts. Default false.
+    /// </summary>
     public bool AllInOne { get; set; }
 }
 
@@ -260,18 +364,43 @@ public class HelpSettings
     /// <summary>Optional base URL substituted into the literal token <c>{base}</c> in any per-page URL.</summary>
     public string BaseUrl { get; set; } = string.Empty;
 
+    /// <summary>Documentation URL for the Mailboxes page; empty hides the help icon. May contain <c>{base}</c>. Default empty.</summary>
     public string Mailboxes { get; set; } = string.Empty;
+
+    /// <summary>Documentation URL for the Rules page; empty hides the help icon. May contain <c>{base}</c>. Default empty.</summary>
     public string Rules { get; set; } = string.Empty;
+
+    /// <summary>Documentation URL for the Jobs page; empty hides the help icon. May contain <c>{base}</c>. Default empty.</summary>
     public string Jobs { get; set; } = string.Empty;
+
+    /// <summary>Documentation URL for the Schedules page; empty hides the help icon. May contain <c>{base}</c>. Default empty.</summary>
     public string Schedules { get; set; } = string.Empty;
+
+    /// <summary>Documentation URL for the SNMP Targets page; empty hides the help icon. May contain <c>{base}</c>. Default empty.</summary>
     public string SnmpTargets { get; set; } = string.Empty;
+
+    /// <summary>Documentation URL for the Webhook Targets page; empty hides the help icon. May contain <c>{base}</c>. Default empty.</summary>
     public string WebhookTargets { get; set; } = string.Empty;
+
+    /// <summary>Documentation URL for the Maintenance (windows) page; empty hides the help icon. May contain <c>{base}</c>. Default empty.</summary>
     public string Maintenance { get; set; } = string.Empty;
+
+    /// <summary>Documentation URL for the Events page; empty hides the help icon. May contain <c>{base}</c>. Default empty.</summary>
     public string Events { get; set; } = string.Empty;
+
+    /// <summary>Documentation URL for the Dead Letters page; empty hides the help icon. May contain <c>{base}</c>. Default empty.</summary>
     public string DeadLetters { get; set; } = string.Empty;
+
+    /// <summary>Documentation URL for the Audit Log page; empty hides the help icon. May contain <c>{base}</c>. Default empty.</summary>
     public string AuditLog { get; set; } = string.Empty;
+
+    /// <summary>Documentation URL for the API Keys page; empty hides the help icon. May contain <c>{base}</c>. Default empty.</summary>
     public string ApiKeys { get; set; } = string.Empty;
+
+    /// <summary>Documentation URL for the Users page; empty hides the help icon. May contain <c>{base}</c>. Default empty.</summary>
     public string Users { get; set; } = string.Empty;
+
+    /// <summary>Documentation URL for the Settings page; empty hides the help icon. May contain <c>{base}</c>. Default empty.</summary>
     public string Settings { get; set; } = string.Empty;
 
     /// <summary>

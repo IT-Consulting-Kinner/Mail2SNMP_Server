@@ -21,6 +21,13 @@ public class UpdateCheckService : BackgroundService
     private readonly UpdateCheckSettings _settings;
     private readonly ILogger<UpdateCheckService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="UpdateCheckService"/> class.
+    /// </summary>
+    /// <param name="scopeFactory">Factory used to create scopes for resolving the lease service, database context, and SNMP channel.</param>
+    /// <param name="httpClientFactory">The factory that supplies the named <c>UpdateCheck</c> HTTP client.</param>
+    /// <param name="settings">The update-check options, including the feed URL, interval, and trap mode.</param>
+    /// <param name="logger">The logger for update-feed and trap-emission diagnostics.</param>
     public UpdateCheckService(
         IServiceScopeFactory scopeFactory,
         IHttpClientFactory httpClientFactory,
@@ -33,6 +40,12 @@ public class UpdateCheckService : BackgroundService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Runs the update-check loop. Returns immediately when the feature is disabled; otherwise checks the
+    /// update feed at startup and every configured interval, performing the check only on the elected cluster
+    /// primary so a multi-node cluster does not emit duplicate update traps.
+    /// </summary>
+    /// <param name="stoppingToken">Token signalled when the host is shutting down.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!_settings.Enabled)

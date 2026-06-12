@@ -18,6 +18,12 @@ public class HeartbeatService : BackgroundService
     private static readonly TimeSpan AcquireTimeout = TimeSpan.FromSeconds(90);
     private static readonly TimeSpan AcquireRetryDelay = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HeartbeatService"/> class.
+    /// </summary>
+    /// <param name="scopeFactory">Factory used to create scopes for resolving the worker-lease service and license provider.</param>
+    /// <param name="logger">The logger for lease acquisition, renewal, and shutdown diagnostics.</param>
+    /// <param name="lifetime">The host application lifetime, used to stop the process when the lease is lost or revoked by a license downgrade.</param>
     public HeartbeatService(
         IServiceScopeFactory scopeFactory,
         ILogger<HeartbeatService> logger,

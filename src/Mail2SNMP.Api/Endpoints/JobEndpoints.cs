@@ -4,8 +4,25 @@ using Mail2SNMP.Models.DTOs;
 
 namespace Mail2SNMP.Api.Endpoints;
 
+/// <summary>
+/// REST API endpoints for managing jobs, which bind a mailbox and rule to SNMP/webhook
+/// targets and drive event generation.
+/// </summary>
 public static class JobEndpoints
 {
+    /// <summary>
+    /// Registers the <c>/api/v1/jobs</c> route group.
+    /// </summary>
+    /// <remarks>
+    /// Maps <c>GET /</c> (list) and <c>GET /{id}</c> (fetch one), both requiring the
+    /// <c>ReadOnly</c> policy, and <c>POST /{id}/dryrun</c> (preview a job's output)
+    /// requiring the <c>Operator</c> policy. The mutating operations <c>POST /</c>
+    /// (create), <c>PUT /{id}</c> (update) and <c>DELETE /{id}</c> (delete) all require
+    /// the <c>Admin</c> policy; create and update also persist the job's SNMP and
+    /// webhook target assignments.
+    /// </remarks>
+    /// <param name="endpoints">The route builder to register the endpoints on.</param>
+    /// <returns>The same <paramref name="endpoints"/> builder, for chaining.</returns>
     public static IEndpointRouteBuilder MapJobEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/v1/jobs")

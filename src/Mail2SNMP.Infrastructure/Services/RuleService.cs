@@ -14,6 +14,11 @@ public class RuleService : IRuleService
     private readonly Mail2SnmpDbContext _db;
     private readonly IAuditService _audit;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RuleService"/> class.
+    /// </summary>
+    /// <param name="db">The database context used to read and persist rules.</param>
+    /// <param name="audit">The audit service used to record rule changes.</param>
     public RuleService(Mail2SnmpDbContext db, IAuditService audit)
     {
         _db = db;

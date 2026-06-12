@@ -4,8 +4,25 @@ using Mail2SNMP.Models.Entities;
 
 namespace Mail2SNMP.Api.Endpoints;
 
+/// <summary>
+/// REST API endpoints for managing maintenance windows that suppress notifications
+/// during planned downtime.
+/// </summary>
 public static class MaintenanceWindowEndpoints
 {
+    /// <summary>
+    /// Registers the <c>/api/v1/maintenance-windows</c> route group.
+    /// </summary>
+    /// <remarks>
+    /// Maps <c>GET /</c> (list), <c>GET /{id}</c> (fetch one) and
+    /// <c>GET /active</c> (report whether a window is currently in effect, optionally
+    /// scoped to a job), all requiring the <c>ReadOnly</c> policy. The mutating
+    /// operations <c>POST /</c> (create) and <c>DELETE /{id}</c> (delete) require the
+    /// <c>Admin</c> policy; create payloads are validated by
+    /// <see cref="Filters.ValidationFilter{T}"/>.
+    /// </remarks>
+    /// <param name="endpoints">The route builder to register the endpoints on.</param>
+    /// <returns>The same <paramref name="endpoints"/> builder, for chaining.</returns>
     public static IEndpointRouteBuilder MapMaintenanceWindowEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/v1/maintenance-windows")

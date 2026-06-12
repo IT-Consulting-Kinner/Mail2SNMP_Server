@@ -21,6 +21,12 @@ public class AutoAcknowledgeService : BackgroundService
     private readonly EventSettings _eventSettings;
     private static readonly TimeSpan ScanInterval = TimeSpan.FromMinutes(1);
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AutoAcknowledgeService"/> class.
+    /// </summary>
+    /// <param name="scopeFactory">Factory used to create a scope per scan for resolving scoped services.</param>
+    /// <param name="logger">The logger for scan and acknowledge diagnostics.</param>
+    /// <param name="configuration">Application configuration; the <c>Events</c> section supplies <see cref="EventSettings.AutoAcknowledgeAfterMinutes"/>.</param>
     public AutoAcknowledgeService(
         IServiceScopeFactory scopeFactory,
         ILogger<AutoAcknowledgeService> logger,
@@ -31,6 +37,13 @@ public class AutoAcknowledgeService : BackgroundService
         _eventSettings = configuration.GetSection("Events").Get<EventSettings>() ?? new EventSettings();
     }
 
+    /// <summary>
+    /// Runs the auto-acknowledge loop. Returns immediately when the feature is disabled
+    /// (<see cref="EventSettings.AutoAcknowledgeAfterMinutes"/> &lt;= 0); otherwise scans once per minute and,
+    /// only on the elected cluster primary, acknowledges <see cref="EventState.New"/> events older than the
+    /// configured age until cancellation is requested.
+    /// </summary>
+    /// <param name="stoppingToken">Token signalled when the host is shutting down.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (_eventSettings.AutoAcknowledgeAfterMinutes <= 0)

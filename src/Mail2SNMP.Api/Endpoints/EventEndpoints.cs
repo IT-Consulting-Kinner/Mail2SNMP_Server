@@ -4,8 +4,24 @@ using Mail2SNMP.Models.Enums;
 
 namespace Mail2SNMP.Api.Endpoints;
 
+/// <summary>
+/// REST API endpoints for querying events and driving them through their lifecycle
+/// (acknowledge, resolve, suppress, replay).
+/// </summary>
 public static class EventEndpoints
 {
+    /// <summary>
+    /// Registers the <c>/api/v1/events</c> route group.
+    /// </summary>
+    /// <remarks>
+    /// Maps <c>GET /</c> (list, optionally filtered by state and job) and <c>GET /{id}</c>
+    /// (fetch one), both requiring the <c>ReadOnly</c> policy. State transitions
+    /// <c>POST /{id}/acknowledge</c>, <c>POST /{id}/resolve</c> and <c>POST /{id}/replay</c>
+    /// require the <c>Operator</c> policy (acknowledge and resolve record the calling user),
+    /// while <c>POST /{id}/suppress</c> requires the <c>Admin</c> policy.
+    /// </remarks>
+    /// <param name="endpoints">The route builder to register the endpoints on.</param>
+    /// <returns>The same <paramref name="endpoints"/> builder, for chaining.</returns>
     public static IEndpointRouteBuilder MapEventEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/v1/events")
