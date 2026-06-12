@@ -17,7 +17,12 @@
     <Company>IT-Consulting Kinner</Company>
     <Copyright>© IT-Consulting Kinner</Copyright>
 
+    <!-- Generate the XML doc file AND enforce documentation: CS1591 (missing XML
+         comment on a publicly visible member) is left at its default 'warning'
+         severity instead of being suppressed, so any new undocumented public or
+         protected member shows up as a build warning. The generated EF Core
+         migrations under */Migrations/ are exempted via a folder-local
+         .editorconfig (they are tool-generated, not hand-maintained). -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 </Project>

@@ -1,0 +1,9 @@
+# EF Core migrations and the model snapshot in this folder are tool-generated
+# (by `dotnet ef migrations add` / `mail2snmp db` tooling), not hand-maintained.
+# The solution enforces CS1591 ("missing XML documentation comment on a publicly
+# visible member") as a warning everywhere else, but generated migration classes
+# expose public/protected members (the migration type, Up/Down, BuildTargetModel)
+# that are not meant to be documented by hand. Exempt this folder so regenerating
+# a migration never introduces doc warnings.
+[*.cs]
+dotnet_diagnostic.CS1591.severity = none
