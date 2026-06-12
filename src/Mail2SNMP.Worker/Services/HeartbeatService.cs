@@ -1,7 +1,4 @@
 using Mail2SNMP.Core.Interfaces;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 namespace Mail2SNMP.Worker.Services;
 

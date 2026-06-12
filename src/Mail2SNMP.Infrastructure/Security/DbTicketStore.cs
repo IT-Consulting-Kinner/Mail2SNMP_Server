@@ -2,7 +2,6 @@ using Mail2SNMP.Infrastructure.Data;
 using Mail2SNMP.Models.Entities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

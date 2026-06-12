@@ -1,23 +1,10 @@
-using System.IO.Compression;
 using System.Net;
-using System.Net.Sockets;
-using System.Reflection;
-using System.Text;
-using System.Text.Json;
 using Lextm.SharpSnmpLib;
 using Lextm.SharpSnmpLib.Messaging;
 using Mail2SNMP.Core.Interfaces;
-using Mail2SNMP.Infrastructure;
-using Mail2SNMP.Infrastructure.Data;
-using Mail2SNMP.Infrastructure.Security;
 using Mail2SNMP.Models.Entities;
 using Mail2SNMP.Models.Enums;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace Mail2SNMP.Cli;
 

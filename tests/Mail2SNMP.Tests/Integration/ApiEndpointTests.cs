@@ -13,11 +13,11 @@ namespace Mail2SNMP.Tests.Integration;
 public class ApiEndpointTests : IClassFixture<TestWebApplicationFactory>, IDisposable
 {
     private readonly HttpClient _client;
-    private readonly TestWebApplicationFactory _factory;
 
     public ApiEndpointTests(TestWebApplicationFactory factory)
     {
-        _factory = factory;
+        // The factory itself is only needed to mint the client; we don't hold a
+        // reference to it (it's owned by the xUnit IClassFixture lifetime).
         _client = factory.CreateClient();
     }
 

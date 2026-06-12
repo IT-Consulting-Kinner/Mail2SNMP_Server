@@ -1,5 +1,4 @@
 using Mail2SNMP.Models.DTOs;
-using Mail2SNMP.Models.Enums;
 
 namespace Mail2SNMP.Core.Interfaces;
 

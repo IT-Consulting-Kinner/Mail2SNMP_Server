@@ -7,10 +7,6 @@ using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 namespace Mail2SNMP.Worker.Services;
 

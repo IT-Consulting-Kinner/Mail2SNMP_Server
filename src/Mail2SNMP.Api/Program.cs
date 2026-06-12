@@ -1,15 +1,10 @@
 using Mail2SNMP.Api.Endpoints;
 using Mail2SNMP.Api.Setup;
-using Mail2SNMP.Core.Interfaces;
 using Mail2SNMP.Infrastructure;
 using Mail2SNMP.Infrastructure.Data;
 using Mail2SNMP.Models.Configuration;
-using Mail2SNMP.Models.Entities;
-using Microsoft.AspNetCore.Authentication.OpenIdConnect;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Mail2SNMP.Infrastructure.Logging;
-using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Prometheus;
 using Serilog;
 

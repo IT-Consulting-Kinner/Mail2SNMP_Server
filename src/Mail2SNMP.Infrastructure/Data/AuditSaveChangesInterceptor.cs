@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Mail2SNMP.Models.Entities;
 using Mail2SNMP.Models.Enums;
 using Microsoft.EntityFrameworkCore;

@@ -1,6 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography;
-using System.Text.Json;
 using Mail2SNMP.Core.Interfaces;
 using Mail2SNMP.Models.DTOs;
 using Mail2SNMP.Models.Enums;

@@ -11,11 +11,6 @@ using MailKit.Net.Imap;
 using MailKit.Search;
 using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using MimeKit;
 using System.Threading.Channels;
 
 namespace Mail2SNMP.Worker.Services;

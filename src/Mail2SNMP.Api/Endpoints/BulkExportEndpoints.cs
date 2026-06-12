@@ -1,9 +1,5 @@
 using System.Text.Json;
 using Mail2SNMP.Core.Interfaces;
-using Mail2SNMP.Models.Entities;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
 
 namespace Mail2SNMP.Api.Endpoints;
 

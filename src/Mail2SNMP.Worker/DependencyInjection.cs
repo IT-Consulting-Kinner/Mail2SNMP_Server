@@ -1,8 +1,6 @@
 using Mail2SNMP.Models.Configuration;
 using Mail2SNMP.Worker.Models;
 using Mail2SNMP.Worker.Services;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Quartz;
 using System.Threading.Channels;
 

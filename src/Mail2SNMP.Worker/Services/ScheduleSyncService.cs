@@ -1,8 +1,5 @@
 using Mail2SNMP.Core.Interfaces;
 using Mail2SNMP.Worker.Jobs;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Quartz;
 
 namespace Mail2SNMP.Worker.Services;

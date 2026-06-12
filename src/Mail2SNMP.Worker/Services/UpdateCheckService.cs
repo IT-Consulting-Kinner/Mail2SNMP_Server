@@ -6,10 +6,6 @@ using Mail2SNMP.Infrastructure.Data;
 using Mail2SNMP.Models.Configuration;
 using Mail2SNMP.Models.DTOs;
 using Mail2SNMP.Models.Entities;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Mail2SNMP.Worker.Services;
