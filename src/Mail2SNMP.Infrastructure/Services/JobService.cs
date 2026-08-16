@@ -153,6 +153,13 @@ public class JobService : IJobService
 
         foreach (var jst in job.JobSnmpTargets.Where(t => t.SnmpTarget.IsActive))
         {
+            // UC-4: the test event is Severity.Information — surface severity routing
+            // instead of silently skipping, so the operator sees why a target stays quiet.
+            if (context.Severity < jst.SnmpTarget.MinSeverity)
+            {
+                report.AppendLine($"SNMP  {jst.SnmpTarget.Name}: skipped (target requires >= {jst.SnmpTarget.MinSeverity})");
+                continue;
+            }
             var ok = snmpChannel != null && await snmpChannel.SendToSnmpTargetAsync(context, jst.SnmpTarget, ct);
             report.AppendLine($"SNMP  {jst.SnmpTarget.Name} ({jst.SnmpTarget.Host}:{jst.SnmpTarget.Port}): {(ok ? "sent" : "FAILED")}");
             if (ok) okCount++; else failCount++;
@@ -160,6 +167,11 @@ public class JobService : IJobService
 
         foreach (var jwt in job.JobWebhookTargets.Where(t => t.WebhookTarget.IsActive))
         {
+            if (context.Severity < jwt.WebhookTarget.MinSeverity)
+            {
+                report.AppendLine($"HTTP  {jwt.WebhookTarget.Name}: skipped (target requires >= {jwt.WebhookTarget.MinSeverity})");
+                continue;
+            }
             var ok = webhookChannel != null && await webhookChannel.SendToWebhookTargetAsync(context, jwt.WebhookTarget, ct);
             report.AppendLine($"HTTP  {jwt.WebhookTarget.Name}: {(ok ? "delivered" : "FAILED")}");
             if (ok) okCount++; else failCount++;

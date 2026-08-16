@@ -609,8 +609,11 @@ public class MailPollingService : BackgroundService
         // e.g. a v3 target under a Community license, DNS failure, master-key drift —
         // stays New instead of being falsely marked Notified.
 
-        // Send to assigned SNMP targets
-        foreach (var jst in job.JobSnmpTargets.Where(t => t.SnmpTarget.IsActive))
+        // Send to assigned SNMP targets.
+        // UC-4: severity routing — targets only receive events at or above their
+        // configured MinSeverity ("page the NOC only for Critical").
+        foreach (var jst in job.JobSnmpTargets.Where(t =>
+                     t.SnmpTarget.IsActive && evt.Severity >= t.SnmpTarget.MinSeverity))
         {
             try
             {
@@ -627,8 +630,9 @@ public class MailPollingService : BackgroundService
             }
         }
 
-        // Send to assigned Webhook targets
-        foreach (var jwt in job.JobWebhookTargets.Where(t => t.WebhookTarget.IsActive))
+        // Send to assigned Webhook targets (UC-4: same severity routing as above).
+        foreach (var jwt in job.JobWebhookTargets.Where(t =>
+                     t.WebhookTarget.IsActive && evt.Severity >= t.WebhookTarget.MinSeverity))
         {
             try
             {

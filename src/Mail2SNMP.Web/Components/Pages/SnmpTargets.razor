@@ -258,6 +258,19 @@ else
                             <label class="form-label">Max Traps/Minute</label>
                             <InputNumber class="form-control" @bind-Value="_form.MaxTrapsPerMinute" />
                         </div>
+                        <div class="mb-3">
+                            <label class="form-label">Minimum Severity</label>
+                            <InputSelect class="form-select" @bind-Value="_form.MinSeverity">
+                                @foreach (var sev in Enum.GetValues<Severity>())
+                                {
+                                    <option value="@sev">@sev</option>
+                                }
+                            </InputSelect>
+                            <div class="form-text">
+                                UC-4: this receiver only gets events at or above the selected severity
+                                (e.g. set Critical for a paging NMS). Information = receive everything.
+                            </div>
+                        </div>
                         <div class="form-check mb-3">
                             <InputCheckbox class="form-check-input" @bind-Value="_form.SendKeepAlive" />
                             <label class="form-check-label">Send KeepAlive Traps</label>
@@ -380,7 +393,8 @@ else
             CommunityString = null, SecurityName = t.SecurityName,
             AuthProtocol = t.AuthProtocol, PrivProtocol = t.PrivProtocol,
             EngineId = t.EngineId, EnterpriseTrapOid = t.EnterpriseTrapOid,
-            MaxTrapsPerMinute = t.MaxTrapsPerMinute, SendKeepAlive = t.SendKeepAlive, IsActive = t.IsActive,
+            MaxTrapsPerMinute = t.MaxTrapsPerMinute, MinSeverity = t.MinSeverity,
+            SendKeepAlive = t.SendKeepAlive, IsActive = t.IsActive,
             IsEditing = true
         };
         _showForm = true;
@@ -410,6 +424,7 @@ else
                 _editing.PrivProtocol = _form.PrivProtocol; _editing.EngineId = _form.EngineId;
                 _editing.EnterpriseTrapOid = _form.EnterpriseTrapOid;
                 _editing.MaxTrapsPerMinute = _form.MaxTrapsPerMinute;
+                _editing.MinSeverity = _form.MinSeverity;
                 _editing.SendKeepAlive = _form.SendKeepAlive;
                 _editing.IsActive = _form.IsActive;
                 // R2 + I3: only update credential fields if the user typed a fresh value;
@@ -430,7 +445,8 @@ else
                     AuthProtocol = _form.AuthProtocol, EncryptedAuthPassword = _form.AuthPassword ?? string.Empty,
                     PrivProtocol = _form.PrivProtocol, EncryptedPrivPassword = _form.PrivPassword ?? string.Empty,
                     EngineId = _form.EngineId, EnterpriseTrapOid = _form.EnterpriseTrapOid,
-                    MaxTrapsPerMinute = _form.MaxTrapsPerMinute, SendKeepAlive = _form.SendKeepAlive, IsActive = _form.IsActive
+                    MaxTrapsPerMinute = _form.MaxTrapsPerMinute, MinSeverity = _form.MinSeverity,
+                    SendKeepAlive = _form.SendKeepAlive, IsActive = _form.IsActive
                 };
                 await SnmpTargetService.CreateAsync(target);
                 _success = "SNMP target created.";
@@ -502,6 +518,9 @@ else
 
         [Range(1, 10000, ErrorMessage = "Max traps per minute must be between 1 and 10,000.")]
         public int MaxTrapsPerMinute { get; set; } = 100;
+
+        // UC-4: severity routing threshold; Information = receive everything.
+        public Severity MinSeverity { get; set; } = Severity.Information;
 
         public bool SendKeepAlive { get; set; } = false;
         public bool IsActive { get; set; } = true;

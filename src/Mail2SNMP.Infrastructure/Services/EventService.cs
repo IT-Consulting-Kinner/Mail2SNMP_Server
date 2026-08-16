@@ -376,15 +376,17 @@ public class EventService : IEventService
         var snmpChannel = channels.FirstOrDefault(c => c.ChannelName == Mail2SNMP.Core.Interfaces.INotificationChannel.Snmp);
         var webhookChannel = channels.FirstOrDefault(c => c.ChannelName == Mail2SNMP.Core.Interfaces.INotificationChannel.Webhook);
 
-        // Send to assigned SNMP targets
-        foreach (var jst in evt.Job.JobSnmpTargets.Where(t => t.SnmpTarget.IsActive))
+        // Send to assigned SNMP targets (UC-4: severity routing applies on replay too).
+        foreach (var jst in evt.Job.JobSnmpTargets.Where(t =>
+                     t.SnmpTarget.IsActive && evt.Severity >= t.SnmpTarget.MinSeverity))
         {
             if (snmpChannel != null)
                 await snmpChannel.SendToSnmpTargetAsync(context, jst.SnmpTarget, ct);
         }
 
-        // Send to assigned Webhook targets
-        foreach (var jwt in evt.Job.JobWebhookTargets.Where(t => t.WebhookTarget.IsActive))
+        // Send to assigned Webhook targets (UC-4: severity routing applies on replay too).
+        foreach (var jwt in evt.Job.JobWebhookTargets.Where(t =>
+                     t.WebhookTarget.IsActive && evt.Severity >= t.WebhookTarget.MinSeverity))
         {
             if (webhookChannel != null)
                 await webhookChannel.SendToWebhookTargetAsync(context, jwt.WebhookTarget, ct);

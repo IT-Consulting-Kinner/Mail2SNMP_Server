@@ -120,6 +120,9 @@ public class SnmpTargetResponse
     /// <summary>Outbound rate cap in traps per minute (1–10,000). Notifications beyond this rate are throttled. Defaults to 100 on the entity.</summary>
     public int MaxTrapsPerMinute { get; set; }
 
+    /// <summary>UC-4: minimum event severity this receiver accepts; events below it are skipped at dispatch. <c>Information</c> = receive everything.</summary>
+    public Enums.Severity MinSeverity { get; set; }
+
     /// <summary>When <see langword="true"/>, the worker periodically sends KeepAlive traps to this target to signal liveness.</summary>
     public bool SendKeepAlive { get; set; }
 
@@ -165,6 +168,9 @@ public class WebhookTargetResponse
 
     /// <summary>Outbound rate cap in requests per minute (1–10,000). Notifications beyond this rate are throttled. Defaults to 60 on the entity.</summary>
     public int MaxRequestsPerMinute { get; set; }
+
+    /// <summary>UC-4: minimum event severity this webhook accepts; events below it are skipped at dispatch. <c>Information</c> = receive everything.</summary>
+    public Enums.Severity MinSeverity { get; set; }
 
     /// <summary>When <see langword="true"/>, the target is enabled and will receive webhook calls; when <see langword="false"/> it is retained but skipped.</summary>
     public bool IsActive { get; set; }
@@ -355,6 +361,7 @@ public static class ResponseDtoMapper
             EngineId = target.EngineId,
             EnterpriseTrapOid = target.EnterpriseTrapOid,
             MaxTrapsPerMinute = target.MaxTrapsPerMinute,
+            MinSeverity = target.MinSeverity,
             SendKeepAlive = target.SendKeepAlive,
             IsActive = target.IsActive,
             CreatedUtc = target.CreatedUtc
@@ -378,6 +385,7 @@ public static class ResponseDtoMapper
             PayloadTemplate = target.PayloadTemplate,
             HasSecret = !string.IsNullOrEmpty(target.EncryptedSecret),
             MaxRequestsPerMinute = target.MaxRequestsPerMinute,
+            MinSeverity = target.MinSeverity,
             IsActive = target.IsActive,
             CreatedUtc = target.CreatedUtc
         };

@@ -159,6 +159,19 @@ else
                             <label class="form-label">Max Requests/Minute</label>
                             <InputNumber class="form-control" @bind-Value="_form.MaxRequestsPerMinute" />
                         </div>
+                        <div class="mb-3">
+                            <label class="form-label">Minimum Severity</label>
+                            <InputSelect class="form-select" @bind-Value="_form.MinSeverity">
+                                @foreach (var sev in Enum.GetValues<Severity>())
+                                {
+                                    <option value="@sev">@sev</option>
+                                }
+                            </InputSelect>
+                            <div class="form-text">
+                                UC-4: this webhook only receives events at or above the selected severity.
+                                Information = receive everything.
+                            </div>
+                        </div>
                         <div class="form-check mb-3">
                             <InputCheckbox class="form-check-input" @bind-Value="_form.IsActive" />
                             <label class="form-check-label">Active</label>
@@ -274,7 +287,8 @@ else
         _form = new WebhookForm
         {
             Name = t.Name, Url = t.Url, Headers = t.Headers,
-            PayloadTemplate = t.PayloadTemplate, MaxRequestsPerMinute = t.MaxRequestsPerMinute, IsActive = t.IsActive,
+            PayloadTemplate = t.PayloadTemplate, MaxRequestsPerMinute = t.MaxRequestsPerMinute,
+            MinSeverity = t.MinSeverity, IsActive = t.IsActive,
             Secret = null
         };
         _showForm = true;
@@ -300,7 +314,8 @@ else
             {
                 _editing.Name = _form.Name; _editing.Url = _form.Url;
                 _editing.Headers = _form.Headers; _editing.PayloadTemplate = _form.PayloadTemplate;
-                _editing.MaxRequestsPerMinute = _form.MaxRequestsPerMinute; _editing.IsActive = _form.IsActive;
+                _editing.MaxRequestsPerMinute = _form.MaxRequestsPerMinute; _editing.MinSeverity = _form.MinSeverity;
+                _editing.IsActive = _form.IsActive;
                 if (!string.IsNullOrEmpty(_form.Secret)) _editing.EncryptedSecret = _form.Secret;
                 await WebhookTargetService.UpdateAsync(_editing);
                 _success = "Webhook target updated.";
@@ -311,7 +326,8 @@ else
                 {
                     Name = _form.Name, Url = _form.Url, Headers = _form.Headers,
                     PayloadTemplate = _form.PayloadTemplate, EncryptedSecret = _form.Secret ?? string.Empty,
-                    MaxRequestsPerMinute = _form.MaxRequestsPerMinute, IsActive = _form.IsActive
+                    MaxRequestsPerMinute = _form.MaxRequestsPerMinute, MinSeverity = _form.MinSeverity,
+                    IsActive = _form.IsActive
                 };
                 await WebhookTargetService.CreateAsync(target);
                 _success = "Webhook target created.";
@@ -375,6 +391,9 @@ else
 
         [Range(1, 10000, ErrorMessage = "Max requests per minute must be between 1 and 10,000.")]
         public int MaxRequestsPerMinute { get; set; } = 60;
+
+        // UC-4: severity routing threshold; Information = receive everything.
+        public Severity MinSeverity { get; set; } = Severity.Information;
 
         public bool IsActive { get; set; } = true;
     }

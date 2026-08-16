@@ -32,6 +32,16 @@ public class SnmpTarget : IValidatableObject
     /// </summary>
     public SnmpVersion Version { get; set; } = SnmpVersion.V2c;
 
+    /// <summary>
+    /// UC-4: minimum event severity this receiver accepts. Events below the
+    /// threshold are skipped for this target at dispatch time, enabling
+    /// severity-based routing within a single job (e.g. "page the NOC only for
+    /// <see cref="Severity.Critical"/>, everything else goes to the log webhook").
+    /// Defaults to <see cref="Severity.Information"/> — receive everything —
+    /// which preserves the pre-UC-4 behaviour for existing targets.
+    /// </summary>
+    public Severity MinSeverity { get; set; } = Severity.Information;
+
     // R2: Encrypted community string (v1/v2c). Stored as AES-GCM ciphertext via the
     // J1 EnsureEncrypted funnel in SnmpTargetService.Create/UpdateAsync, exactly like
     // the v3 auth/priv passwords below. The Razor edit form binds to a separate

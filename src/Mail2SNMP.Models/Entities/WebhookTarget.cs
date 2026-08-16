@@ -51,6 +51,14 @@ public class WebhookTarget
     [Range(1, 10000, ErrorMessage = "Max requests per minute must be between 1 and 10,000.")]
     public int MaxRequestsPerMinute { get; set; } = 60;
 
+    /// <summary>
+    /// UC-4: minimum event severity this webhook accepts. Events below the threshold
+    /// are skipped for this target at dispatch time, enabling severity-based routing
+    /// within a single job. Defaults to <see cref="Enums.Severity.Information"/>
+    /// (receive everything), preserving pre-UC-4 behaviour for existing targets.
+    /// </summary>
+    public Enums.Severity MinSeverity { get; set; } = Enums.Severity.Information;
+
     /// <summary>Whether the target receives deliveries. Defaults to <c>true</c>; inactive targets are skipped.</summary>
     public bool IsActive { get; set; } = true;
 
