@@ -176,6 +176,12 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
             e.Property(x => x.Subject).HasMaxLength(500);
             e.Property(x => x.MailFrom).HasMaxLength(500);
             e.HasIndex(x => new { x.JobId, x.State });
+            // PF-5: the events list and the dashboard open-events count filter by State
+            // alone (no JobId) and always order by CreatedUtc DESC. The (JobId, State)
+            // index above cannot serve a state-only, time-ordered query because its
+            // leading column is JobId, forcing a full scan + sort. This index makes the
+            // state-filtered, newest-first Take(500) query seekable.
+            e.HasIndex(x => new { x.State, x.CreatedUtc });
             e.Property(x => x.RowVersion).IsRowVersion();
         });
 

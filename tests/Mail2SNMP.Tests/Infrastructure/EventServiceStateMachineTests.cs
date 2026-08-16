@@ -79,6 +79,45 @@ public class EventServiceStateMachineTests : IDisposable
     }
 
     [Fact]
+    public async Task Create_DedupWindowZero_DisablesDedup_InsertsSeparateEvents()
+    {
+        // FN-2 regression: Job.DedupWindowMinutes = 0 is documented as "dedup off".
+        // Previously the engine never read the job's window at all, so 0 still deduped.
+        var mailbox = new Mailbox { Name = "MB0", Host = "h", Username = "u" };
+        var rule = new Rule { Name = "R0", Field = RuleFieldType.Subject, MatchType = RuleMatchType.Contains, Criteria = "t" };
+        _db.Mailboxes.Add(mailbox);
+        _db.Rules.Add(rule);
+        await _db.SaveChangesAsync();
+        var job = new Job { Name = "J0", MailboxId = mailbox.Id, RuleId = rule.Id, DedupWindowMinutes = 0 };
+        _db.Jobs.Add(job);
+        await _db.SaveChangesAsync();
+
+        var svc = NewService();
+        var first = await svc.CreateAsync(new Event { JobId = job.Id, Severity = Severity.Warning, Subject = "same", MessageId = "dup-1" });
+        var second = await svc.CreateAsync(new Event { JobId = job.Id, Severity = Severity.Warning, Subject = "same", MessageId = "dup-1" });
+
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.Equal(2, await _db.Events.CountAsync(e => e.JobId == job.Id));
+        // No dedup entries are written when dedup is disabled.
+        Assert.Equal(0, await _db.EventDedups.CountAsync(d => d.JobId == job.Id));
+    }
+
+    [Fact]
+    public async Task Create_JobDedupWindow_IsHonoredWithoutRuleOverride()
+    {
+        // FN-2 regression: with the rule override left blank (null), the job's own
+        // window governs dedup — duplicates inside it collapse into one event.
+        var job = await SeedJobAsync(); // default Job.DedupWindowMinutes = 30, Rule override null
+        var svc = NewService();
+
+        var first = await svc.CreateAsync(new Event { JobId = job.Id, Severity = Severity.Error, Subject = "x", MessageId = "win-1" });
+        var second = await svc.CreateAsync(new Event { JobId = job.Id, Severity = Severity.Error, Subject = "x", MessageId = "win-1" });
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Equal(2, second.HitCount);
+    }
+
+    [Fact]
     public async Task Create_DuplicateMessageId_IncrementsHitCount_NotInsert()
     {
         var job = await SeedJobAsync();

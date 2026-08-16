@@ -112,30 +112,66 @@ public class DeadLetterRetryService : BackgroundService
         var httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
         var now = DateTime.UtcNow;
 
-        // Atomically claim entries using raw SQL UPDATE with WHERE conditions.
-        // This ensures only one worker instance processes each entry — no TOCTOU race.
-        var claimedCount = await db.Database.ExecuteSqlInterpolatedAsync(
-            $"""
-            UPDATE DeadLetterEntries
-            SET LockedByInstanceId = {_instanceId},
-                LockedUntilUtc = {now.Add(_lockDuration)},
-                Status = {(int)DeadLetterStatus.Locked}
-            WHERE Status = {(int)DeadLetterStatus.Pending}
-              AND (LockedUntilUtc IS NULL OR LockedUntilUtc < {now})
-              AND NextRetryUtc <= {now}
-              AND AttemptCount < {_maxAttempts}
-            """, ct);
+        // FN-1: Atomically claim AT MOST _batchSize entries, and also reclaim entries
+        // whose Locked lease has expired. The previous query flipped EVERY eligible row
+        // to Locked but the fetch below only processed _batchSize of them; the surplus
+        // stayed Locked owned by this process forever — the re-claim required
+        // Status=Pending, so the lock-expiry net never applied, and a worker restart
+        // changed the instance id and orphaned them permanently (silent loss of failed
+        // webhook deliveries on a routine deploy). Bounding the claim to _batchSize and
+        // reclaiming expired locks (Status=Locked AND LockedUntilUtc < now, from any
+        // instance) closes both. The IN-subquery form keeps this a single atomic UPDATE
+        // on both SQLite (LIMIT) and SQL Server (TOP).
+        var lockUntil = now.Add(_lockDuration);
+        var pending = (int)DeadLetterStatus.Pending;
+        var locked = (int)DeadLetterStatus.Locked;
+        var isSqlite = db.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+        FormattableString claimSql;
+        if (isSqlite)
+        {
+            claimSql = $"""
+                UPDATE DeadLetterEntries
+                SET LockedByInstanceId = {_instanceId}, LockedUntilUtc = {lockUntil}, Status = {locked}
+                WHERE Id IN (
+                    SELECT Id FROM DeadLetterEntries
+                    WHERE ((Status = {pending} AND (LockedUntilUtc IS NULL OR LockedUntilUtc < {now}))
+                           OR (Status = {locked} AND LockedUntilUtc < {now}))
+                      AND NextRetryUtc <= {now}
+                      AND AttemptCount < {_maxAttempts}
+                    ORDER BY NextRetryUtc
+                    LIMIT {_batchSize})
+                """;
+        }
+        else
+        {
+            claimSql = $"""
+                UPDATE DeadLetterEntries
+                SET LockedByInstanceId = {_instanceId}, LockedUntilUtc = {lockUntil}, Status = {locked}
+                WHERE Id IN (
+                    SELECT TOP ({_batchSize}) Id FROM DeadLetterEntries
+                    WHERE ((Status = {pending} AND (LockedUntilUtc IS NULL OR LockedUntilUtc < {now}))
+                           OR (Status = {locked} AND LockedUntilUtc < {now}))
+                      AND NextRetryUtc <= {now}
+                      AND AttemptCount < {_maxAttempts}
+                    ORDER BY NextRetryUtc)
+                """;
+        }
+        var claimedCount = await db.Database.ExecuteSqlInterpolatedAsync(claimSql, ct);
 
         if (claimedCount == 0)
             return;
 
         _logger.LogInformation("Claimed {Count} dead letter entries for retry", claimedCount);
 
-        // Fetch the entries we just locked
+        // Fetch every entry we currently own and hold Locked. The claim above already
+        // bounded the newly-locked set to _batchSize, so we deliberately do NOT re-cap
+        // the fetch — capping here would re-strand rows we just locked (fresh lease,
+        // never fetched) exactly like the original bug.
         var entries = await db.DeadLetterEntries
             .Include(d => d.WebhookTarget)
             .Where(d => d.LockedByInstanceId == _instanceId && d.Status == DeadLetterStatus.Locked)
-            .Take(_batchSize)
+            .OrderBy(d => d.NextRetryUtc)
             .ToListAsync(ct);
 
         // Use the named client registered in DI; the factory manages handler lifetime,

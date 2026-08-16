@@ -78,21 +78,29 @@ public class EventService : IEventService
         // both pass the count check and exceed the limit.
         var job = await _db.Jobs.AsNoTracking()
             .Where(j => j.Id == evt.JobId)
-            .Select(j => new { j.MaxActiveEvents, j.RuleId })
+            .Select(j => new { j.MaxActiveEvents, j.RuleId, j.DedupWindowMinutes })
             .FirstOrDefaultAsync(ct);
 
-        // G3: Determine effective dedup window. Per-rule override takes precedence
-        // over the global Events:DefaultDedupWindowMinutes setting. job.Rule may be
-        // null if not eager-loaded — in that case we fall back to the legacy behaviour
-        // (no time-based expiry on the dedup entry).
-        int? dedupWindowMinutes = null;
+        // FN-2: Determine the effective dedup window. The per-job control
+        // Job.DedupWindowMinutes (non-nullable, default 30) is the base and was
+        // previously never read — a dead configuration field that the UI, CLI and
+        // dry-run all exposed with no effect. A per-rule override
+        // (Rule.DedupWindowMinutes, nullable) wins only when explicitly set.
+        //   window &gt; 0 : duplicates within the window collapse into one event; a
+        //                dedup entry older than the window starts a fresh event.
+        //   window = 0 : deduplication is disabled — every matching mail becomes a
+        //                new event and no dedup entry is written.
+        //   window null: only when the job could not be loaded — legacy behaviour
+        //                (dedup entry never time-expires in-band).
+        int? dedupWindowMinutes = job?.DedupWindowMinutes;
         if (job?.RuleId is int ruleId)
         {
             var rule = await _db.Rules.AsNoTracking()
                 .Where(r => r.Id == ruleId)
                 .Select(r => new { r.DedupWindowMinutes })
                 .FirstOrDefaultAsync(ct);
-            dedupWindowMinutes = rule?.DedupWindowMinutes;
+            if (rule?.DedupWindowMinutes is int ruleWindow)
+                dedupWindowMinutes = ruleWindow;
         }
 
         var maxActive = job?.MaxActiveEvents ?? int.MaxValue;
@@ -128,35 +136,43 @@ public class EventService : IEventService
             : null;
         try
         {
-            var existingDedup = await _db.EventDedups
-                .FirstOrDefaultAsync(d => d.DedupKeyHash == dedupKey && d.JobId == evt.JobId, ct);
+            // FN-2: window == 0 disables deduplication entirely — no lookup, no dedup
+            // entry, every matching mail becomes a fresh event. Otherwise the dedup
+            // entry is looked up and (when older than a positive window) expired.
+            var dedupEnabled = dedupWindowMinutes is not int configuredWindow || configuredWindow != 0;
 
-            // G3: if a per-rule dedup window is configured and the existing entry is older
-            // than the window, mark it for removal — the new event should be created fresh.
-            // (Removed but NOT saved here; the final SaveChanges below commits everything atomically.)
-            if (existingDedup != null && dedupWindowMinutes is int window && window > 0)
+            if (dedupEnabled)
             {
-                var cutoff = DateTime.UtcNow.AddMinutes(-window);
-                if (existingDedup.FirstSeenUtc < cutoff)
+                var existingDedup = await _db.EventDedups
+                    .FirstOrDefaultAsync(d => d.DedupKeyHash == dedupKey && d.JobId == evt.JobId, ct);
+
+                // If a positive dedup window is configured and the existing entry is older
+                // than the window, mark it for removal — the new event is created fresh.
+                // (Removed but NOT saved here; the final SaveChanges commits atomically.)
+                if (existingDedup != null && dedupWindowMinutes is int window && window > 0)
                 {
-                    _db.EventDedups.Remove(existingDedup);
-                    existingDedup = null;
+                    var cutoff = DateTime.UtcNow.AddMinutes(-window);
+                    if (existingDedup.FirstSeenUtc < cutoff)
+                    {
+                        _db.EventDedups.Remove(existingDedup);
+                        existingDedup = null;
+                    }
                 }
-            }
 
-            if (existingDedup != null)
-            {
-                var existingEvent = await _db.Events.FindAsync(new object[] { existingDedup.EventId }, ct);
-                if (existingEvent != null)
+                if (existingDedup != null)
                 {
-                    existingEvent.HitCount++;
-                    existingDedup.LastSeenUtc = DateTime.UtcNow;
-                    await _db.SaveChangesAsync(ct);
-                    if (transaction != null) await transaction.CommitAsync(ct);
-                    _logger.LogInformation(
-                        "Duplicate event suppressed for Job {JobId}. Existing Event {EventId} HitCount={HitCount}",
-                        evt.JobId, existingEvent.Id, existingEvent.HitCount);
-                    return existingEvent;
+                    var existingEvent = await _db.Events.FindAsync(new object[] { existingDedup.EventId }, ct);
+                    if (existingEvent != null)
+                    {
+                        existingEvent.HitCount++;
+                        existingDedup.LastSeenUtc = DateTime.UtcNow;
+                        await _db.SaveChangesAsync(ct);
+                        if (transaction != null) await transaction.CommitAsync(ct);
+                        _logger.LogInformation(
+                            "Duplicate event suppressed for Job {JobId}. Existing Event {EventId} HitCount={HitCount}",
+                            evt.JobId, existingEvent.Id, existingEvent.HitCount);
+                        return existingEvent;
+                    }
                 }
             }
 
@@ -190,16 +206,21 @@ public class EventService : IEventService
                 }
             }
 
-            // No duplicate — insert the event and dedup entry together.
+            // No duplicate — insert the event. When dedup is enabled, insert its dedup
+            // entry alongside; FN-2: skipped entirely when the window is 0, which also
+            // avoids re-inserting a row that would collide with the unique index.
             _db.Events.Add(evt);
-            _db.EventDedups.Add(new EventDedup
+            if (dedupEnabled)
             {
-                DedupKeyHash = dedupKey,
-                JobId = evt.JobId,
-                Event = evt,
-                FirstSeenUtc = DateTime.UtcNow,
-                LastSeenUtc = DateTime.UtcNow
-            });
+                _db.EventDedups.Add(new EventDedup
+                {
+                    DedupKeyHash = dedupKey,
+                    JobId = evt.JobId,
+                    Event = evt,
+                    FirstSeenUtc = DateTime.UtcNow,
+                    LastSeenUtc = DateTime.UtcNow
+                });
+            }
             await _db.SaveChangesAsync(ct);
             if (transaction != null) await transaction.CommitAsync(ct);
             return evt;
