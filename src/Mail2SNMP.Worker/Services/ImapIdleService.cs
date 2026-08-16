@@ -7,6 +7,7 @@ using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Mail2SNMP.Worker.Services;
 
@@ -34,19 +35,23 @@ public class ImapIdleService : BackgroundService
     /// </summary>
     /// <param name="scopeFactory">Factory used to create scopes for resolving the lease service, database context, and credential encryptor.</param>
     /// <param name="channel">The bounded channel into which work items are enqueued when new mail arrives.</param>
-    /// <param name="configuration">Application configuration; reads <c>Imap:UseIdle</c> and the <c>Imap</c> settings section.</param>
+    /// <param name="imapOptions">
+    /// AR-6: the validated <c>Imap</c> options (incl. <c>UseIdle</c>). Injected as
+    /// <see cref="IOptions{TOptions}"/> instead of re-binding raw <c>IConfiguration</c>,
+    /// so the ValidateOnStart pipeline applies and the service is unit-testable.
+    /// </param>
     /// <param name="logger">The logger for IDLE-session and leadership diagnostics.</param>
     public ImapIdleService(
         IServiceScopeFactory scopeFactory,
         Channel<MailWorkItem> channel,
-        IConfiguration configuration,
+        IOptions<ImapSettings> imapOptions,
         ILogger<ImapIdleService> logger)
     {
         _scopeFactory = scopeFactory;
         _channel = channel;
         _logger = logger;
-        _imapSettings = configuration.GetSection("Imap").Get<ImapSettings>() ?? new ImapSettings();
-        _enabled = configuration.GetValue<bool>("Imap:UseIdle");
+        _imapSettings = imapOptions.Value;
+        _enabled = _imapSettings.UseIdle;
     }
 
     /// <summary>

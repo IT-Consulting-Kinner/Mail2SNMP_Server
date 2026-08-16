@@ -11,6 +11,7 @@ using MailKit.Net.Imap;
 using MailKit.Search;
 using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Threading.Channels;
 
 namespace Mail2SNMP.Worker.Services;
@@ -34,20 +35,22 @@ public class MailPollingService : BackgroundService
     /// <param name="channel">The bounded channel from which mail work items are consumed.</param>
     /// <param name="scopeFactory">Factory used to create a scope per work item for resolving scoped services.</param>
     /// <param name="logger">The logger for consumer and IMAP-processing diagnostics.</param>
-    /// <param name="configuration">Application configuration; the <c>Imap</c> section supplies the consumer count, connection limit, and timeouts.</param>
+    /// <param name="imapOptions">
+    /// AR-6: the validated <c>Imap</c> options (consumer count, connection limit,
+    /// timeouts). Injected as <see cref="IOptions{TOptions}"/> instead of re-binding
+    /// raw <c>IConfiguration</c>, so the ValidateOnStart pipeline applies and the
+    /// service is unit-testable with a plain options value.
+    /// </param>
     public MailPollingService(
         Channel<MailWorkItem> channel,
         IServiceScopeFactory scopeFactory,
         ILogger<MailPollingService> logger,
-        IConfiguration configuration)
+        IOptions<ImapSettings> imapOptions)
     {
         _channel = channel;
         _scopeFactory = scopeFactory;
         _logger = logger;
-
-        _imapSettings = configuration
-            .GetSection("Imap")
-            .Get<ImapSettings>() ?? new ImapSettings();
+        _imapSettings = imapOptions.Value;
 
         _imapSemaphore = new SemaphoreSlim(_imapSettings.MaxConcurrentConnections);
         _consumerCount = _imapSettings.ConsumerTasks;
