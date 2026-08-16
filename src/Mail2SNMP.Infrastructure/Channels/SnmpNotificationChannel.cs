@@ -96,54 +96,28 @@ public class SnmpNotificationChannel : INotificationChannel
         _logger = logger;
     }
 
-    /// <summary>
-    /// Sends SNMP traps to all active SNMP targets for the given event context.
-    /// Applies deduplication and rate-limiting per target before sending.
-    /// </summary>
-    public async Task SendAsync(NotificationContext context, CancellationToken cancellationToken = default)
-    {
-        var targets = await _db.SnmpTargets.Where(t => t.IsActive).ToListAsync(cancellationToken);
-
-        foreach (var target in targets)
-        {
-            var targetKey = $"snmp:{target.Id}";
-
-            if (_dedupCache.IsDuplicate(targetKey, context.EventId))
-            {
-                _logger.LogDebug("Notification dedup: skipping duplicate SNMP trap to {Target} for event {EventId}", target.Name, context.EventId);
-                continue;
-            }
-
-            if (_floodProtection.IsRateLimited(targetKey, target.MaxTrapsPerMinute))
-            {
-                _logger.LogWarning("SNMP trap to {Target} rate-limited ({Max}/min)", target.Name, target.MaxTrapsPerMinute);
-                continue;
-            }
-
-            try
-            {
-                await SendTrapAsync(target, context);
-                _logger.LogInformation("SNMP trap sent to {Host}:{Port} (v{Version}) for event {EventId}",
-                    target.Host, target.Port, target.Version, context.EventId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send SNMP trap to {Host}:{Port}: {Message}", target.Host, target.Port, ex.Message);
-            }
-        }
-    }
+    // AR-2: the legacy broadcast SendAsync(NotificationContext) was removed — it had
+    // zero call sites (all real dispatch is per-target via the job's assignments)
+    // and its presence suggested a working generic path that did not exist.
 
     /// <summary>
     /// Sends an SNMP trap to a specific target (per-job assignment). Applies dedup and rate-limiting.
     /// </summary>
-    public async Task SendToSnmpTargetAsync(NotificationContext context, SnmpTarget target, CancellationToken ct = default)
+    /// <returns>
+    /// FN-3: <c>true</c> when the trap left the process (or an earlier send already
+    /// covered this event/target via notification-dedup); <c>false</c> on rate-limit
+    /// drop or any send failure — so callers never mark an event Notified when
+    /// nothing was actually dispatched.
+    /// </returns>
+    public async Task<bool> SendToSnmpTargetAsync(NotificationContext context, SnmpTarget target, CancellationToken ct = default)
     {
         var targetKey = $"snmp:{target.Id}";
 
         if (_dedupCache.IsDuplicate(targetKey, context.EventId))
         {
             _logger.LogDebug("Notification dedup: skipping duplicate SNMP trap to {Target} for event {EventId}", target.Name, context.EventId);
-            return;
+            // An earlier send already covered this event/target pair — delivered.
+            return true;
         }
 
         if (_floodProtection.IsRateLimited(targetKey, target.MaxTrapsPerMinute))
@@ -151,21 +125,30 @@ public class SnmpNotificationChannel : INotificationChannel
             Services.Mail2SnmpMetrics.TrapsRateLimited.Inc();
             Services.Mail2SnmpMetrics.RateLimitHits.WithLabels("snmp-target").Inc();
             _logger.LogWarning("SNMP trap to {Target} rate-limited ({Max}/min)", target.Name, target.MaxTrapsPerMinute);
-            return;
+            return false;
         }
 
         try
         {
-            await SendTrapAsync(target, context);
-            Services.Mail2SnmpMetrics.NotificationsSent.WithLabels("snmp").Inc();
-            Services.Mail2SnmpMetrics.SnmpTrapsSent.WithLabels(target.Name, target.Version.ToString()).Inc();
-            _logger.LogInformation("SNMP trap sent to {Host}:{Port} (v{Version}) for event {EventId}",
-                target.Host, target.Port, target.Version, context.EventId);
+            var sent = await SendTrapAsync(target, context);
+            if (sent)
+            {
+                Services.Mail2SnmpMetrics.NotificationsSent.WithLabels("snmp").Inc();
+                Services.Mail2SnmpMetrics.SnmpTrapsSent.WithLabels(target.Name, target.Version.ToString()).Inc();
+                _logger.LogInformation("SNMP trap sent to {Host}:{Port} (v{Version}) for event {EventId}",
+                    target.Host, target.Port, target.Version, context.EventId);
+            }
+            else
+            {
+                Services.Mail2SnmpMetrics.NotificationsFailed.WithLabels("snmp").Inc();
+            }
+            return sent;
         }
         catch (Exception ex)
         {
             Services.Mail2SnmpMetrics.NotificationsFailed.WithLabels("snmp").Inc();
             _logger.LogError(ex, "Failed to send SNMP trap to {Host}:{Port}: {Message}", target.Host, target.Port, ex.Message);
+            return false;
         }
     }
 
@@ -173,7 +156,7 @@ public class SnmpNotificationChannel : INotificationChannel
     /// Constructs and sends an EventCreated SNMP trap (v1, v2c, or v3) to a single target.
     /// Uses the official Mail2SNMP MIB OIDs (eventID, eventName, eventSeverity, eventMessage).
     /// </summary>
-    private Task SendTrapAsync(Models.Entities.SnmpTarget target, NotificationContext context)
+    private Task<bool> SendTrapAsync(Models.Entities.SnmpTarget target, NotificationContext context)
     {
         var trapOid = new ObjectIdentifier(target.EnterpriseTrapOid ?? EventCreatedOid);
 
@@ -310,8 +293,12 @@ public class SnmpNotificationChannel : INotificationChannel
 
     /// <summary>
     /// Internal helper that performs the actual UDP send for v1/v2c/v3.
+    /// FN-3: returns <c>false</c> on every silent-drop path (DNS failure,
+    /// credential-decrypt failure, v3-under-Community skip) and <c>true</c> only
+    /// when the trap was actually handed to the network stack, so callers can
+    /// distinguish "attempt completed" from "nothing was sent".
     /// </summary>
-    private async Task SendVarbindsAsync(Models.Entities.SnmpTarget target, ObjectIdentifier trapOid, List<Variable> varbinds)
+    private async Task<bool> SendVarbindsAsync(Models.Entities.SnmpTarget target, ObjectIdentifier trapOid, List<Variable> varbinds)
     {
         IPAddress ipAddress;
         if (!IPAddress.TryParse(target.Host, out ipAddress!))
@@ -330,7 +317,7 @@ public class SnmpNotificationChannel : INotificationChannel
                     _logger.LogWarning(
                         "DNS lookup for SNMP target {Name} ({Host}) returned no addresses. Trap dropped.",
                         target.Name, target.Host);
-                    return;
+                    return false;
                 }
                 ipAddress = addresses.FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
                             ?? addresses[0];
@@ -340,7 +327,7 @@ public class SnmpNotificationChannel : INotificationChannel
                 _logger.LogError(dnsEx,
                     "DNS lookup failed for SNMP target {Name} ({Host}): {Message}. Trap dropped.",
                     target.Name, target.Host, dnsEx.Message);
-                return;
+                return false;
             }
         }
         var endpoint = new IPEndPoint(ipAddress, target.Port);
@@ -358,7 +345,7 @@ public class SnmpNotificationChannel : INotificationChannel
                 _logger.LogError(ex,
                     "Failed to decrypt community string for SNMP target {Name}. Master key mismatch — trap dropped.",
                     target.Name);
-                return;
+                return false;
             }
         }
 
@@ -381,11 +368,13 @@ public class SnmpNotificationChannel : INotificationChannel
                 _logger.LogWarning(
                     "SNMP v3 target {Name} skipped — requires an Enterprise license.",
                     target.Name);
-                return;
+                return false;
             }
 
             SendV3Trap(target, endpoint, trapOid, varbinds);
         }
+
+        return true;
     }
 
     /// <summary>

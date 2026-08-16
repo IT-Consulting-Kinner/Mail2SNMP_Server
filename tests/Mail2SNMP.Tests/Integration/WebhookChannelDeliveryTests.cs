@@ -94,8 +94,10 @@ public class WebhookChannelDeliveryTests : IDisposable
             Id = 1, Name = "T", Url = $"{_server.Url}/hook", IsActive = true, MaxRequestsPerMinute = 100
         };
 
-        await BuildChannel().SendToWebhookTargetAsync(Context(eventId: 1), target);
+        var delivered = await BuildChannel().SendToWebhookTargetAsync(Context(eventId: 1), target);
 
+        // FN-3: the channel reports the delivery outcome.
+        Assert.True(delivered);
         Assert.Single(_server.LogEntries);
         await _deadLetter.DidNotReceive().CreateAsync(Arg.Any<DeadLetterEntry>(), Arg.Any<CancellationToken>());
     }
@@ -111,8 +113,10 @@ public class WebhookChannelDeliveryTests : IDisposable
             Id = 2, Name = "T", Url = $"{_server.Url}/hook-fail", IsActive = true, MaxRequestsPerMinute = 100
         };
 
-        await BuildChannel().SendToWebhookTargetAsync(Context(eventId: 2), target);
+        var delivered = await BuildChannel().SendToWebhookTargetAsync(Context(eventId: 2), target);
 
+        // FN-3: a failed delivery must report false so the event is not marked Notified.
+        Assert.False(delivered);
         // A 5xx (EnsureSuccessStatusCode throws) must be caught and dead-lettered.
         await _deadLetter.Received(1).CreateAsync(
             Arg.Is<DeadLetterEntry>(d => d.WebhookTargetId == 2 && d.EventId == 2),
@@ -144,8 +148,10 @@ public class WebhookChannelDeliveryTests : IDisposable
             Id = 3, Name = "T", Url = $"{_server.Url}/blocked", IsActive = true, MaxRequestsPerMinute = 100
         };
 
-        await channel.SendToWebhookTargetAsync(Context(eventId: 3), target);
+        var delivered = await channel.SendToWebhookTargetAsync(Context(eventId: 3), target);
 
+        // FN-3: an SSRF-blocked delivery must report false.
+        Assert.False(delivered);
         Assert.Empty(_server.LogEntries); // never actually sent
         await _deadLetter.Received(1).CreateAsync(Arg.Any<DeadLetterEntry>(), Arg.Any<CancellationToken>());
     }

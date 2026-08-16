@@ -86,7 +86,7 @@ public class EventService : IEventService
         // previously never read — a dead configuration field that the UI, CLI and
         // dry-run all exposed with no effect. A per-rule override
         // (Rule.DedupWindowMinutes, nullable) wins only when explicitly set.
-        //   window &gt; 0 : duplicates within the window collapse into one event; a
+        //   window > 0  : duplicates within the window collapse into one event; a
         //                dedup entry older than the window starts a fresh event.
         //   window = 0 : deduplication is disabled — every matching mail becomes a
         //                new event and no dedup entry is written.
@@ -282,7 +282,7 @@ public class EventService : IEventService
         // Emit EventConfirmed SNMP trap (best-effort, must not fail the acknowledge action)
         try
         {
-            var snmpChannel = _channels.FirstOrDefault(c => c.ChannelName == "snmp");
+            var snmpChannel = _channels.FirstOrDefault(c => c.ChannelName == Mail2SNMP.Core.Interfaces.INotificationChannel.Snmp);
             if (snmpChannel != null)
                 await snmpChannel.SendEventConfirmedAsync(id, ct);
         }
@@ -373,8 +373,8 @@ public class EventService : IEventService
         };
 
         var channels = _channels.ToList();
-        var snmpChannel = channels.FirstOrDefault(c => c.ChannelName == "snmp");
-        var webhookChannel = channels.FirstOrDefault(c => c.ChannelName == "webhook");
+        var snmpChannel = channels.FirstOrDefault(c => c.ChannelName == Mail2SNMP.Core.Interfaces.INotificationChannel.Snmp);
+        var webhookChannel = channels.FirstOrDefault(c => c.ChannelName == Mail2SNMP.Core.Interfaces.INotificationChannel.Webhook);
 
         // Send to assigned SNMP targets
         foreach (var jst in evt.Job.JobSnmpTargets.Where(t => t.SnmpTarget.IsActive))

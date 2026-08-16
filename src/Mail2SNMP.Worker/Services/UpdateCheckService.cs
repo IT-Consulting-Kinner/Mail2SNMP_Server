@@ -203,7 +203,7 @@ public class UpdateCheckService : BackgroundService
         // "UntilUpdated" → send every check; we never reach here when current >= feed.Version anyway
 
         var snmp = scope.ServiceProvider.GetServices<INotificationChannel>()
-            .FirstOrDefault(c => c.ChannelName == "snmp");
+            .FirstOrDefault(c => c.ChannelName == Mail2SNMP.Core.Interfaces.INotificationChannel.Snmp);
         if (snmp != null)
         {
             await snmp.SendUpdateAvailableAsync(info, ct);

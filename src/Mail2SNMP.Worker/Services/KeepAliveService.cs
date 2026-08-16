@@ -85,7 +85,7 @@ public class KeepAliveService : BackgroundService
                 if (isPrimary)
                 {
                     var channels = scope.ServiceProvider.GetServices<INotificationChannel>();
-                    var snmp = channels.FirstOrDefault(c => c.ChannelName == "snmp");
+                    var snmp = channels.FirstOrDefault(c => c.ChannelName == Mail2SNMP.Core.Interfaces.INotificationChannel.Snmp);
                     if (snmp != null)
                     {
                         await snmp.SendKeepAliveAsync(stoppingToken);

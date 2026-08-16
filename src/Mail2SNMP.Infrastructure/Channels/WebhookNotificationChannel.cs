@@ -84,62 +84,35 @@ public class WebhookNotificationChannel : INotificationChannel
         _logger = logger;
     }
 
-    /// <summary>
-    /// Sends webhook notifications to all active webhook targets for the given event.
-    /// Applies deduplication and rate-limiting per target. Failed deliveries are
-    /// queued as dead letters when running under an Enterprise license.
-    /// </summary>
-    public async Task SendAsync(NotificationContext context, CancellationToken cancellationToken = default)
-    {
-        var targets = await _db.WebhookTargets.Where(t => t.IsActive).ToListAsync(cancellationToken);
-
-        foreach (var target in targets)
-        {
-            var targetKey = $"webhook:{target.Id}";
-
-            if (_dedupCache.IsDuplicate(targetKey, context.EventId))
-            {
-                _logger.LogDebug("Notification dedup: skipping duplicate webhook to {Target} for event {EventId}", target.Name, context.EventId);
-                continue;
-            }
-
-            if (_floodProtection.IsRateLimited(targetKey, target.MaxRequestsPerMinute))
-            {
-                _logger.LogWarning("Webhook to {Target} rate-limited ({Max}/min)", target.Name, target.MaxRequestsPerMinute);
-                continue;
-            }
-
-            try
-            {
-                await SendWebhookAsync(target, context, cancellationToken);
-                _logger.LogInformation("Webhook sent to {Url} for event {EventId}", target.Url, context.EventId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send webhook to {Url}: {Message}", target.Url, ex.Message);
-                await CreateDeadLetterAsync(target, context, ex.Message, cancellationToken);
-            }
-        }
-    }
+    // AR-2: the legacy broadcast SendAsync(NotificationContext) was removed — it had
+    // zero call sites (all real dispatch is per-target via the job's assignments)
+    // and its presence suggested a working generic path that did not exist.
 
     /// <summary>
     /// Sends a webhook notification to a specific target (per-job assignment). Applies dedup and rate-limiting.
     /// </summary>
-    public async Task SendToWebhookTargetAsync(NotificationContext context, WebhookTarget target, CancellationToken ct = default)
+    /// <returns>
+    /// FN-3: <c>true</c> when the POST succeeded (or an earlier send already covered
+    /// this event/target via notification-dedup); <c>false</c> on rate-limit drop or
+    /// failure — failures are dead-lettered for retry, but the event has not been
+    /// delivered yet, so callers must not mark it Notified on this basis.
+    /// </returns>
+    public async Task<bool> SendToWebhookTargetAsync(NotificationContext context, WebhookTarget target, CancellationToken ct = default)
     {
         var targetKey = $"webhook:{target.Id}";
 
         if (_dedupCache.IsDuplicate(targetKey, context.EventId))
         {
             _logger.LogDebug("Notification dedup: skipping duplicate webhook to {Target} for event {EventId}", target.Name, context.EventId);
-            return;
+            // An earlier send already covered this event/target pair — delivered.
+            return true;
         }
 
         if (_floodProtection.IsRateLimited(targetKey, target.MaxRequestsPerMinute))
         {
             Services.Mail2SnmpMetrics.RateLimitHits.WithLabels("webhook-target").Inc();
             _logger.LogWarning("Webhook to {Target} rate-limited ({Max}/min)", target.Name, target.MaxRequestsPerMinute);
-            return;
+            return false;
         }
 
         try
@@ -148,12 +121,14 @@ public class WebhookNotificationChannel : INotificationChannel
             Services.Mail2SnmpMetrics.NotificationsSent.WithLabels("webhook").Inc();
             Services.Mail2SnmpMetrics.WebhookRequestsSent.WithLabels(target.Name).Inc();
             _logger.LogInformation("Webhook sent to {Url} for event {EventId}", target.Url, context.EventId);
+            return true;
         }
         catch (Exception ex)
         {
             Services.Mail2SnmpMetrics.NotificationsFailed.WithLabels("webhook").Inc();
             _logger.LogError(ex, "Failed to send webhook to {Url}: {Message}", target.Url, ex.Message);
             await CreateDeadLetterAsync(target, context, ex.Message, ct);
+            return false;
         }
     }
 

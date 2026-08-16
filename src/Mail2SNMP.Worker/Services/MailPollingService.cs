@@ -597,17 +597,23 @@ public class MailPollingService : BackgroundService
 
         var anySuccess = false;
         var channels = notificationChannels.ToList();
-        var snmpChannel = channels.FirstOrDefault(c => c.ChannelName == "snmp");
-        var webhookChannel = channels.FirstOrDefault(c => c.ChannelName == "webhook");
+        var snmpChannel = channels.FirstOrDefault(c => c.ChannelName == INotificationChannel.Snmp);
+        var webhookChannel = channels.FirstOrDefault(c => c.ChannelName == INotificationChannel.Webhook);
+
+        // FN-3: the channels report a delivery outcome. anySuccess is only set when a
+        // notification actually left the process (or an earlier one already covered
+        // the event/target pair), so an event whose every send silently failed —
+        // e.g. a v3 target under a Community license, DNS failure, master-key drift —
+        // stays New instead of being falsely marked Notified.
 
         // Send to assigned SNMP targets
         foreach (var jst in job.JobSnmpTargets.Where(t => t.SnmpTarget.IsActive))
         {
             try
             {
-                if (snmpChannel != null)
+                if (snmpChannel != null &&
+                    await snmpChannel.SendToSnmpTargetAsync(context, jst.SnmpTarget, ct))
                 {
-                    await snmpChannel.SendToSnmpTargetAsync(context, jst.SnmpTarget, ct);
                     anySuccess = true;
                 }
             }
@@ -623,9 +629,9 @@ public class MailPollingService : BackgroundService
         {
             try
             {
-                if (webhookChannel != null)
+                if (webhookChannel != null &&
+                    await webhookChannel.SendToWebhookTargetAsync(context, jwt.WebhookTarget, ct))
                 {
-                    await webhookChannel.SendToWebhookTargetAsync(context, jwt.WebhookTarget, ct);
                     anySuccess = true;
                 }
             }
