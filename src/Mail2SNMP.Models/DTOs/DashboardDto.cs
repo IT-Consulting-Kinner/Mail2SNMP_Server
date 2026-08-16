@@ -29,7 +29,20 @@ public class DashboardDto
     /// <summary>Name of the active maintenance window when <see cref="MaintenanceActive"/> is <see langword="true"/>; otherwise <see langword="null"/>.</summary>
     public string? MaintenanceWindowName { get; set; }
 
-    /// <summary>Overall system health flag. <see langword="true"/> when core subsystems are operating normally; <see langword="false"/> signals a degraded state surfaced on the dashboard.</summary>
+    /// <summary>
+    /// Number of active mailboxes whose most recent poll failed (LastError set).
+    /// UC-1: a broken mailbox silently stops all alerts for its jobs, so the count is
+    /// surfaced as a first-class dashboard signal instead of being buried in the
+    /// Mailboxes list.
+    /// </summary>
+    public int MailboxesInError { get; set; }
+
+    /// <summary>
+    /// Overall system health flag. <see langword="true"/> when core subsystems are operating normally;
+    /// <see langword="false"/> signals a degraded state surfaced on the dashboard.
+    /// UC-1: computed (no longer hardcoded) — currently false when any active mailbox
+    /// is in error, i.e. ingestion is partially or fully broken.
+    /// </summary>
     public bool IsHealthy { get; set; }
 
     /// <summary>

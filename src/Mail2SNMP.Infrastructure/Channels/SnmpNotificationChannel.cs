@@ -311,23 +311,26 @@ public class SnmpNotificationChannel : INotificationChannel
     /// <summary>
     /// Internal helper that performs the actual UDP send for v1/v2c/v3.
     /// </summary>
-    private Task SendVarbindsAsync(Models.Entities.SnmpTarget target, ObjectIdentifier trapOid, List<Variable> varbinds)
+    private async Task SendVarbindsAsync(Models.Entities.SnmpTarget target, ObjectIdentifier trapOid, List<Variable> varbinds)
     {
         IPAddress ipAddress;
         if (!IPAddress.TryParse(target.Host, out ipAddress!))
         {
-            // Resolve hostname → IPv4 (preferred) or first available address.
-            // Wrapped in try/catch so that an unreachable DNS server or invalid hostname
-            // does not crash the worker thread; the failure is logged and the trap is dropped.
+            // PF-6: resolve hostname asynchronously with a hard 5 s timeout. The
+            // previous synchronous Dns.GetHostAddresses pinned the calling consumer
+            // thread for the OS resolver timeout (seconds) whenever the DNS server
+            // was slow or unreachable, serially stalling ingestion for every
+            // hostname-configured target. Failures are logged and the trap dropped.
             try
             {
-                var addresses = Dns.GetHostAddresses(target.Host);
+                using var dnsCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                var addresses = await Dns.GetHostAddressesAsync(target.Host, dnsCts.Token);
                 if (addresses.Length == 0)
                 {
                     _logger.LogWarning(
                         "DNS lookup for SNMP target {Name} ({Host}) returned no addresses. Trap dropped.",
                         target.Name, target.Host);
-                    return Task.CompletedTask;
+                    return;
                 }
                 ipAddress = addresses.FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
                             ?? addresses[0];
@@ -337,7 +340,7 @@ public class SnmpNotificationChannel : INotificationChannel
                 _logger.LogError(dnsEx,
                     "DNS lookup failed for SNMP target {Name} ({Host}): {Message}. Trap dropped.",
                     target.Name, target.Host, dnsEx.Message);
-                return Task.CompletedTask;
+                return;
             }
         }
         var endpoint = new IPEndPoint(ipAddress, target.Port);
@@ -355,7 +358,7 @@ public class SnmpNotificationChannel : INotificationChannel
                 _logger.LogError(ex,
                     "Failed to decrypt community string for SNMP target {Name}. Master key mismatch — trap dropped.",
                     target.Name);
-                return Task.CompletedTask;
+                return;
             }
         }
 
@@ -378,13 +381,11 @@ public class SnmpNotificationChannel : INotificationChannel
                 _logger.LogWarning(
                     "SNMP v3 target {Name} skipped — requires an Enterprise license.",
                     target.Name);
-                return Task.CompletedTask;
+                return;
             }
 
             SendV3Trap(target, endpoint, trapOid, varbinds);
         }
-
-        return Task.CompletedTask;
     }
 
     /// <summary>

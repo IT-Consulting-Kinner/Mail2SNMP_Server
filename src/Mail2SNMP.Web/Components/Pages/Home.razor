@@ -86,12 +86,31 @@ else
         }
     }
 
+    @* UC-1: ingestion-health banner. A broken mailbox silently stops all alerts for
+       its jobs while the KeepAlive trap keeps telling the NMS everything is green —
+       so the dashboard must shout when polling is failing. *@
+    @if (_dashboard.MailboxesInError > 0)
+    {
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <strong class="me-2">⚠ Mail ingestion degraded</strong>
+            <span>
+                @_dashboard.MailboxesInError active @(_dashboard.MailboxesInError == 1 ? "mailbox is" : "mailboxes are") failing to poll —
+                alerts from @(_dashboard.MailboxesInError == 1 ? "its" : "their") jobs are <strong>not</strong> being generated.
+                <a href="/mailboxes" class="alert-link">Review the mailboxes</a> for the error details.
+            </span>
+        </div>
+    }
+
     <div class="row g-3">
         <div class="col-md-4 col-lg-3">
-            <div class="card border-0 shadow-sm">
+            <div class="card border-0 shadow-sm @(_dashboard.MailboxesInError > 0 ? "border-danger" : "")">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">Active Mailboxes</h6>
-                    <h2 class="card-title mb-0">@_dashboard.ActiveMailboxes</h2>
+                    <h2 class="card-title mb-0 @(_dashboard.MailboxesInError > 0 ? "text-danger" : "")">@_dashboard.ActiveMailboxes</h2>
+                    @if (_dashboard.MailboxesInError > 0)
+                    {
+                        <small class="text-danger">@_dashboard.MailboxesInError in error</small>
+                    }
                 </div>
             </div>
         </div>
@@ -293,16 +312,20 @@ else
     {
         try
         {
-            var mailboxes = await MailboxService.GetAllAsync();
-            var jobs = await JobService.GetAllAsync();
-            var schedules = await ScheduleService.GetAllAsync();
-            var events = await EventService.GetAllAsync(EventState.New);
-            var notifiedEvents = await EventService.GetAllAsync(EventState.Notified);
-            var deadLetters = await DeadLetterService.GetAllAsync();
+            // PF-1: server-side COUNT aggregates instead of materializing full entity
+            // graphs (jobs with 4-level Includes, events/dead-letters capped at 500)
+            // just to render tile numbers. Also fixes two counting bugs: OpenEvents
+            // was bounded by GetAllAsync's Take(500) and missed Acknowledged events.
+            var activeEventStates = new[] { EventState.New, EventState.Notified, EventState.Acknowledged };
+            var activeMailboxes = await Db.Mailboxes.CountAsync(m => m.IsActive);
+            var mailboxesInError = await Db.Mailboxes.CountAsync(m => m.IsActive && m.LastError != null);
+            var activeJobs = await Db.Jobs.CountAsync(j => j.IsActive);
+            var activeSchedules = await Db.Schedules.CountAsync(s => s.IsActive);
+            var openEvents = await Db.Events.CountAsync(e => activeEventStates.Contains(e.State));
+            var pendingDeadLetters = await Db.DeadLetterEntries.CountAsync(d => d.Status == DeadLetterStatus.Pending);
             var inMaintenance = await MaintenanceService.IsInMaintenanceAsync();
 
-            // T6: counts for the onboarding banner. Cheap because the lists
-            // are already loaded above.
+            // T6: counts for the onboarding banner.
             _ruleCount = await Db.Rules.CountAsync();
             var snmpCount = await Db.SnmpTargets.CountAsync(t => t.IsActive);
             var webhookCount = await Db.WebhookTargets.CountAsync(t => t.IsActive);
@@ -310,14 +333,17 @@ else
 
             _dashboard = new DashboardDto
             {
-                ActiveMailboxes = mailboxes.Count(m => m.IsActive),
-                ActiveJobs = jobs.Count(j => j.IsActive),
-                ActiveSchedules = schedules.Count(s => s.IsActive),
-                OpenEvents = events.Count + notifiedEvents.Count,
-                PendingDeadLetters = deadLetters.Count(d => d.Status == DeadLetterStatus.Pending),
+                ActiveMailboxes = activeMailboxes,
+                ActiveJobs = activeJobs,
+                ActiveSchedules = activeSchedules,
+                OpenEvents = openEvents,
+                PendingDeadLetters = pendingDeadLetters,
                 MaintenanceActive = inMaintenance,
                 LicenseEdition = LicenseProvider.Current.Edition.ToString(),
-                IsHealthy = true
+                // UC-1: health is computed — a broken active mailbox means ingestion
+                // is failing for its jobs, which the dashboard must surface.
+                MailboxesInError = mailboxesInError,
+                IsHealthy = mailboxesInError == 0
             };
             _license = LicenseProvider.Current;
 

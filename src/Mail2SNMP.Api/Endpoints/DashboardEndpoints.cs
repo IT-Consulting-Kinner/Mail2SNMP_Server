@@ -1,6 +1,8 @@
 using Mail2SNMP.Core.Interfaces;
+using Mail2SNMP.Infrastructure.Data;
 using Mail2SNMP.Models.DTOs;
 using Mail2SNMP.Models.Enums;
+using Microsoft.EntityFrameworkCore;
 
 namespace Mail2SNMP.Api.Endpoints;
 
@@ -20,20 +22,27 @@ public static class DashboardEndpoints
     public static IEndpointRouteBuilder MapDashboardEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet("/api/v1/dashboard", async (
-            IMailboxService mailboxService,
-            IJobService jobService,
-            IScheduleService scheduleService,
-            IEventService eventService,
-            IDeadLetterService deadLetterService,
+            Mail2SnmpDbContext db,
             IMaintenanceWindowService maintenanceWindowService,
             ILicenseProvider licenseProvider,
             CancellationToken ct) =>
         {
-            var mailboxes = await mailboxService.GetAllAsync(ct);
-            var jobs = await jobService.GetAllAsync(ct);
-            var schedules = await scheduleService.GetAllAsync(ct);
-            var openEvents = await eventService.GetAllAsync(stateFilter: null, jobId: null, ct: ct);
-            var deadLetters = await deadLetterService.GetAllAsync(ct);
+            // PF-1: the previous implementation materialized full entity graphs
+            // (jobs with 4-level Includes, 500 events, 500 dead letters) on every
+            // dashboard hit just to render six integers, and two counters were
+            // wrong: OpenEvents was capped by GetAllAsync's Take(500) (undercounting
+            // beyond 500 total events) and PendingDeadLetters counted the loaded
+            // page across ALL statuses. Server-side COUNT aggregates fix both.
+            // Direct DbContext use is deliberate here: read-only aggregate counters
+            // with no business logic — the service layer adds only materialization.
+            var activeEventStates = new[] { EventState.New, EventState.Notified, EventState.Acknowledged };
+
+            var activeMailboxes = await db.Mailboxes.CountAsync(m => m.IsActive, ct);
+            var mailboxesInError = await db.Mailboxes.CountAsync(m => m.IsActive && m.LastError != null, ct);
+            var activeJobs = await db.Jobs.CountAsync(j => j.IsActive, ct);
+            var activeSchedules = await db.Schedules.CountAsync(s => s.IsActive, ct);
+            var openEvents = await db.Events.CountAsync(e => activeEventStates.Contains(e.State), ct);
+            var pendingDeadLetters = await db.DeadLetterEntries.CountAsync(d => d.Status == DeadLetterStatus.Pending, ct);
             var inMaintenance = await maintenanceWindowService.IsInMaintenanceAsync(ct: ct);
 
             // Find active maintenance window name
@@ -48,17 +57,17 @@ public static class DashboardEndpoints
 
             var dashboard = new DashboardDto
             {
-                ActiveMailboxes = mailboxes.Count(m => m.IsActive),
-                ActiveJobs = jobs.Count(j => j.IsActive),
-                ActiveSchedules = schedules.Count(s => s.IsActive),
-                OpenEvents = openEvents.Count(e =>
-                    e.State == EventState.New ||
-                    e.State == EventState.Notified ||
-                    e.State == EventState.Acknowledged),
-                PendingDeadLetters = deadLetters.Count,
+                ActiveMailboxes = activeMailboxes,
+                ActiveJobs = activeJobs,
+                ActiveSchedules = activeSchedules,
+                OpenEvents = openEvents,
+                PendingDeadLetters = pendingDeadLetters,
                 MaintenanceActive = inMaintenance,
                 MaintenanceWindowName = maintenanceWindowName,
-                IsHealthy = true,
+                // UC-1: health is computed, not asserted. A broken active mailbox means
+                // ingestion (the product's core loop) is failing for its jobs.
+                MailboxesInError = mailboxesInError,
+                IsHealthy = mailboxesInError == 0,
                 LicenseEdition = licenseProvider.Current.Edition.ToString()
             };
 
