@@ -33,16 +33,25 @@ try
     builder.Services.AddMail2SnmpIdentityCore();
 
     // ── Cookie Authentication ──────────────────────────────────────────────
+    // AR-5: lifetimes come from the shared Session config section (previously this
+    // host hardcoded an 8h sliding window while the Web host hardcoded 60min).
+    var sessionSettings = builder.Configuration.GetSection("Session").Get<SessionSettings>() ?? new SessionSettings();
     builder.Services.ConfigureApplicationCookie(options =>
     {
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         options.Cookie.SameSite = SameSiteMode.Strict;
         options.Cookie.Name = "Mail2SNMP.Auth";
-        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(Math.Max(1, sessionSettings.SlidingExpiryMinutes));
         options.SlidingExpiration = true;
         options.LoginPath = "/api/v1/auth/login";
         options.AccessDeniedPath = "/api/v1/auth/access-denied";
+
+        // SEC-3: same deactivated-user revalidation as the Web host (previously
+        // missing here, so a deactivated user kept API access until cookie expiry)
+        // plus the absolute session lifetime.
+        AuthSetup.AttachDeactivatedUserRejection(
+            options, TimeSpan.FromHours(Math.Max(1, sessionSettings.AbsoluteExpiryHours)));
         options.Events.OnRedirectToLogin = context =>
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;

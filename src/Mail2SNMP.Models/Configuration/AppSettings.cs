@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Mail2SNMP.Models.Configuration;
 
 /// <summary>
@@ -101,8 +103,13 @@ public class DatabaseSettings
             return string.Join(";", parts) + ";";
         }
 
-        // SQLite — DatabaseName is the file path
-        return $"Data Source={DatabaseName}";
+        // SQLite — DatabaseName is the file path.
+        // PF-4: "Default Timeout" is Microsoft.Data.Sqlite's busy-wait window. With
+        // multiple consumer tasks writing concurrently (event creation runs in a
+        // Serializable transaction that takes SQLite's database-wide write lock), a
+        // second writer previously failed immediately with SQLITE_BUSY ("database is
+        // locked"); now it queues for up to ConnectTimeoutSeconds instead.
+        return $"Data Source={DatabaseName};Default Timeout={Math.Max(1, ConnectTimeoutSeconds)}";
     }
 }
 
@@ -116,6 +123,7 @@ public class ImapSettings
     /// (a connection-pool / semaphore ceiling). Higher values poll more mailboxes in
     /// parallel at the cost of open sockets and server-side connection limits. Default 10.
     /// </summary>
+    [Range(1, 100)]
     public int MaxConcurrentConnections { get; set; } = 10;
 
     /// <summary>
@@ -124,24 +132,39 @@ public class ImapSettings
     /// and counted by the channel-overflow metric, so size this to your peak burst.
     /// Default 20.
     /// </summary>
+    [Range(1, 100000)]
     public int ChannelBoundedCapacity { get; set; } = 20;
 
     /// <summary>
     /// Number of consumer tasks that drain the channel and process mail items in parallel.
     /// Default 5.
     /// </summary>
+    [Range(1, 64)]
     public int ConsumerTasks { get; set; } = 5;
 
     /// <summary>
     /// IMAP connect/authenticate timeout in seconds. Used by both
     /// MailPollingService and the Test-Connection action. Default 10.
     /// </summary>
+    [Range(1, 300)]
     public int ConnectTimeoutSeconds { get; set; } = 10;
 
     /// <summary>
     /// IMAP per-operation timeout (search/fetch) in seconds. Default 60.
     /// </summary>
+    [Range(1, 3600)]
     public int OperationTimeoutSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// PF-2: maximum number of unseen messages processed in a single poll pass.
+    /// A large backlogged inbox (e.g. after an outage) would otherwise be drained
+    /// in one blocking pass that monopolizes a consumer task and an IMAP
+    /// connection slot for the whole drain, starving every other mailbox. The
+    /// oldest messages are processed first; the remainder stays unseen and is
+    /// picked up by the next poll cycle. 0 disables the cap. Default 500.
+    /// </summary>
+    [Range(0, 1000000)]
+    public int MaxMessagesPerPoll { get; set; } = 500;
 
     /// <summary>
     /// Initial backoff (seconds) before restarting a crashed mail-polling consumer
@@ -174,6 +197,7 @@ public class EventSettings
     /// dedup key as a recent one is treated as a duplicate and suppressed rather than
     /// raising a new event. Applied per job unless the job overrides it. Default 30.
     /// </summary>
+    [Range(0, 1440)]
     public int DefaultDedupWindowMinutes { get; set; } = 30;
 
     /// <summary>
@@ -181,6 +205,7 @@ public class EventSettings
     /// events beyond the cap are rate-limited (dropped) to protect downstream targets.
     /// Applied per job unless overridden. Default 50.
     /// </summary>
+    [Range(1, 100000)]
     public int DefaultMaxEventsPerHour { get; set; } = 50;
 
     /// <summary>
@@ -188,6 +213,7 @@ public class EventSettings
     /// hold open before new ones are throttled. Applied per job unless overridden.
     /// Default 200.
     /// </summary>
+    [Range(1, 1000000)]
     public int DefaultMaxActiveEvents { get; set; } = 200;
 
     /// <summary>
@@ -251,12 +277,14 @@ public class SessionSettings
     /// request resets the clock and the session expires after this much idle time.
     /// Default 60.
     /// </summary>
+    [Range(1, 1440)]
     public int SlidingExpiryMinutes { get; set; } = 60;
 
     /// <summary>
     /// Absolute maximum lifetime (in hours) of a session regardless of activity, after
     /// which re-authentication is required. Default 8.
     /// </summary>
+    [Range(1, 168)]
     public int AbsoluteExpiryHours { get; set; } = 8;
 }
 

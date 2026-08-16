@@ -24,9 +24,18 @@ public static class DependencyInjection
     public static IServiceCollection AddMail2SnmpInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         // Bind shared option classes so any host (Worker, Api, Web) gets the same settings.
-        services.Configure<ImapSettings>(configuration.GetSection("Imap"));
-        services.Configure<EventSettings>(configuration.GetSection("Events"));
-        services.Configure<RetentionSettings>(configuration.GetSection("Retention"));
+        // AR-4: ValidateDataAnnotations + ValidateOnStart turn an out-of-range
+        // appsettings value (e.g. ConsumerTasks=0, which previously produced a
+        // service that started but processed nothing) into a clear boot-time
+        // error naming the offending option instead of a deep runtime failure.
+        services.AddOptions<ImapSettings>().Bind(configuration.GetSection("Imap"))
+            .ValidateDataAnnotations().ValidateOnStart();
+        services.AddOptions<EventSettings>().Bind(configuration.GetSection("Events"))
+            .ValidateDataAnnotations().ValidateOnStart();
+        services.AddOptions<RetentionSettings>().Bind(configuration.GetSection("Retention"))
+            .ValidateDataAnnotations().ValidateOnStart();
+        services.AddOptions<SessionSettings>().Bind(configuration.GetSection("Session"))
+            .ValidateDataAnnotations().ValidateOnStart();
 
         // Named HttpClients for webhook calls — handler lifetime managed by
         // IHttpClientFactory so we never create raw HttpClient instances.

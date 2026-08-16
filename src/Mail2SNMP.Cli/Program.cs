@@ -97,7 +97,7 @@ public partial class Program
     static void PrintUsage()
     {
         // Read version from assembly so the banner tracks Directory.Build.props
-        // automatically on every release â€” no manual string edit required.
+        // automatically on every release — no manual string edit required.
         var version = typeof(Program).Assembly
             .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
             .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()

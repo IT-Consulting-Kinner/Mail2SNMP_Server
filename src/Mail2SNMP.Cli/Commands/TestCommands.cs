@@ -57,7 +57,7 @@ public partial class Program
             }
             Console.WriteLine("Available mailboxes:");
             foreach (var m in allMailboxes)
-                Console.WriteLine($"  [{m.Id}] {m.Name} â€” {m.Host}:{m.Port}");
+                Console.WriteLine($"  [{m.Id}] {m.Name} — {m.Host}:{m.Port}");
             Console.Write("\nMailbox ID to test: ");
             if (!int.TryParse(Console.ReadLine()?.Trim(), out var selected)) { Console.Error.WriteLine("Invalid ID."); return 1; }
             mailboxId = selected;
@@ -133,10 +133,10 @@ public partial class Program
     }
 
     /// <summary>
-    /// Truncates a string to a maximum length, appending "â€¦" if truncated.
+    /// Truncates a string to a maximum length, appending "…" if truncated.
     /// </summary>
     private static string Truncate(string value, int maxLength)
-        => value.Length <= maxLength ? value : value[..(maxLength - 1)] + "â€¦";
+        => value.Length <= maxLength ? value : value[..(maxLength - 1)] + "…";
 
     static int HandleTestSnmp(string[] args)
     {

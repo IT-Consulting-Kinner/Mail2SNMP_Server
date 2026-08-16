@@ -84,36 +84,50 @@ public class DataRetentionService : BackgroundService
 
         var totalDeleted = 0;
 
-        // AR-1: per-entity retention counters. Each step reports how many rows it
-        // removed; the labelled counter makes retention throughput observable so an
-        // operator can see when the hourly capped batches fall behind ingestion.
-        static int Track(string entity, int n)
+        // PF-3: each cleanup step used to remove ONE capped batch per hourly cycle
+        // (e.g. 1000 events/h), so any deployment aging out rows faster than the cap
+        // grew those tables without bound. Drain now repeats a step within the same
+        // cycle until it removes fewer than its batch cap — i.e. the cycle actually
+        // catches up to the cutoff. The iteration guard is a defensive stop against
+        // a pathological non-converging step; 200 × batch is far beyond any real
+        // hourly backlog.
+        // AR-1: the labelled counter makes retention throughput observable.
+        async Task<int> DrainAsync(string entity, int batchCap, Func<Task<int>> step)
         {
-            if (n > 0)
-                Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.RetentionDeleted.WithLabels(entity).Inc(n);
-            return n;
+            var total = 0;
+            int n;
+            var guard = 0;
+            do
+            {
+                n = await step();
+                total += n;
+            } while (n >= batchCap && ++guard < 200 && !ct.IsCancellationRequested);
+
+            if (total > 0)
+                Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.RetentionDeleted.WithLabels(entity).Inc(total);
+            return total;
         }
 
         // 1. Auto-expire old New/Notified events (not yet acknowledged)
-        totalDeleted += Track("event-expired", await ExpireOldEventsAsync(db, ct));
+        totalDeleted += await DrainAsync("event-expired", 1000, () => ExpireOldEventsAsync(db, ct));
 
         // 2. Delete old resolved/suppressed/expired events beyond retention period
-        totalDeleted += Track("event", await DeleteOldEventsAsync(db, ct));
+        totalDeleted += await DrainAsync("event", 1000, () => DeleteOldEventsAsync(db, ct));
 
         // 3. Delete old processed mail records
-        totalDeleted += Track("processedmail", await DeleteOldProcessedMailsAsync(db, ct));
+        totalDeleted += await DrainAsync("processedmail", 5000, () => DeleteOldProcessedMailsAsync(db, ct));
 
         // 4. Delete old audit events (by age and max count)
-        totalDeleted += Track("audit", await DeleteOldAuditEventsAsync(db, ct));
+        totalDeleted += await DrainAsync("audit", 5000, () => DeleteOldAuditEventsAsync(db, ct));
 
         // 5. Delete old dead letter entries
-        totalDeleted += Track("deadletter", await DeleteOldDeadLettersAsync(db, ct));
+        totalDeleted += await DrainAsync("deadletter", 1000, () => DeleteOldDeadLettersAsync(db, ct));
 
         // 6. Delete old event dedup entries
-        totalDeleted += Track("eventdedup", await DeleteOldEventDedupsAsync(db, ct));
+        totalDeleted += await DrainAsync("eventdedup", 1000, () => DeleteOldEventDedupsAsync(db, ct));
 
         // 7. Delete expired authentication tickets (server-side session store)
-        totalDeleted += Track("authticket", await DeleteExpiredAuthTicketsAsync(db, ct));
+        totalDeleted += await DrainAsync("authticket", 1000, () => DeleteExpiredAuthTicketsAsync(db, ct));
 
         if (totalDeleted > 0)
             _logger.LogInformation("Data retention cleanup completed. Total records removed: {Count}", totalDeleted);

@@ -152,7 +152,7 @@ public partial class Program
                 if (args[i] == "--email") email = args[i + 1];
                 if (args[i] == "--password") cliPw = args[i + 1];
             }
-            // V10: see create-admin â€” discourage password-on-command-line.
+            // V10: see create-admin — discourage password-on-command-line.
             if (cliPw is not null)
                 Console.Error.WriteLine("WARNING: --password on the command line is visible in shell history and process listings. Omit it to be prompted securely.");
 
@@ -246,7 +246,7 @@ public partial class Program
 
     static async Task<int> HandleCredentials(string[] args, IServiceProvider sp)
     {
-        // G1: rotate-key â€” atomically re-encrypts every stored credential with a new
+        // G1: rotate-key — atomically re-encrypts every stored credential with a new
         // master key. Procedure:
         //   1. Load OLD key (current MASTER_KEY env var or default key file).
         //   2. Decrypt every credential in-memory using the old encryptor.
@@ -365,7 +365,7 @@ public partial class Program
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                Console.Error.WriteLine($"DATABASE WRITE FAILED â€” rolled back: {ex.Message}");
+                Console.Error.WriteLine($"DATABASE WRITE FAILED — rolled back: {ex.Message}");
                 return 3;
             }
 

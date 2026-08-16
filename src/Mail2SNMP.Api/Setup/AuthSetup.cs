@@ -57,6 +57,48 @@ public static class AuthSetup
     }
 
     /// <summary>
+    /// SEC-3 / V2: rejects the cookie principal when the backing user has been
+    /// deleted or deactivated (<c>IsActive == false</c>) since the cookie was
+    /// issued, forcing a fresh sign-in. Attach from every host's
+    /// <c>ConfigureApplicationCookie</c> so a deactivated user cannot keep using
+    /// a live session against either the Web UI or the standalone API.
+    /// </summary>
+    /// <remarks>
+    /// ASP.NET Identity's default pipeline knows nothing about the custom
+    /// <c>IsActive</c> flag, so without this event a disabled account keeps its
+    /// sliding-expiration cookie alive indefinitely. Cookie validation runs on
+    /// every request; the <c>UserManager</c> lookup is served from the request
+    /// scope, so the cost is one indexed PK query.
+    /// </remarks>
+    public static void AttachDeactivatedUserRejection(CookieAuthenticationOptions options, TimeSpan? absoluteExpiry = null)
+    {
+        options.Events.OnValidatePrincipal = async context =>
+        {
+            // AR-5: absolute session lifetime. Sliding expiration alone lets an
+            // actively-used session live forever; when configured, a ticket older
+            // than the absolute window is rejected regardless of activity.
+            if (absoluteExpiry is TimeSpan max &&
+                context.Properties.IssuedUtc is DateTimeOffset issued &&
+                DateTimeOffset.UtcNow - issued > max)
+            {
+                context.RejectPrincipal();
+                return;
+            }
+
+            var userId = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId)) return;
+            var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager<AppUser>>();
+            var user = await userManager.FindByIdAsync(userId);
+            if (user is null || !user.IsActive)
+            {
+                context.RejectPrincipal();
+                var signInManager = context.HttpContext.RequestServices.GetRequiredService<SignInManager<AppUser>>();
+                await signInManager.SignOutAsync();
+            }
+        };
+    }
+
+    /// <summary>
     /// Wires the server-side session store so the auth ticket lives in the DB and
     /// the cookie stays small (critical for OIDC tokens with many claims).
     /// </summary>

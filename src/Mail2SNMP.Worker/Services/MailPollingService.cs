@@ -332,6 +332,18 @@ public class MailPollingService : BackgroundService
             _logger.LogInformation("Found {Count} unseen emails in mailbox {Name}/{Folder}",
                 uids.Count, mailbox.Name, mailbox.Folder);
 
+            // PF-2: bound a single poll pass so a backlogged inbox cannot monopolize
+            // this consumer task + IMAP slot for the entire drain. Oldest UIDs first;
+            // the remainder stays unseen and is picked up by the next cycle.
+            if (_imapSettings.MaxMessagesPerPoll > 0 && uids.Count > _imapSettings.MaxMessagesPerPoll)
+            {
+                _logger.LogWarning(
+                    "Mailbox {Name}: {Total} unseen messages exceed MaxMessagesPerPoll ({Cap}). " +
+                    "Processing the oldest {Cap}; the rest will be handled next cycle.",
+                    mailbox.Name, uids.Count, _imapSettings.MaxMessagesPerPoll);
+                uids = uids.Take(_imapSettings.MaxMessagesPerPoll).ToList();
+            }
+
             var matchCount = 0;
 
             foreach (var uid in uids)
@@ -348,7 +360,26 @@ public class MailPollingService : BackgroundService
 
                 try
                 {
-                    var message = await folder.GetMessageAsync(uid, ct);
+                    // PF-2: per-message fetch timeout. The parent token only fires on
+                    // shutdown, so a single hung fetch could previously stall the
+                    // consumer indefinitely. The timeout is caught HERE (not by the
+                    // outer OperationCanceledException filters) so it skips only this
+                    // message instead of masquerading as a shutdown.
+                    using var msgCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    msgCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, _imapSettings.OperationTimeoutSeconds)));
+                    MimeKit.MimeMessage message;
+                    try
+                    {
+                        message = await folder.GetMessageAsync(uid, msgCts.Token);
+                    }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                    {
+                        _logger.LogWarning(
+                            "Fetching message UID {Uid} from mailbox {Name} timed out after {Timeout}s. " +
+                            "Leaving it unseen for the next cycle.",
+                            uid, mailbox.Name, _imapSettings.OperationTimeoutSeconds);
+                        continue;
+                    }
 
                     // V8: bound untrusted email fields before they reach rule
                     // evaluation, the database, the UI and CSV exports. The DB

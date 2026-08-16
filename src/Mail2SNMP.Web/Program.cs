@@ -47,36 +47,25 @@ try
     // Identity (P-2: shared bootstrap — see AuthSetup. Host-specific cookie config below.)
     builder.Services.AddMail2SnmpIdentityCore();
 
-    // Cookie authentication
+    // Cookie authentication.
+    // AR-5: session lifetimes come from the Session config section (previously the
+    // documented SessionSettings class existed but was never bound — a silent
+    // config trust gap — while the two hosts hardcoded diverging lifetimes).
+    var sessionSettings = builder.Configuration.GetSection("Session").Get<SessionSettings>() ?? new SessionSettings();
     builder.Services.ConfigureApplicationCookie(options =>
     {
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         options.Cookie.SameSite = SameSiteMode.Strict;
         options.SlidingExpiration = true;
-        options.ExpireTimeSpan = TimeSpan.FromMinutes(60);
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(Math.Max(1, sessionSettings.SlidingExpiryMinutes));
         options.LoginPath = "/login";
         options.AccessDeniedPath = "/access-denied";
 
-        // V2: terminate live sessions of deactivated users. IsActive is a custom
-        // property unknown to ASP.NET Identity, so the default pipeline ignores
-        // it. On every request we revalidate the principal: if the backing user
-        // has been disabled (or deleted) since the cookie was issued, reject the
-        // principal and force a fresh sign-in. Validation is throttled to once
-        // per 30s per cookie so this is not a per-request DB hit.
-        options.Events.OnValidatePrincipal = async context =>
-        {
-            var userId = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(userId)) return;
-            var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager<AppUser>>();
-            var user = await userManager.FindByIdAsync(userId);
-            if (user is null || !user.IsActive)
-            {
-                context.RejectPrincipal();
-                var signInManager = context.HttpContext.RequestServices.GetRequiredService<SignInManager<AppUser>>();
-                await signInManager.SignOutAsync();
-            }
-        };
+        // V2/SEC-3: shared principal revalidation — terminates live sessions of
+        // deactivated/deleted users and enforces the absolute session lifetime.
+        Mail2SNMP.Api.Setup.AuthSetup.AttachDeactivatedUserRejection(
+            options, TimeSpan.FromHours(Math.Max(1, sessionSettings.AbsoluteExpiryHours)));
     });
 
     // Server-side session store + X-Api-Key scheme (P-2: shared bootstrap).
