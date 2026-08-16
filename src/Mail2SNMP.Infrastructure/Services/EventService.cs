@@ -169,9 +169,14 @@ public class EventService : IEventService
                     .CountAsync(e => e.JobId == evt.JobId && activeStates.Contains(e.State), ct);
                 if (activeCount >= maxActive)
                 {
+                    // FN-4: the eviction candidate set must match the active-count set,
+                    // otherwise a job whose active events are ALL Acknowledged would find
+                    // nothing to expire and grow past maxActive unbounded. Expire the
+                    // oldest active event regardless of sub-state, preferring New, then
+                    // Notified, then Acknowledged.
                     var toExpire = await _db.Events
-                        .Where(e => e.JobId == evt.JobId && (e.State == EventState.New || e.State == EventState.Notified))
-                        .OrderBy(e => e.State == EventState.New ? 0 : 1)
+                        .Where(e => e.JobId == evt.JobId && activeStates.Contains(e.State))
+                        .OrderBy(e => e.State == EventState.New ? 0 : e.State == EventState.Notified ? 1 : 2)
                         .ThenBy(e => e.CreatedUtc)
                         .FirstOrDefaultAsync(ct);
                     if (toExpire != null)

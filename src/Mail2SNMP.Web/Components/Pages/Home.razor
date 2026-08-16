@@ -1,5 +1,6 @@
 @page "/"
 @rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "ReadOnly")]
 @using Mail2SNMP.Infrastructure.Data
 @using Mail2SNMP.Models.Entities
 @using Microsoft.EntityFrameworkCore

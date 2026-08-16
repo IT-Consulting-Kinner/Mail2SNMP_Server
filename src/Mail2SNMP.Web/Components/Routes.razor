@@ -12,6 +12,9 @@
                 }
             </NotAuthorized>
         </AuthorizeRouteView>
-        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        @* UX-2: content pages render their title as <h3> (Login uses <h4>); the only
+           <h1> is on the error page. Target h3 so keyboard/screen-reader focus is
+           actually moved to the page heading on every navigation. *@
+        <FocusOnNavigate RouteData="routeData" Selector="h3" />
     </Found>
 </Router>

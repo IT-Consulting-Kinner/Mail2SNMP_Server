@@ -274,10 +274,13 @@ public class MailPollingService : BackgroundService
 
         try
         {
-            // Connect to mailbox
+            // Connect to mailbox.
+            // SEC-1: mandatory STARTTLS (StartTls) on the non-SSL path so a stripped
+            // STARTTLS capability fails the connection instead of silently downgrading
+            // the IMAP login (username + decrypted password) to cleartext.
             var sslOptions = mailbox.UseSsl
                 ? SecureSocketOptions.SslOnConnect
-                : SecureSocketOptions.StartTlsWhenAvailable;
+                : SecureSocketOptions.StartTls;
 
             // M11: configurable IMAP connect timeout. The connect-only window covers
             // the TCP handshake + TLS negotiation + LOGIN; subsequent operations use

@@ -208,7 +208,9 @@ public class ImapIdleService : BackgroundService
         if (jobIdsForMailbox.Count == 0) return;
 
         using var client = new ImapClient();
-        var ssl = mailbox.UseSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTlsWhenAvailable;
+        // SEC-1: mandatory STARTTLS (StartTls) on the non-SSL path — fail rather than
+        // silently fall back to cleartext when the server omits the STARTTLS capability.
+        var ssl = mailbox.UseSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         connectCts.CancelAfter(TimeSpan.FromSeconds(_imapSettings.ConnectTimeoutSeconds * 3));

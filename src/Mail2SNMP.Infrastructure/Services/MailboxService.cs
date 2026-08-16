@@ -137,9 +137,14 @@ public class MailboxService : IMailboxService
         using var client = new ImapClient();
         try
         {
+            // SEC-1: when UseSsl is false, require mandatory STARTTLS (StartTls) rather
+            // than StartTlsWhenAvailable. The latter silently proceeds over cleartext if
+            // the server omits the STARTTLS capability, so an on-path attacker who strips
+            // it would cause the mailbox password to be sent in the clear. StartTls fails
+            // the connection instead of downgrading.
             var sslOptions = mailbox.UseSsl
                 ? SecureSocketOptions.SslOnConnect
-                : SecureSocketOptions.StartTlsWhenAvailable;
+                : SecureSocketOptions.StartTls;
 
             // M11: configurable IMAP connect timeout (default 10s)
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
