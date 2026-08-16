@@ -24,10 +24,11 @@
         <NavMenu />
         <div class="p-3 border-top border-secondary small">
             <div class="text-white-50 mb-2">@_userName</div>
-            @* Wave E (17): dark mode toggle — persists choice in localStorage via mail2snmp.js *@
-            <button type="button" class="btn btn-outline-light btn-sm w-100 mb-2" onclick="mail2snmp.toggleTheme()">
-                <i class="bi bi-circle-half"></i> Toggle theme
-            </button>
+            @* UX-1: the former "Toggle theme" button was removed. It flipped the
+               Bootstrap 5.3 data-bs-theme attribute, but the bundled stylesheet is
+               v5.1.0 which has no data-bs-theme support and no custom dark CSS
+               exists — the control was visibly dead. Reintroduce it together with a
+               Bootstrap 5.3+ upgrade (or real dark-mode styles), not before. *@
             <form method="post" action="/logout">
                 <button type="submit" class="btn btn-outline-light btn-sm w-100">Logout</button>
             </form>

@@ -244,8 +244,10 @@
         }
         catch (Exception ex)
         {
+            // UX-4: route through the friendly formatter — raw exception text can
+            // leak SQL/EF internals to the operator UI.
             _reloadAlertClass = "alert-danger";
-            _reloadMessage = $"Failed to reload configuration: {ex.Message}";
+            _reloadMessage = $"Failed to reload configuration: {Helpers.ErrorMessageFormatter.ToFriendly(ex, "reloading the configuration")}";
         }
         finally
         {

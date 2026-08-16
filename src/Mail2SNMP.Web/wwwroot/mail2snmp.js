@@ -1,25 +1,10 @@
 // Wave C/E: small JS helpers used from Blazor pages.
 window.mail2snmp = window.mail2snmp || {};
 
-// Wave E (17): Bootstrap 5.3 dark-mode support via data-bs-theme on <html>.
-// The chosen theme is persisted in localStorage and re-applied immediately on
-// every page load (avoids the "flash of light theme" on cold reload).
-(function applyStoredTheme() {
-    try {
-        const stored = localStorage.getItem('mail2snmp-theme');
-        if (stored === 'dark' || stored === 'light') {
-            document.documentElement.setAttribute('data-bs-theme', stored);
-        }
-    } catch { /* localStorage may be blocked */ }
-})();
-
-window.mail2snmp.toggleTheme = function () {
-    const html = document.documentElement;
-    const current = html.getAttribute('data-bs-theme') || 'light';
-    const next = current === 'dark' ? 'light' : 'dark';
-    html.setAttribute('data-bs-theme', next);
-    try { localStorage.setItem('mail2snmp-theme', next); } catch { /* ignored */ }
-};
+// UX-1: the theme-toggle helpers (applyStoredTheme/toggleTheme) were removed.
+// They set the Bootstrap 5.3 data-bs-theme attribute, but the bundled stylesheet
+// is v5.1.0 which does not implement data-bs-theme, so toggling had no visible
+// effect. Restore them together with a Bootstrap 5.3+ upgrade or real dark CSS.
 
 // G7: per-table configurable columns. Stores a JSON array of hidden column
 // indices in localStorage under key 'mail2snmp-cols-<tableId>' and re-applies

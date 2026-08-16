@@ -283,10 +283,9 @@ else
         </div>
     </div>
 
-    @if (!string.IsNullOrEmpty(_error))
-    {
-        <div class="alert alert-danger mt-3">@_error</div>
-    }
+    @* UX-4: standard error surface (themed, dismissible) instead of a bespoke,
+       never-clearing alert div — consistent with every other data page. *@
+    <AutoDismissAlert Type="danger" @bind-Message="_error" />
 }
 
 @code {
@@ -387,7 +386,8 @@ else
         }
         catch (Exception ex)
         {
-            _error = $"Failed to load dashboard: {ex.Message}";
+            // UX-4: never expose raw exception text (may leak SQL/EF internals).
+            _error = Helpers.ErrorMessageFormatter.ToFriendly(ex, "loading the dashboard");
             _dashboard.IsHealthy = false;
         }
         finally

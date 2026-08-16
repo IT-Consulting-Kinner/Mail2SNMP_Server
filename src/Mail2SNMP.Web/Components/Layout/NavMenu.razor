@@ -48,39 +48,49 @@
                 Events
             </NavLink>
         </li>
-        <li class="nav-item">
-            <NavLink class="nav-link text-white py-1" href="dead-letters">
-                Dead Letters
-            </NavLink>
-        </li>
+        @* UX-3: the nav mirrors the page-level policies so lower roles are not led
+           to "not authorized" dead ends. DeadLetters/Maintenance/AuditLog require
+           Operator; Settings/Users/ApiKeys require Admin — same gates the pages
+           enforce via their [Authorize(Policy=...)] attributes. *@
+        <AuthorizeView Policy="Operator">
+            <li class="nav-item">
+                <NavLink class="nav-link text-white py-1" href="dead-letters">
+                    Dead Letters
+                </NavLink>
+            </li>
+        </AuthorizeView>
 
-        <li class="nav-item mt-2">
-            <small class="text-secondary px-3 text-uppercase fw-semibold" style="font-size: 0.65rem;">Administration</small>
-        </li>
-        <li class="nav-item">
-            <NavLink class="nav-link text-white py-1" href="maintenance">
-                Maintenance
-            </NavLink>
-        </li>
-        <li class="nav-item">
-            <NavLink class="nav-link text-white py-1" href="audit">
-                Audit Log
-            </NavLink>
-        </li>
-        <li class="nav-item">
-            <NavLink class="nav-link text-white py-1" href="settings">
-                Settings
-            </NavLink>
-        </li>
-        <li class="nav-item">
-            <NavLink class="nav-link text-white py-1" href="users">
-                Users
-            </NavLink>
-        </li>
-        <li class="nav-item">
-            <NavLink class="nav-link text-white py-1" href="api-keys">
-                API Keys
-            </NavLink>
-        </li>
+        <AuthorizeView Policy="Operator">
+            <li class="nav-item mt-2">
+                <small class="text-secondary px-3 text-uppercase fw-semibold" style="font-size: 0.65rem;">Administration</small>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link text-white py-1" href="maintenance">
+                    Maintenance
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link text-white py-1" href="audit">
+                    Audit Log
+                </NavLink>
+            </li>
+        </AuthorizeView>
+        <AuthorizeView Policy="Admin">
+            <li class="nav-item">
+                <NavLink class="nav-link text-white py-1" href="settings">
+                    Settings
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link text-white py-1" href="users">
+                    Users
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link text-white py-1" href="api-keys">
+                    API Keys
+                </NavLink>
+            </li>
+        </AuthorizeView>
     </ul>
 </div>

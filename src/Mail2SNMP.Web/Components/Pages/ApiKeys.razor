@@ -147,7 +147,7 @@ else
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", _newKeyPlaintext);
             _success = "API key copied to clipboard.";
         }
-        catch (Exception ex) { _error = "Could not copy: " + ex.Message; }
+        catch { _error = "Could not copy to the clipboard. Select the key text and copy it manually."; }
     }
 
     protected override async Task OnInitializedAsync() => await Load();
@@ -155,7 +155,7 @@ else
     private async Task Load()
     {
         try { _keys = await Db.ApiKeys.OrderByDescending(k => k.CreatedUtc).ToListAsync(); }
-        catch (Exception ex) { _error = ex.Message; }
+        catch (Exception ex) { _error = Helpers.ErrorMessageFormatter.ToFriendly(ex); }
     }
 
     private void ShowCreate()
@@ -212,7 +212,7 @@ else
             _showForm = false;
             await Load();
         }
-        catch (Exception ex) { _error = ex.Message; }
+        catch (Exception ex) { _error = Helpers.ErrorMessageFormatter.ToFriendly(ex); }
         finally { _busy = false; }
     }
 
@@ -235,7 +235,7 @@ else
             _success = $"Key '{k.Name}' is now {(k.IsActive ? "active" : "disabled")}.";
             await Load();
         }
-        catch (Exception ex) { _error = ex.Message; }
+        catch (Exception ex) { _error = Helpers.ErrorMessageFormatter.ToFriendly(ex); }
         finally { _busy = false; }
     }
 
@@ -253,7 +253,7 @@ else
             _success = "Key deleted.";
             await Load();
         }
-        catch (Exception ex) { _error = ex.Message; }
+        catch (Exception ex) { _error = Helpers.ErrorMessageFormatter.ToFriendly(ex); }
         finally { _busy = false; }
     }
 }
