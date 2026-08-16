@@ -54,6 +54,17 @@ public interface IJobService
     Task<string> DryRunAsync(int id, CancellationToken ct = default);
 
     /// <summary>
+    /// UC-7: sends a synthetic test event through the REAL delivery path of this job —
+    /// its templates, OID mapping and assigned SNMP/webhook targets — so an operator
+    /// can prove the assembled pipeline end-to-end without waiting for a live alert.
+    /// Complements <see cref="DryRunAsync"/>, which deliberately skips delivery.
+    /// </summary>
+    /// <param name="id">The unique identifier of the job to test.</param>
+    /// <param name="ct">Optional cancellation token.</param>
+    /// <returns>A human-readable per-target delivery summary.</returns>
+    Task<string> SendTestEventAsync(int id, CancellationToken ct = default);
+
+    /// <summary>
     /// Updates the SNMP and Webhook target assignments for a job, replacing existing entries.
     /// </summary>
     /// <param name="jobId">The unique identifier of the job.</param>

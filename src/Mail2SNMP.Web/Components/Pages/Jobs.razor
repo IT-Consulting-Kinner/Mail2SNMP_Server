@@ -136,6 +136,9 @@ else
                         </Authorized></AuthorizeView>
                         <AuthorizeView Policy="Operator"><Authorized>
                             <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => DryRun(job.Id)" disabled="@_busy"><i class="bi bi-play-circle"></i> Dry Run</button>
+                            @* UC-7: unlike Dry Run (which skips delivery), Test Send pushes a
+                               synthetic event through the job's REAL templates + targets. *@
+                            <button class="btn btn-outline-info btn-sm me-1" @onclick="() => TestSend(job.Id)" disabled="@_busy" title="Send a synthetic test event through this job's real targets"><i class="bi bi-send-check"></i> Test Send</button>
                         </Authorized></AuthorizeView>
                         <AuthorizeView Policy="Admin"><Authorized>
                             <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(job.Id)" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
@@ -602,6 +605,26 @@ else
             _dryRunResult = await JobService.DryRunAsync(id);
         }
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "running the dry-run"); }
+        finally { _busy = false; }
+    }
+
+    // UC-7: sends a synthetic event through the job's real templates and targets so
+    // the operator can verify the assembled pipeline before the first live alert.
+    private async Task TestSend(int id)
+    {
+        if (_busy) return;
+        if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin", "Operator")) { _error = "Operator role required."; return; }
+        if (!await Confirm.AskAsync(
+                "Send a synthetic TEST event through this job's real targets? " +
+                "The assigned SNMP receivers / webhooks WILL receive it.",
+                title: "Send test event", confirmLabel: "Send", danger: false))
+            return;
+        _busy = true;
+        try
+        {
+            _dryRunResult = await JobService.SendTestEventAsync(id);
+        }
+        catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "sending the test event"); }
         finally { _busy = false; }
     }
 

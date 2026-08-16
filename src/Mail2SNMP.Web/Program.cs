@@ -66,6 +66,11 @@ try
         // deactivated/deleted users and enforces the absolute session lifetime.
         Mail2SNMP.Api.Setup.AuthSetup.AttachDeactivatedUserRejection(
             options, TimeSpan.FromHours(Math.Max(1, sessionSettings.AbsoluteExpiryHours)));
+
+        // AR-3: API clients hitting /api/v1/* in All-in-One mode now get 401/403
+        // like on the standalone API host, instead of a 302 to the HTML login page.
+        // Browser navigation to Razor pages keeps the normal redirect flow.
+        Mail2SNMP.Api.Setup.AuthSetup.AttachApiStatusCodeRedirects(options);
     });
 
     // Server-side session store + X-Api-Key scheme (P-2: shared bootstrap).
@@ -439,23 +444,12 @@ try
     // SignalR hub for live event and dashboard updates
     app.MapHub<Mail2SNMP.Web.Hubs.EventHub>("/hubs/events");
 
-    // All-in-One mode: map REST API endpoints in this process
+    // All-in-One mode: map the REST API in this process.
+    // AR-3: single shared registration — the endpoint list can no longer drift
+    // between the standalone API host and All-in-One mode.
     if (isAllInOne)
     {
-        app.MapMailboxEndpoints();
-        app.MapRuleEndpoints();
-        app.MapJobEndpoints();
-        app.MapScheduleEndpoints();
-        app.MapSnmpTargetEndpoints();
-        app.MapWebhookTargetEndpoints();
-        app.MapEventEndpoints();
-        app.MapAuditEndpoints();
-        app.MapMaintenanceWindowEndpoints();
-        app.MapDashboardEndpoints();
-        app.MapLicenseEndpoints();
-        app.MapDeadLetterEndpoints();
-        app.MapWorkerEndpoints();
-        app.MapBulkExportEndpoints();
+        app.MapMail2SnmpApi();
         Log.Information("All-in-One: REST API endpoints mapped at /api/v1/*");
     }
 

@@ -154,7 +154,7 @@ public class ServiceTests : IDisposable
         _db.Rules.Add(rule);
         await _db.SaveChangesAsync();
 
-        var service = new JobService(_db, _license, _audit, _ruleEvaluator, NullLogger<JobService>.Instance);
+        var service = new JobService(_db, _license, _audit, _ruleEvaluator, Enumerable.Empty<INotificationChannel>(), NullLogger<JobService>.Instance);
         for (int i = 0; i < 5; i++)
             await service.CreateAsync(new Job { Name = $"Job{i}", MailboxId = mailbox.Id, RuleId = rule.Id });
 

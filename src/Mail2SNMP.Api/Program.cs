@@ -52,16 +52,11 @@ try
         // plus the absolute session lifetime.
         AuthSetup.AttachDeactivatedUserRejection(
             options, TimeSpan.FromHours(Math.Max(1, sessionSettings.AbsoluteExpiryHours)));
-        options.Events.OnRedirectToLogin = context =>
-        {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            return Task.CompletedTask;
-        };
-        options.Events.OnRedirectToAccessDenied = context =>
-        {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            return Task.CompletedTask;
-        };
+
+        // AR-3: shared 401/403 semantics for /api/* (this host serves nothing else,
+        // so effectively every auth failure is machine-readable) — identical to the
+        // behaviour the Web host now applies to its /api/v1 surface.
+        AuthSetup.AttachApiStatusCodeRedirects(options);
     });
 
     // ── Server-side session store + X-Api-Key scheme (P-2: shared bootstrap) ──
@@ -195,20 +190,11 @@ try
         Predicate = _ => false // always healthy if the process is running
     }).AllowAnonymous();
 
-    // ── Map all API endpoint groups ────────────────────────────────────────
-    app.MapMailboxEndpoints();
-    app.MapRuleEndpoints();
-    app.MapJobEndpoints();
-    app.MapScheduleEndpoints();
-    app.MapSnmpTargetEndpoints();
-    app.MapWebhookTargetEndpoints();
-    app.MapEventEndpoints();
-    app.MapAuditEndpoints();
-    app.MapMaintenanceWindowEndpoints();
-    app.MapDashboardEndpoints();
-    app.MapLicenseEndpoints();
-    app.MapDeadLetterEndpoints();
-    app.MapWorkerEndpoints();
+    // ── Map the API surface ────────────────────────────────────────────────
+    // AR-3: single shared registration used by both hosts. Note this ADDS the
+    // bulk-export endpoints to the standalone API — previously they existed only
+    // in All-in-One mode, an accidental deployment-dependent API difference.
+    app.MapMail2SnmpApi();
 
     app.Run();
 }

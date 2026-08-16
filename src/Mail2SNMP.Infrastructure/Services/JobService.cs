@@ -18,6 +18,7 @@ public class JobService : IJobService
     private readonly ILicenseProvider _license;
     private readonly IAuditService _audit;
     private readonly RuleEvaluator _ruleEvaluator;
+    private readonly IEnumerable<INotificationChannel> _channels;
     private readonly ILogger<JobService> _logger;
 
     /// <summary>
@@ -27,13 +28,15 @@ public class JobService : IJobService
     /// <param name="license">The license provider that enforces the maximum job count.</param>
     /// <param name="audit">The audit service used to record job changes.</param>
     /// <param name="ruleEvaluator">The rule evaluator used to test rule matches during a dry run.</param>
+    /// <param name="channels">The notification channels used by <see cref="SendTestEventAsync"/> (UC-7).</param>
     /// <param name="logger">The logger for dry-run diagnostics.</param>
-    public JobService(Mail2SnmpDbContext db, ILicenseProvider license, IAuditService audit, RuleEvaluator ruleEvaluator, ILogger<JobService> logger)
+    public JobService(Mail2SnmpDbContext db, ILicenseProvider license, IAuditService audit, RuleEvaluator ruleEvaluator, IEnumerable<INotificationChannel> channels, ILogger<JobService> logger)
     {
         _db = db;
         _license = license;
         _audit = audit;
         _ruleEvaluator = ruleEvaluator;
+        _channels = channels;
         _logger = logger;
     }
 
@@ -108,6 +111,67 @@ public class JobService : IJobService
         _db.Jobs.Remove(job);
         await _db.SaveChangesAsync(ct);
         await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Job.Deleted", "Job", id.ToString(), ct: ct);
+    }
+
+    /// <summary>
+    /// UC-7: sends a synthetic test event through the job's REAL delivery path —
+    /// templates, OID mapping and all assigned active targets — and reports the
+    /// per-target outcome. Uses a unique negative EventId so notification-dedup
+    /// never suppresses a repeated test; per-target rate limits still apply
+    /// (deliberately, so a test cannot flood a production NMS).
+    /// </summary>
+    public async Task<string> SendTestEventAsync(int id, CancellationToken ct = default)
+    {
+        var job = await GetByIdAsync(id, ct)
+            ?? throw new KeyNotFoundException($"Job {id} not found.");
+
+        var context = new Models.DTOs.NotificationContext
+        {
+            // Unique negative id: cannot collide with a real event and defeats the
+            // notification-dedup cache across repeated test clicks.
+            EventId = -DateTime.UtcNow.Ticks,
+            JobName = job.Name,
+            Mailbox = job.Mailbox?.Name ?? string.Empty,
+            From = "test@mail2snmp.local",
+            Subject = $"Mail2SNMP test event for job '{job.Name}'",
+            Severity = Models.Enums.Severity.Information,
+            RuleName = job.Rule?.Name ?? string.Empty,
+            HitCount = 1,
+            TimestampUtc = DateTime.UtcNow,
+            TrapTemplate = job.TrapTemplate,
+            WebhookTemplate = job.WebhookTemplate,
+            OidMapping = job.OidMapping
+        };
+
+        var channels = _channels.ToList();
+        var snmpChannel = channels.FirstOrDefault(c => c.ChannelName == INotificationChannel.Snmp);
+        var webhookChannel = channels.FirstOrDefault(c => c.ChannelName == INotificationChannel.Webhook);
+
+        var report = new StringBuilder();
+        var okCount = 0;
+        var failCount = 0;
+
+        foreach (var jst in job.JobSnmpTargets.Where(t => t.SnmpTarget.IsActive))
+        {
+            var ok = snmpChannel != null && await snmpChannel.SendToSnmpTargetAsync(context, jst.SnmpTarget, ct);
+            report.AppendLine($"SNMP  {jst.SnmpTarget.Name} ({jst.SnmpTarget.Host}:{jst.SnmpTarget.Port}): {(ok ? "sent" : "FAILED")}");
+            if (ok) okCount++; else failCount++;
+        }
+
+        foreach (var jwt in job.JobWebhookTargets.Where(t => t.WebhookTarget.IsActive))
+        {
+            var ok = webhookChannel != null && await webhookChannel.SendToWebhookTargetAsync(context, jwt.WebhookTarget, ct);
+            report.AppendLine($"HTTP  {jwt.WebhookTarget.Name}: {(ok ? "delivered" : "FAILED")}");
+            if (ok) okCount++; else failCount++;
+        }
+
+        if (okCount == 0 && failCount == 0)
+            report.AppendLine("No active targets are assigned to this job — nothing was sent.");
+
+        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Job.TestSend", "Job", id.ToString(), ct: ct);
+        _logger.LogInformation("Test event sent through Job {JobId}: {Ok} ok, {Failed} failed", id, okCount, failCount);
+
+        return $"Test event for '{job.Name}': {okCount} delivered, {failCount} failed.\n{report}".TrimEnd();
     }
 
     /// <summary>

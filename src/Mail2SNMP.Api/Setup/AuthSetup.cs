@@ -99,6 +99,38 @@ public static class AuthSetup
     }
 
     /// <summary>
+    /// AR-3: makes cookie auth-failure semantics on <c>/api/*</c> host-independent.
+    /// An unauthenticated or unauthorized API request receives a machine-readable
+    /// <c>401</c>/<c>403</c> instead of a <c>302</c> redirect to the HTML login
+    /// page; browser requests to non-API paths keep the normal redirect flow.
+    /// </summary>
+    /// <remarks>
+    /// Previously the standalone API host returned 401/403 while the Web host
+    /// (All-in-One mode) redirected the very same <c>/api/v1</c> request to
+    /// <c>/login</c> — an identical client behaved differently depending on a
+    /// deployment flag ("works in staging, breaks in prod").
+    /// </remarks>
+    public static void AttachApiStatusCodeRedirects(CookieAuthenticationOptions options)
+    {
+        options.Events.OnRedirectToLogin = context =>
+        {
+            if (context.Request.Path.StartsWithSegments("/api"))
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            else
+                context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            if (context.Request.Path.StartsWithSegments("/api"))
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            else
+                context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
+    }
+
+    /// <summary>
     /// Wires the server-side session store so the auth ticket lives in the DB and
     /// the cookie stays small (critical for OIDC tokens with many claims).
     /// </summary>
