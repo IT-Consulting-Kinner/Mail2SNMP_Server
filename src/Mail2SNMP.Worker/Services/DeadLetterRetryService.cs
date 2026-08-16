@@ -112,6 +112,11 @@ public class DeadLetterRetryService : BackgroundService
         var httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
         var now = DateTime.UtcNow;
 
+        // AR-1: publish the real pending depth each cycle (set-from-DB rather than
+        // inc/dec so the gauge survives restarts and cross-process writes correctly).
+        Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.DeadLetterPending.Set(
+            await db.DeadLetterEntries.CountAsync(d => d.Status == DeadLetterStatus.Pending, ct));
+
         // FN-1: Atomically claim AT MOST _batchSize entries, and also reclaim entries
         // whose Locked lease has expired. The previous query flipped EVERY eligible row
         // to Locked but the fetch below only processed _batchSize of them; the surplus
@@ -250,6 +255,7 @@ public class DeadLetterRetryService : BackgroundService
                     }
                 }
 
+                Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.DeadLetterRetried.Inc();
                 using var response = await httpClient.PostAsync(entry.WebhookTarget.Url, content, ct);
                 response.EnsureSuccessStatusCode();
 

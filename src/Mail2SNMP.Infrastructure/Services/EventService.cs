@@ -199,6 +199,8 @@ public class EventService : IEventService
                     {
                         toExpire.State = EventState.Expired;
                         toExpire.LastStateChangeUtc = DateTime.UtcNow;
+                        Mail2SnmpMetrics.ActiveEvents.Dec();
+                        Mail2SnmpMetrics.RateLimitHits.WithLabels("active-events").Inc();
                         _logger.LogInformation(
                             "Active event limit ({Limit}) reached for Job {JobId}. Expired Event {EventId}",
                             maxActive, evt.JobId, toExpire.Id);
@@ -223,6 +225,11 @@ public class EventService : IEventService
             }
             await _db.SaveChangesAsync(ct);
             if (transaction != null) await transaction.CommitAsync(ct);
+
+            // AR-1: business metrics. The gauge is process-local (worker and web are
+            // separate processes) and tracks the delta since process start.
+            Mail2SnmpMetrics.EventsCreated.WithLabels(evt.JobId.ToString(), evt.Severity.ToString()).Inc();
+            Mail2SnmpMetrics.ActiveEvents.Inc();
             return evt;
         }
         catch
@@ -250,6 +257,7 @@ public class EventService : IEventService
         evt.NotifiedUtc = DateTime.UtcNow;
         evt.LastStateChangeUtc = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
+        Mail2SnmpMetrics.EventsNotified.Inc();
         _logger.LogDebug("Event {EventId} marked as Notified", id);
     }
 
@@ -299,6 +307,7 @@ public class EventService : IEventService
         evt.ResolvedBy = userId;
         evt.LastStateChangeUtc = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
+        Mail2SnmpMetrics.ActiveEvents.Dec();
         await _audit.LogAsync(ActorType.User, userId, "Event.Resolved", "Event", id.ToString(), ct: ct);
     }
 
@@ -315,6 +324,7 @@ public class EventService : IEventService
         evt.State = EventState.Suppressed;
         evt.LastStateChangeUtc = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
+        Mail2SnmpMetrics.ActiveEvents.Dec();
         await _audit.LogAsync(ActorType.System, "system", "Event.Suppressed", "Event", id.ToString(), ct: ct);
     }
 

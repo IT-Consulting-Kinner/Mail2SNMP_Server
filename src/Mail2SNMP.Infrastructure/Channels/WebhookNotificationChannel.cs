@@ -137,6 +137,7 @@ public class WebhookNotificationChannel : INotificationChannel
 
         if (_floodProtection.IsRateLimited(targetKey, target.MaxRequestsPerMinute))
         {
+            Services.Mail2SnmpMetrics.RateLimitHits.WithLabels("webhook-target").Inc();
             _logger.LogWarning("Webhook to {Target} rate-limited ({Max}/min)", target.Name, target.MaxRequestsPerMinute);
             return;
         }
@@ -144,10 +145,13 @@ public class WebhookNotificationChannel : INotificationChannel
         try
         {
             await SendWebhookAsync(target, context, ct);
+            Services.Mail2SnmpMetrics.NotificationsSent.WithLabels("webhook").Inc();
+            Services.Mail2SnmpMetrics.WebhookRequestsSent.WithLabels(target.Name).Inc();
             _logger.LogInformation("Webhook sent to {Url} for event {EventId}", target.Url, context.EventId);
         }
         catch (Exception ex)
         {
+            Services.Mail2SnmpMetrics.NotificationsFailed.WithLabels("webhook").Inc();
             _logger.LogError(ex, "Failed to send webhook to {Url}: {Message}", target.Url, ex.Message);
             await CreateDeadLetterAsync(target, context, ex.Message, ct);
         }

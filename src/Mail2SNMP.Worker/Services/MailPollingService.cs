@@ -272,6 +272,9 @@ public class MailPollingService : BackgroundService
     {
         using var imapClient = new ImapClient();
 
+        // AR-1: tracks whether we got past connect+authenticate — drives the
+        // active-connections gauge (finally) and the connection-errors counter (catch).
+        var imapConnected = false;
         try
         {
             // Connect to mailbox.
@@ -307,6 +310,8 @@ public class MailPollingService : BackgroundService
             }
 
             await imapClient.AuthenticateAsync(mailbox.Username, password, connectCts.Token);
+            imapConnected = true;
+            Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.ImapActiveConnections.Inc();
 
             _logger.LogDebug("Connected to IMAP server {Host}:{Port} for mailbox {Name}",
                 mailbox.Host, mailbox.Port, mailbox.Name);
@@ -334,6 +339,7 @@ public class MailPollingService : BackgroundService
                 // Re-check flood protection per message
                 if (floodProtection.IsEventRateLimited(job.Id, job.MaxEventsPerHour))
                 {
+                    Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.RateLimitHits.WithLabels("events-per-hour").Inc();
                     _logger.LogWarning("Job {JobId} hit event rate limit during processing. Stopping.", job.Id);
                     break;
                 }
@@ -402,6 +408,7 @@ public class MailPollingService : BackgroundService
                         foreach (var entry in dbContext.ChangeTracker.Entries<ProcessedMail>().ToList())
                             entry.State = EntityState.Detached;
 
+                        Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.EmailsDuplicate.Inc();
                         _logger.LogDebug(
                             "Email already claimed by another instance (ClaimKey={ClaimKey}, Mailbox={Name}). Skipping.",
                             claimKey, mailbox.Name);
@@ -422,6 +429,7 @@ public class MailPollingService : BackgroundService
                     if (matched)
                     {
                         matchCount++;
+                        Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.EmailsMatched.WithLabels(mailbox.Name, rule.Name).Inc();
                         // K3: per-mail logging is Debug — Information would explode the log under
                         // any meaningful mail volume. The end-of-batch summary at the bottom of
                         // FetchAndProcessEmailsAsync is what operators actually want to see.
@@ -469,6 +477,7 @@ public class MailPollingService : BackgroundService
 
                     // Mark message as seen after processing
                     await folder.AddFlagsAsync(uid, MessageFlags.Seen, true, ct);
+                    Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.EmailsProcessed.WithLabels(mailbox.Name).Inc();
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -500,6 +509,10 @@ public class MailPollingService : BackgroundService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // AR-1: a failure before the connected flag was set is a connect/auth error.
+            if (!imapConnected)
+                Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.ImapConnectionErrors.WithLabels(mailbox.Name).Inc();
+
             _logger.LogError(ex, "IMAP processing failed for mailbox {Name}: {Error}", mailbox.Name, ex.Message);
 
             // Update mailbox with error info
@@ -515,6 +528,11 @@ public class MailPollingService : BackgroundService
             }
 
             throw;
+        }
+        finally
+        {
+            if (imapConnected)
+                Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.ImapActiveConnections.Dec();
         }
     }
 

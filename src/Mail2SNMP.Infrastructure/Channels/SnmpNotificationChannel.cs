@@ -148,6 +148,8 @@ public class SnmpNotificationChannel : INotificationChannel
 
         if (_floodProtection.IsRateLimited(targetKey, target.MaxTrapsPerMinute))
         {
+            Services.Mail2SnmpMetrics.TrapsRateLimited.Inc();
+            Services.Mail2SnmpMetrics.RateLimitHits.WithLabels("snmp-target").Inc();
             _logger.LogWarning("SNMP trap to {Target} rate-limited ({Max}/min)", target.Name, target.MaxTrapsPerMinute);
             return;
         }
@@ -155,11 +157,14 @@ public class SnmpNotificationChannel : INotificationChannel
         try
         {
             await SendTrapAsync(target, context);
+            Services.Mail2SnmpMetrics.NotificationsSent.WithLabels("snmp").Inc();
+            Services.Mail2SnmpMetrics.SnmpTrapsSent.WithLabels(target.Name, target.Version.ToString()).Inc();
             _logger.LogInformation("SNMP trap sent to {Host}:{Port} (v{Version}) for event {EventId}",
                 target.Host, target.Port, target.Version, context.EventId);
         }
         catch (Exception ex)
         {
+            Services.Mail2SnmpMetrics.NotificationsFailed.WithLabels("snmp").Inc();
             _logger.LogError(ex, "Failed to send SNMP trap to {Host}:{Port}: {Message}", target.Host, target.Port, ex.Message);
         }
     }

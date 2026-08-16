@@ -84,26 +84,36 @@ public class DataRetentionService : BackgroundService
 
         var totalDeleted = 0;
 
+        // AR-1: per-entity retention counters. Each step reports how many rows it
+        // removed; the labelled counter makes retention throughput observable so an
+        // operator can see when the hourly capped batches fall behind ingestion.
+        static int Track(string entity, int n)
+        {
+            if (n > 0)
+                Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.RetentionDeleted.WithLabels(entity).Inc(n);
+            return n;
+        }
+
         // 1. Auto-expire old New/Notified events (not yet acknowledged)
-        totalDeleted += await ExpireOldEventsAsync(db, ct);
+        totalDeleted += Track("event-expired", await ExpireOldEventsAsync(db, ct));
 
         // 2. Delete old resolved/suppressed/expired events beyond retention period
-        totalDeleted += await DeleteOldEventsAsync(db, ct);
+        totalDeleted += Track("event", await DeleteOldEventsAsync(db, ct));
 
         // 3. Delete old processed mail records
-        totalDeleted += await DeleteOldProcessedMailsAsync(db, ct);
+        totalDeleted += Track("processedmail", await DeleteOldProcessedMailsAsync(db, ct));
 
         // 4. Delete old audit events (by age and max count)
-        totalDeleted += await DeleteOldAuditEventsAsync(db, ct);
+        totalDeleted += Track("audit", await DeleteOldAuditEventsAsync(db, ct));
 
         // 5. Delete old dead letter entries
-        totalDeleted += await DeleteOldDeadLettersAsync(db, ct);
+        totalDeleted += Track("deadletter", await DeleteOldDeadLettersAsync(db, ct));
 
         // 6. Delete old event dedup entries
-        totalDeleted += await DeleteOldEventDedupsAsync(db, ct);
+        totalDeleted += Track("eventdedup", await DeleteOldEventDedupsAsync(db, ct));
 
         // 7. Delete expired authentication tickets (server-side session store)
-        totalDeleted += await DeleteExpiredAuthTicketsAsync(db, ct);
+        totalDeleted += Track("authticket", await DeleteExpiredAuthTicketsAsync(db, ct));
 
         if (totalDeleted > 0)
             _logger.LogInformation("Data retention cleanup completed. Total records removed: {Count}", totalDeleted);

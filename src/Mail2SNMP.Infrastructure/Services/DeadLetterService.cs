@@ -44,6 +44,9 @@ public class DeadLetterService : IDeadLetterService
         entry.NextRetryUtc = DateTime.UtcNow.AddMinutes(15);
         _db.DeadLetterEntries.Add(entry);
         await _db.SaveChangesAsync(ct);
+        // AR-1: single funnel for dead-letter creation — every failed webhook delivery
+        // passes through here, so this is the one place the counter must live.
+        Mail2SnmpMetrics.WebhookDeadLetterTotal.Inc();
         _logger.LogWarning("Dead letter created for webhook target {TargetId}, event {EventId}: {Error}",
             entry.WebhookTargetId, entry.EventId, entry.LastError);
         return entry;
