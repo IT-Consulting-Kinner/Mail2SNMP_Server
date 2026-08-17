@@ -63,6 +63,19 @@ public class SnmpNotificationChannel : INotificationChannel
     /// </summary>
     public const string UpdateOid         = "1.3.6.1.4.1.61376.1.2.0.4";
 
+    /// <summary>
+    /// OID of <c>mail2SNMPIngestionHealthNotification</c>, sent when mail ingestion starts
+    /// or stops failing.
+    /// </summary>
+    /// <remarks>
+    /// The product exists to tell a NOC when something is wrong, but said nothing when its
+    /// own ingestion broke: a mailbox failing to poll raises no alert, because no mail
+    /// arrives to raise one. The only signal was a red banner on a dashboard somebody had
+    /// to open. This trap makes the failure push-based like every other alert the product
+    /// emits, and it is sent again on recovery so the NOC can clear it.
+    /// </remarks>
+    public const string IngestionHealthOid = "1.3.6.1.4.1.61376.1.2.0.5";
+
     // MIB object identifiers (varbinds)
     private const string EventIDOid       = "1.3.6.1.4.1.61376.1.1.1.1.1";
     private const string EventNameOid     = "1.3.6.1.4.1.61376.1.1.1.1.2";
@@ -305,6 +318,46 @@ public class SnmpNotificationChannel : INotificationChannel
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send KeepAlive trap to {Host}:{Port}", target.Host, target.Port);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sends an mail2SNMPIngestionHealthNotification trap to all active SNMP targets,
+    /// reporting that mail ingestion has started or stopped failing.
+    /// </summary>
+    /// <param name="degraded"><c>true</c> when at least one active mailbox is failing to poll.</param>
+    /// <param name="message">Human-readable detail naming the affected mailboxes, or the recovery notice.</param>
+    /// <param name="ct">Token used to cancel the sends.</param>
+    /// <remarks>
+    /// Sent to every active target rather than only to those with <c>SendKeepAlive</c>: a
+    /// KeepAlive is a routine heartbeat an operator may reasonably opt out of, whereas this
+    /// says the gateway has stopped seeing mail. It ignores each target's
+    /// <c>MinSeverity</c> for the same reason — a target configured for "Critical only"
+    /// most certainly wants to hear that ingestion is down.
+    /// </remarks>
+    public async Task SendIngestionHealthAsync(bool degraded, string message, CancellationToken ct = default)
+    {
+        var targets = await _db.SnmpTargets.Where(t => t.IsActive).ToListAsync(ct);
+        var trapOid = new ObjectIdentifier(IngestionHealthOid);
+
+        foreach (var target in targets)
+        {
+            try
+            {
+                var varbinds = new List<Variable>
+                {
+                    new(new ObjectIdentifier(EventNameOid),     new OctetString(degraded ? "Mail ingestion degraded" : "Mail ingestion recovered")),
+                    new(new ObjectIdentifier(EventSeverityOid), new OctetString(degraded ? "Critical" : "Information")),
+                    new(new ObjectIdentifier(EventMessageOid),  new OctetString(_templateEngine.TruncateForSnmp(message)))
+                };
+                await SendVarbindsAsync(target, trapOid, varbinds);
+                _logger.LogInformation("Ingestion-health trap sent to {Host}:{Port} (degraded={Degraded})",
+                    target.Host, target.Port, degraded);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send ingestion-health trap to {Host}:{Port}", target.Host, target.Port);
             }
         }
     }

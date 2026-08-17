@@ -144,6 +144,21 @@ public static class Mail2SnmpMetrics
         "Current number of active IMAP connections");
 
     /// <summary>
+    /// Gauge <c>mail2snmp_mailboxes_in_error</c>: number of active mailboxes currently
+    /// failing to poll. Unlabeled.
+    /// </summary>
+    /// <remarks>
+    /// The alertable counterpart to the dashboard's red banner. A gateway whose ingestion
+    /// has stopped raises no events — precisely because no mail reaches it — so the absence
+    /// of alerts is indistinguishable from a quiet night. This gauge (and the matching
+    /// ingestion-health trap) is what makes the failure detectable from outside.
+    /// Alert on <c>mail2snmp_mailboxes_in_error &gt; 0</c>.
+    /// </remarks>
+    public static readonly Gauge MailboxesInError = Metrics.CreateGauge(
+        "mail2snmp_mailboxes_in_error",
+        "Number of active mailboxes currently failing to poll");
+
+    /// <summary>
     /// Counter <c>mail2snmp_imap_connection_errors_total</c>: total IMAP connect/authenticate
     /// failures. Label: <c>mailbox</c> (the mailbox whose connection failed).
     /// </summary>

@@ -117,6 +117,9 @@ public static class WorkerDependencyInjection
         services.AddHostedService<UpdateCheckService>();
         services.AddHostedService<AutoAcknowledgeService>();
         services.AddHostedService<ImapIdleService>();
+        // Pushes an alert when ingestion itself breaks — the one failure the product could
+        // not report, because a dead mailbox produces no mail to raise an event from.
+        services.AddHostedService<IngestionHealthService>();
 
         return services;
     }

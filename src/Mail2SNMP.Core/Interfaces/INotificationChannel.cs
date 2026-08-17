@@ -81,4 +81,19 @@ public interface INotificationChannel
     /// </summary>
     Task SendUpdateAvailableAsync(UpdateInfo info, CancellationToken ct = default)
         => Task.CompletedTask;
+
+    /// <summary>
+    /// Reports that mail ingestion has started or stopped failing.
+    /// </summary>
+    /// <param name="degraded"><c>true</c> when at least one active mailbox is failing to poll.</param>
+    /// <param name="message">Human-readable detail naming the affected mailboxes, or the recovery notice.</param>
+    /// <param name="ct">Token used to cancel the sends.</param>
+    /// <remarks>
+    /// A gateway whose job is to alert a NOC cannot alert it about its own ingestion
+    /// failing — no mail arrives, so no event is raised, so nothing is sent. The failure
+    /// was visible only as a banner on a dashboard somebody had to open. This is the
+    /// push-based counterpart, emitted once on degradation and once on recovery.
+    /// </remarks>
+    Task SendIngestionHealthAsync(bool degraded, string message, CancellationToken ct = default)
+        => Task.CompletedTask;
 }

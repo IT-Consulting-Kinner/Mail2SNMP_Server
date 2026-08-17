@@ -18,6 +18,12 @@ Mail2SNMP is a Windows service that monitors email mailboxes and converts matchi
 - **API key authentication**: `X-Api-Key` header with `read` / `write` / `admin` scopes for automation; manage via Web UI → API Keys.
 - **Outbound SSRF protection**: webhook and update-feed requests are blocked from reaching loopback / link-local / private / cloud-metadata addresses (DNS-rebinding-safe); opt in for internal targets via `Security:AllowPrivateWebhookTargets`.
 - **Health & metrics**: `/health/live`, `/health/ready` and Prometheus metrics on `/metrics`.
+- **Self-monitoring**: when a mailbox stops polling, the gateway raises an alarm about
+  itself — SNMP trap `mail2SNMPIngestionHealthNotification`, a webhook POST, and the
+  gauge `mail2snmp_mailboxes_in_error`. Without it a dead ingestion path is
+  indistinguishable from a quiet night, because a mailbox that cannot be polled
+  produces no mail and therefore no alerts. Raised once per outage and again on
+  recovery; alert on `mail2snmp_mailboxes_in_error > 0`.
 - **OpenTelemetry tracing** (optional, configure `Otel:Enabled`).
 - **Bulk export**: download `mailboxes / rules / jobs / schedules / targets / maintenance windows` as a single JSON bundle (encrypted credentials are intentionally omitted).
 - **Worker leasing**: multi-instance deployments are coordinated by a serializable database lease so only the licensed number of workers polls at once.

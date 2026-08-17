@@ -92,6 +92,69 @@ public class WebhookNotificationChannel : INotificationChannel
     // and its presence suggested a working generic path that did not exist.
 
     /// <summary>
+    /// Posts an ingestion-health notification to every active webhook target.
+    /// </summary>
+    /// <param name="degraded"><c>true</c> when at least one active mailbox is failing to poll.</param>
+    /// <param name="message">Human-readable detail naming the affected mailboxes, or the recovery notice.</param>
+    /// <param name="ct">Token used to cancel the sends.</param>
+    /// <remarks>
+    /// Deliberately not job-scoped: this is a statement about the gateway itself, not about
+    /// any one job's mail, so there is no job whose assignments could select the recipients.
+    /// It goes to every active target, ignoring <c>MinSeverity</c> — a target configured for
+    /// "Critical only" certainly wants to hear that ingestion has stopped. Failures are
+    /// logged, not dead-lettered: a retry queue for "we are currently broken" would deliver
+    /// a stale alarm long after recovery.
+    /// </remarks>
+    public async Task SendIngestionHealthAsync(bool degraded, string message, CancellationToken ct = default)
+    {
+        var targets = await _db.WebhookTargets.Where(t => t.IsActive).ToListAsync(ct);
+        if (targets.Count == 0) return;
+
+        var payload = JsonSerializer.Serialize(new
+        {
+            type = "ingestion-health",
+            status = degraded ? "degraded" : "recovered",
+            severity = degraded ? "Critical" : "Information",
+            message,
+            timestampUtc = DateTime.UtcNow
+        });
+
+        var httpClient = _httpClientFactory.CreateClient("WebhookSend");
+
+        foreach (var target in targets)
+        {
+            try
+            {
+                if (!SsrfGuard.IsSafeOutboundUrl(target.Url, _allowPrivateTargets, out var reason))
+                {
+                    _logger.LogWarning(
+                        "Ingestion-health webhook to {Name} blocked by SSRF guard: {Reason}", target.Name, reason);
+                    continue;
+                }
+
+                using var content = WebhookRequestBuilder.BuildContent(
+                    target, payload, _encryptor, _license, _logger, out var signingFailed);
+
+                if (signingFailed)
+                {
+                    _logger.LogError(
+                        "Webhook target '{Name}' expects a signed payload but the signing secret could not be " +
+                        "decrypted; refusing to send the ingestion-health notification unsigned.", target.Name);
+                    continue;
+                }
+
+                using var response = await httpClient.PostAsync(target.Url, content, ct);
+                response.EnsureSuccessStatusCode();
+                _logger.LogInformation("Ingestion-health webhook sent to {Name} (degraded={Degraded})", target.Name, degraded);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send ingestion-health webhook to {Name}", target.Name);
+            }
+        }
+    }
+
+    /// <summary>
     /// Sends a webhook notification to a specific target (per-job assignment). Applies dedup and rate-limiting.
     /// </summary>
     /// <returns>

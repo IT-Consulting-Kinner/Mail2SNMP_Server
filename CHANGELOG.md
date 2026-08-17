@@ -4,6 +4,40 @@ All notable changes to Mail2SNMP Server. Entries are grouped by **release** and 
 
 ## Unreleased
 
+### Added
+
+- **The gateway now alerts on its own ingestion failing.** This was the one failure
+  the product structurally could not report: every alert it sends is derived from
+  an inbound mail, so a mailbox that stops polling produces no mail, therefore no
+  event, therefore no notification — a dead ingestion path was indistinguishable
+  from a quiet night. The only signal was a red banner on a dashboard somebody had
+  to open. Now there is a push signal on all three surfaces:
+  - SNMP trap `mail2SNMPIngestionHealthNotification`
+    (`1.3.6.1.4.1.61376.1.2.0.5`), sent to every active target regardless of its
+    `MinSeverity` — a "Critical only" target certainly wants to hear this.
+  - Webhook POST with `{"type":"ingestion-health","status":"degraded"|"recovered"}`.
+  - Prometheus gauge `mail2snmp_mailboxes_in_error`; alert on `> 0`.
+
+  Sent once per outage rather than once per check — a trap per minute for the same
+  broken mailbox is noise operators learn to filter — and sent again on recovery so
+  the alarm can be cleared without a human deciding it looks fine now. In a
+  cluster only the elected primary notifies; the gauge is maintained by every
+  instance. The MIB ships the new notification type.
+
+- **REST parity for the features that shipped UI-only**: `GET /api/v1/mail-log`
+  (filters, paging, `X-Total-Count`, and the delivery outcome),
+  `POST /api/v1/jobs/{id}/test-send?severity=`, and `POST /api/v1/jobs/bulk`.
+
+### Performance
+
+- The Mail Log is indexed on `ReceivedUtc` and `(MailboxId, ReceivedUtc)`, and now
+  sorts by the column it actually displays. It previously sorted by `ProcessedUtc`
+  while showing `ReceivedUtc` — seconds apart for most mail, but visibly unsorted
+  while a backlog drains — and the date filter was on a third column again, so
+  every load sorted the largest table in the deployment.
+- Data retention deletes set-based instead of materializing up to 5000 tracked
+  entities per step, once an hour for the life of the process.
+
 ### Fixed
 
 - **Audit trail names who made a change.** Every configuration mutation was recorded

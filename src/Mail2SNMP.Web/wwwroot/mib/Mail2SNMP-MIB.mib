@@ -104,6 +104,18 @@ mail2SNMPUpdateNotification NOTIFICATION-TYPE
  DESCRIPTION "Update information event"
  ::= { mail2SNMPMIBNotificationsPrefix 4 }
 
+mail2SNMPIngestionHealthNotification NOTIFICATION-TYPE
+ OBJECTS { eventName, eventSeverity, eventMessage }
+ STATUS current
+ DESCRIPTION "Mail ingestion started or stopped failing. Sent once when at least
+              one active mailbox begins failing to poll, and once again when all
+              mailboxes recover. This is the only alarm the gateway raises about
+              itself: a mailbox that cannot be polled produces no mail, therefore
+              no events, so its failure is otherwise indistinguishable from a
+              quiet period. eventSeverity is Critical on degradation and
+              Information on recovery."
+ ::= { mail2SNMPMIBNotificationsPrefix 5 }
+
 -- conformance information
 
 mail2SNMPMIBConformance OBJECT IDENTIFIER ::= { mail2SNMPMIB 3 }
