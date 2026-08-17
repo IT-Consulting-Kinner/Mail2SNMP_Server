@@ -15,8 +15,23 @@ public class ProcessedMail
     public Mailbox Mailbox { get; set; } = null!;
 
     /// <summary>
-    /// RFC 5322 <c>Message-ID</c> header of the email. Together with <see cref="MailboxId"/> this uniquely
-    /// identifies a processed message so it is not handled twice across cluster instances.
+    /// H-1: FK to the <see cref="Entities.Job"/> that processed this mail. The claim is
+    /// scoped per job so that several jobs (i.e. several rules) can share one mailbox
+    /// and each evaluates every message independently.
+    /// </summary>
+    /// <remarks>
+    /// Before this existed the uniqueness claim was <c>(MessageId, MailboxId)</c>, so the
+    /// first job to poll won the claim and every other job on the same mailbox silently
+    /// never fired — the most natural configuration of the product (one alert mailbox,
+    /// several rules) dropped all but one rule's alerts, non-deterministically.
+    /// <c>null</c> only on rows written before the column existed.
+    /// </remarks>
+    public int? JobId { get; set; }
+
+    /// <summary>
+    /// RFC 5322 <c>Message-ID</c> header of the email. Together with <see cref="MailboxId"/>
+    /// and <see cref="JobId"/> this uniquely identifies a processed message so the same job
+    /// does not handle it twice across cluster instances.
     /// </summary>
     public string MessageId { get; set; } = string.Empty;
 

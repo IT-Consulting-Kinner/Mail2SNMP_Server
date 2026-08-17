@@ -145,6 +145,7 @@ else
         MailDisposition.EventCreated => "bg-success",
         MailDisposition.Deduplicated => "bg-info text-dark",
         MailDisposition.MaintenanceSuppressed => "bg-warning text-dark",
+        MailDisposition.RateLimited => "bg-danger",
         MailDisposition.NoMatch => "bg-secondary",
         _ => "bg-light text-dark border",
     };
@@ -154,6 +155,9 @@ else
         MailDisposition.EventCreated => "Event created",
         MailDisposition.Deduplicated => "Deduplicated",
         MailDisposition.MaintenanceSuppressed => "Maintenance",
+        // H-2: a matched mail that lost to the hourly event budget — surfaced so a
+        // missing alert is explainable instead of invisible.
+        MailDisposition.RateLimited => "Rate-limited",
         MailDisposition.NoMatch => "No match",
         _ => "Unknown",
     };

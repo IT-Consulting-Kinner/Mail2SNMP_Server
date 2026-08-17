@@ -224,9 +224,12 @@ public class MailPollingService : BackgroundService
             // Check maintenance window
             var inMaintenance = await maintenanceService.IsInMaintenanceAsync(job.Id, ct);
 
-            // Check flood protection
-            if (floodProtection.IsEventRateLimited(job.Id, job.MaxEventsPerHour))
+            // H-2: pre-flight budget check must NOT consume budget — this runs once per
+            // poll pass before a single mail has been looked at. Charging it here meant a
+            // one-minute schedule spent 60 of the hourly allowance on polling alone.
+            if (floodProtection.IsEventBudgetExhausted(job.Id, job.MaxEventsPerHour))
             {
+                Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.RateLimitHits.WithLabels("events-per-hour").Inc();
                 _logger.LogWarning("Job {JobId} has exceeded event rate limit. Skipping.", job.Id);
                 return;
             }
@@ -353,8 +356,10 @@ public class MailPollingService : BackgroundService
 
             foreach (var uid in uids)
             {
-                // Re-check flood protection per message
-                if (floodProtection.IsEventRateLimited(job.Id, job.MaxEventsPerHour))
+                // H-2: per-message check is also read-only — most inspected mails do not
+                // match the rule, and charging them starved noisy mailboxes of their
+                // entire event budget before a single alert was raised.
+                if (floodProtection.IsEventBudgetExhausted(job.Id, job.MaxEventsPerHour))
                 {
                     Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.RateLimitHits.WithLabels("events-per-hour").Inc();
                     _logger.LogWarning("Job {JobId} hit event rate limit during processing. Stopping.", job.Id);
@@ -427,10 +432,13 @@ public class MailPollingService : BackgroundService
                     // UC-5: the claim row doubles as the per-mail disposition record.
                     // Keep the tracked instance so the outcome can be stamped on it
                     // after rule evaluation and event creation complete.
+                    // H-1: the claim is scoped to THIS job, so every job on the mailbox
+                    // evaluates every message independently.
                     var claim = new ProcessedMail
                     {
                         MessageId = claimKey,
                         MailboxId = mailbox.Id,
+                        JobId = job.Id,
                         From = from,
                         Subject = subject,
                         ReceivedUtc = message.Date.UtcDateTime,
@@ -443,17 +451,37 @@ public class MailPollingService : BackgroundService
                     }
                     catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true)
                     {
-                        // Another instance already claimed this email — skip without processing.
-                        // Detach the failed-insert entry so the next iteration starts clean.
+                        // Detach the failed insert so the next iteration starts clean.
                         foreach (var entry in dbContext.ChangeTracker.Entries<ProcessedMail>().ToList())
                             entry.State = EntityState.Detached;
 
-                        Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.EmailsDuplicate.Inc();
-                        _logger.LogDebug(
-                            "Email already claimed by another instance (ClaimKey={ClaimKey}, Mailbox={Name}). Skipping.",
-                            claimKey, mailbox.Name);
-                        await folder.AddFlagsAsync(uid, MessageFlags.Seen, true, ct);
-                        continue;
+                        // H-4: a claim row is NOT proof that the mail was handled — the row
+                        // is committed before processing, so a transient failure mid-way
+                        // leaves it behind with Disposition = Unknown. Treating that as
+                        // "someone else did it" silently and permanently dropped the alert.
+                        // Re-claim the incomplete row and process it now; only a stamped
+                        // row (any disposition but Unknown) means the work is really done.
+                        var existing = await dbContext.ProcessedMails
+                            .FirstOrDefaultAsync(p => p.MessageId == claimKey
+                                                   && p.MailboxId == mailbox.Id
+                                                   && p.JobId == job.Id, ct);
+
+                        if (existing is null || existing.Disposition != MailDisposition.Unknown)
+                        {
+                            Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.EmailsDuplicate.Inc();
+                            _logger.LogDebug(
+                                "Email already processed for Job {JobId} (ClaimKey={ClaimKey}, Mailbox={Name}). Skipping.",
+                                job.Id, claimKey, mailbox.Name);
+                            await MarkSeenWhenAllJobsDoneAsync(dbContext, folder, uid, mailbox.Id, claimKey, ct);
+                            continue;
+                        }
+
+                        _logger.LogWarning(
+                            "Resuming mail {ClaimKey} for Job {JobId}: a previous attempt claimed it but never " +
+                            "recorded an outcome (likely a transient failure). Re-processing.",
+                            claimKey, job.Id);
+                        existing.ProcessedUtc = DateTime.UtcNow;
+                        claim = existing;
                     }
 
                     // Build headers dictionary
@@ -468,6 +496,23 @@ public class MailPollingService : BackgroundService
 
                     if (matched)
                     {
+                        // H-2: THIS is where the hourly event budget is actually charged —
+                        // one unit per event the job raises, which is what
+                        // MaxEventsPerHour has always claimed to mean. If the budget is
+                        // gone the mail is recorded as rate-limited (so the Mail Log can
+                        // explain the missing alert) instead of vanishing.
+                        if (floodProtection.IsEventRateLimited(job.Id, job.MaxEventsPerHour))
+                        {
+                            Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.RateLimitHits.WithLabels("events-per-hour").Inc();
+                            claim.Disposition = MailDisposition.RateLimited;
+                            await dbContext.SaveChangesAsync(ct);
+                            _logger.LogWarning(
+                                "Job {JobId} reached its hourly event limit ({Max}); mail '{Subject}' was not raised as an event.",
+                                job.Id, job.MaxEventsPerHour, subject);
+                            await MarkSeenWhenAllJobsDoneAsync(dbContext, folder, uid, mailbox.Id, claimKey, ct);
+                            continue;
+                        }
+
                         matchCount++;
                         Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.EmailsMatched.WithLabels(mailbox.Name, rule.Name).Inc();
                         // K3: per-mail logging is Debug — Information would explode the log under
@@ -530,8 +575,10 @@ public class MailPollingService : BackgroundService
                     // inserted before processing; this updates it with the outcome).
                     await dbContext.SaveChangesAsync(ct);
 
-                    // Mark message as seen after processing
-                    await folder.AddFlagsAsync(uid, MessageFlags.Seen, true, ct);
+                    // H-1: flag Seen only once EVERY active job on this mailbox has
+                    // processed the message — otherwise the first job to finish would
+                    // hide the mail from its siblings' NotSeen search.
+                    await MarkSeenWhenAllJobsDoneAsync(dbContext, folder, uid, mailbox.Id, claimKey, ct);
                     Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.EmailsProcessed.WithLabels(mailbox.Name).Inc();
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -681,6 +728,42 @@ public class MailPollingService : BackgroundService
             {
                 _logger.LogWarning(ex, "Failed to mark Event {EventId} as Notified", evt.Id);
             }
+        }
+    }
+
+    /// <summary>
+    /// H-1: flags an IMAP message <c>Seen</c> only once every currently-active job on the
+    /// mailbox has recorded a completed claim for it.
+    /// </summary>
+    /// <remarks>
+    /// The IMAP <c>Seen</c> flag is shared state across all jobs polling a mailbox: the
+    /// poll query is <c>SearchQuery.NotSeen</c>, so whichever job flags the message first
+    /// hides it from every sibling job. Deferring the flag until the completed-claim count
+    /// reaches the active-job count lets several rules share one mailbox. Deactivating or
+    /// deleting a job lowers the expected count, so a message can never be stranded unseen
+    /// by a job that no longer exists.
+    /// </remarks>
+    private async Task MarkSeenWhenAllJobsDoneAsync(
+        Mail2SnmpDbContext dbContext, IMailFolder folder, UniqueId uid,
+        int mailboxId, string claimKey, CancellationToken ct)
+    {
+        var activeJobs = await dbContext.Jobs
+            .CountAsync(j => j.MailboxId == mailboxId && j.IsActive, ct);
+
+        var completedClaims = await dbContext.ProcessedMails
+            .CountAsync(p => p.MailboxId == mailboxId
+                          && p.MessageId == claimKey
+                          && p.Disposition != MailDisposition.Unknown, ct);
+
+        if (completedClaims >= activeJobs)
+        {
+            await folder.AddFlagsAsync(uid, MessageFlags.Seen, true, ct);
+        }
+        else
+        {
+            _logger.LogDebug(
+                "Mail {ClaimKey} stays unseen: {Done}/{Total} active jobs on mailbox {MailboxId} have processed it.",
+                claimKey, completedClaims, activeJobs, mailboxId);
         }
     }
 

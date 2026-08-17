@@ -57,6 +57,29 @@ public class FloodProtectionService
     }
 
     /// <summary>
+    /// H-2: read-only budget check — reports whether the job is already at its hourly
+    /// event limit <b>without</b> consuming budget.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="IsEventRateLimited"/> increments on every call, which is correct at the
+    /// point an event is actually created but wrong for the pre-flight checks the mail
+    /// poller performs (once per poll pass, and once per inspected message regardless of
+    /// whether it matches). Charging those consumed the entire budget on noisy or
+    /// frequently-polled mailboxes — a job stopped alerting long before it had produced
+    /// anything close to <paramref name="maxPerHour"/> events. Use this to decide whether
+    /// to keep going, and <see cref="IsEventRateLimited"/> only where an event is raised.
+    /// </remarks>
+    /// <param name="jobId">The identifier of the monitoring job.</param>
+    /// <param name="maxPerHour">The maximum number of events allowed per one-hour sliding window.</param>
+    /// <returns><c>true</c> when the budget is exhausted; otherwise <c>false</c>.</returns>
+    public bool IsEventBudgetExhausted(int jobId, int maxPerHour)
+    {
+        var key = $"event:{jobId}";
+        var counter = _counters.GetOrAdd(key, _ => new RateCounter(TimeSpan.FromHours(1)));
+        return counter.Peek() >= maxPerHour;
+    }
+
+    /// <summary>
     /// Thread-safe sliding-window counter that tracks timestamps of recent requests
     /// and evicts entries that fall outside the configured window.
     /// </summary>
@@ -92,6 +115,21 @@ public class FloodProtectionService
 
                 _timestamps.Enqueue(DateTime.UtcNow);
                 return true;
+            }
+        }
+
+        /// <summary>
+        /// H-2: returns the number of entries currently inside the window <b>without</b>
+        /// consuming budget, evicting expired entries first so the answer is accurate.
+        /// </summary>
+        public int Peek()
+        {
+            lock (_lock)
+            {
+                var cutoff = DateTime.UtcNow - _window;
+                while (_timestamps.Count > 0 && _timestamps.Peek() < cutoff)
+                    _timestamps.Dequeue();
+                return _timestamps.Count;
             }
         }
 

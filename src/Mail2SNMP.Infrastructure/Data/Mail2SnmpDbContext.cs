@@ -315,7 +315,13 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
             e.HasOne(x => x.Mailbox).WithMany().HasForeignKey(x => x.MailboxId);
             e.Property(x => x.MessageId).HasMaxLength(1000);
             e.HasIndex(x => x.ProcessedUtc);
-            e.HasIndex(x => new { x.MessageId, x.MailboxId }).IsUnique();
+            // H-1: the claim is scoped per JOB, not just per mailbox. With the old
+            // (MessageId, MailboxId) key the first job to poll won the claim and every
+            // other job on the same mailbox silently never fired.
+            e.HasIndex(x => new { x.MessageId, x.MailboxId, x.JobId }).IsUnique();
+            // Supports the "have all active jobs claimed this mail yet?" lookup that
+            // decides when the message may be flagged Seen on the IMAP server.
+            e.HasIndex(x => new { x.MailboxId, x.MessageId });
         });
 
         builder.Entity<WorkerLease>(e =>

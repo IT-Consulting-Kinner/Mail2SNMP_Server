@@ -36,4 +36,12 @@ public enum MailDisposition
     /// and immediately suppressed, and no notifications were sent.
     /// </summary>
     MaintenanceSuppressed = 4,
+
+    /// <summary>
+    /// H-2: the mail matched the rule, but the job had already used its hourly event
+    /// budget (<c>Job.MaxEventsPerHour</c>), so no event was raised and no notification
+    /// was sent. Recorded explicitly so a suppressed alert is visible in the Mail Log
+    /// instead of looking like a mail that simply never arrived.
+    /// </summary>
+    RateLimited = 5,
 }
