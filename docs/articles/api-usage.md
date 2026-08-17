@@ -154,9 +154,40 @@ references exactly one target kind (`webhookTargetId` **or** `snmpTargetId`).
 
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
-| GET | `/` | Operator | List failed deliveries (both channels) |
+| GET | `/` | Operator | List failed deliveries (both channels), filtered and paged |
 | POST | `/{id}/retry` | Operator | Retry single delivery |
-| POST | `/retry-all/{webhookTargetId}` | Admin | Retry all for a webhook target (SNMP entries are re-queued per entry via `/{id}/retry`) |
+| POST | `/retry-all` | Admin | Retry every entry matching a filter — either target kind |
+| POST | `/retry-all/{webhookTargetId}` | Admin | Retry all for one webhook target (kept for 1.1.0 compatibility) |
+
+**Filtering and paging (`GET /`).** All parameters are optional:
+
+| Parameter | Values | Default | Description |
+|-----------|--------|---------|-------------|
+| `status` | `Pending`, `Locked`, `Abandoned` | all | Restrict to one status. `Abandoned` entries are never retried automatically, so this is the filter to reach for when auditing what was permanently lost. |
+| `kind` | `Webhook`, `Snmp` | both | Restrict to one target kind. |
+| `targetId` | integer | all | Restrict to one target; interpreted against `kind`. |
+| `skip` | integer | `0` | Rows to skip. |
+| `take` | integer | `500` | Rows to return, capped at 500. |
+
+The response body is a **bare JSON array** of entries, unchanged from 1.1.0. The number of
+rows matching the filter *before* paging is returned in the **`X-Total-Count`** response
+header — check it to find out whether you are seeing the whole queue.
+
+`POST /retry-all` accepts the same `status`, `kind` and `targetId` parameters and returns
+`{ "count": n, "message": "…" }`. It re-queues each matching entry exactly the way
+`POST /{id}/retry` does — status back to `Pending`, lock cleared, attempt counter and last
+error reset — so `Abandoned` entries become claimable again. With no parameters it
+re-queues the entire queue, both kinds.
+
+```bash
+# What has been permanently abandoned, and how much of it is there?
+curl -sD - -H "X-API-Key: $KEY" \
+  "https://mail2snmp.example.com/api/v1/dead-letters?status=Abandoned&take=50"
+
+# Give every abandoned SNMP trap one more chance
+curl -X POST -H "X-API-Key: $KEY" \
+  "https://mail2snmp.example.com/api/v1/dead-letters/retry-all?status=Abandoned&kind=Snmp"
+```
 
 ### Dashboard (`/api/v1/dashboard`)
 

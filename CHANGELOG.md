@@ -2,6 +2,68 @@
 
 All notable changes to Mail2SNMP Server. Entries are grouped by **release** and by the development **waves** that made up each release. Each wave fixes the findings of a multi-agent comprehensive code review of the previous wave; the wave pattern is documented in the repo's development history.
 
+## Unreleased
+
+Second full-surface review (UX consistency, security, correctness, use cases,
+architecture, performance) with adversarially verified findings, implemented in
+batches. **1.1.0 shipped with two blocking defects — see below; upgrade is
+strongly recommended.**
+
+### Fixed — blockers in 1.1.0
+
+- **C-1** Every write to a table with a `RowVersion` column failed on SQLite
+  (`NOT NULL constraint failed`). `IsRowVersion()` marks the column
+  store-generated, so EF omitted it from the INSERT — which SQL Server fills in
+  and SQLite does not. Concurrency tokens are now stamped by the context on
+  SQLite and left to the provider on SQL Server. The default (SQLite)
+  deployment could not create a mailbox, rule or job at all.
+- **C-2** The migrations hard-coded SQLite store types (`TEXT`, `INTEGER`,
+  `BLOB`) and `Sqlite:Autoincrement`, so `db migrate` against SQL Server
+  produced a schema of SQLite types with no IDENTITY keys. Migrations are now
+  provider-neutral and carry both autoincrement annotations.
+- **H-1** A mail claim was keyed `(MessageId, MailboxId)`, so with several jobs
+  on one mailbox the first job to poll won the claim and every other job
+  silently never fired. The claim is now scoped per job.
+
+### Changed — dead-letter queue
+
+- The queue API is no longer webhook-shaped. `IDeadLetterService` filters and
+  bulk-retries through a `DeadLetterQuery` that matches either target kind, so
+  SNMP entries (UC-3) are no longer an N+1 of single-entry calls with different
+  reset semantics. Bulk retry now applies exactly the same reset as a
+  single-entry retry, which means **`Abandoned` entries become claimable again**
+  — previously the UI reported "queued for retry" for entries the worker would
+  skip forever.
+- `GET /api/v1/dead-letters` accepts `status`, `kind`, `targetId`, `skip` and
+  `take`, and returns the pre-paging total in the `X-Total-Count` header. The
+  response body is unchanged (a bare array), and
+  `POST /retry-all/{webhookTargetId}` still works, so 1.1.0 clients keep
+  working. New: `POST /retry-all` with the same filter parameters.
+- The Dead Letters page filters by status and target kind and pages
+  server-side. It previously loaded the newest 500 rows with no filter and no
+  total, which hid the rest of the queue — including the `Abandoned` entries an
+  operator most needs — behind a view that looked complete.
+- CLI: `deadletter retry-all` takes an optional filter
+  (`<webhook-target-id>`, `webhook` or `snmp`) and defaults to the whole queue;
+  `deadletter list` reports the true queue depth alongside the shown page.
+
+### Changed — configuration
+
+- **AR-6** The `DeadLetter` and `Security` sections are now bound to validated
+  options classes like every other section, so an out-of-range value fails the
+  boot with a message naming the field instead of producing a service that
+  starts and misbehaves. Both sections are declared in `appsettings.json`.
+  `DeadLetter:LockDurationMinutes` default corrected to 7 (5 was below the safe
+  lease floor and logged a warning on every start).
+
+### Added — tests
+
+- Coverage for the four 1.1.0 features, which shipped with none: UC-4 severity
+  routing, UC-5 per-mail disposition and per-job claim, UC-3 SNMP
+  dead-lettering, UC-7 Test Send.
+- Provider-parity tests that would have caught C-1 and C-2 without a server
+  (real SQLite inserts; SQL Server DDL generated via `IMigrator.GenerateScript`).
+
 ## 1.1.0 — 2026-08-17 (Quality & Features)
 
 Full-surface review (UX consistency, security, correctness, use cases,

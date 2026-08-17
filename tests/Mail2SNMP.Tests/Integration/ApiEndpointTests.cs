@@ -215,6 +215,49 @@ public class ApiEndpointTests : IClassFixture<TestWebApplicationFactory>, IDispo
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    [Fact]
+    public async Task DeadLetters_Get_StaysABareArrayAndReportsTheTotalInAHeader()
+    {
+        // Adding filters and paging must not reshape the body: 1.1.0 clients and scripts
+        // parse a bare JSON array. The pre-paging total goes in X-Total-Count instead of
+        // an envelope.
+        var response = await _client.GetAsync("/api/v1/dead-letters?status=Abandoned&kind=Snmp&skip=0&take=10");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = (await response.Content.ReadAsStringAsync()).TrimStart();
+        Assert.StartsWith("[", body);
+
+        Assert.True(response.Headers.TryGetValues("X-Total-Count", out var totals));
+        Assert.True(int.TryParse(totals.Single(), out _));
+    }
+
+    [Fact]
+    public async Task DeadLetters_Get_RejectsAnUnparseableFilterValue()
+    {
+        // Minimal-API binding turns a bad enum value into a 400 rather than silently
+        // ignoring the filter and returning the unfiltered queue.
+        var response = await _client.GetAsync("/api/v1/dead-letters?status=NotAStatus");
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeadLetters_RetryAll_WithNoTarget_IsAcceptedAndReportsACount()
+    {
+        // The pre-1.2 route took a webhookTargetId, so SNMP entries had no bulk path at
+        // all. The kind-neutral route must accept an empty filter.
+        var response = await _client.PostAsync("/api/v1/dead-letters/retry-all", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var content = await response.Content.ReadAsStringAsync();
+        Assert.Contains("count", content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DeadLetters_RetryAll_LegacyPerWebhookTargetRouteStillWorks()
+    {
+        var response = await _client.PostAsync("/api/v1/dead-letters/retry-all/1", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     // ── Worker Endpoints ─────────────────────────────────────────────────
 
     [Fact]

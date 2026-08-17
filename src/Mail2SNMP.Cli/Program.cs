@@ -129,7 +129,7 @@ public partial class Program
         Console.WriteLine("  worker release-lease             Release all worker leases");
         Console.WriteLine("  deadletter list                  List dead letter entries");
         Console.WriteLine("  deadletter retry <id>            Retry a specific dead letter");
-        Console.WriteLine("  deadletter retry-all <target>    Retry all for a webhook target");
+        Console.WriteLine("  deadletter retry-all [filter]    Retry all; filter: <webhook-target-id>, 'webhook' or 'snmp'");
         Console.WriteLine("  diagnostics export [path]        Export diagnostics bundle");
         Console.WriteLine("  backup export [path.zip]         Export configuration backup (ZIP with README)");
     }

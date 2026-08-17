@@ -257,10 +257,18 @@ public partial class Program
         {
             using var scope = sp.CreateScope();
             var svc = scope.ServiceProvider.GetRequiredService<IDeadLetterService>();
-            var entries = await svc.GetAllAsync();
-            Console.WriteLine($"Dead letters: {entries.Count}");
-            foreach (var e in entries)
-                Console.WriteLine($"  [{e.Id}] Target={e.WebhookTargetId} Event={e.EventId} Status={e.Status} Attempts={e.AttemptCount} Error={e.LastError}");
+            // Report the true queue depth alongside the page: GetAllAsync is capped, and
+            // printing a capped list under a "Dead letters: N" header read as complete.
+            var page = await svc.QueryAsync(new Models.DTOs.DeadLetterQuery { Take = Models.DTOs.DeadLetterQuery.MaxTake });
+            Console.WriteLine(page.TotalCount > page.Entries.Count
+                ? $"Dead letters: {page.TotalCount} (showing newest {page.Entries.Count})"
+                : $"Dead letters: {page.TotalCount}");
+            foreach (var e in page.Entries)
+            {
+                // UC-3: an entry belongs to either an SNMP or a webhook target.
+                var target = e.SnmpTargetId is not null ? $"snmp:{e.SnmpTargetId}" : $"webhook:{e.WebhookTargetId}";
+                Console.WriteLine($"  [{e.Id}] Target={target} Event={e.EventId} Status={e.Status} Attempts={e.AttemptCount} Error={e.LastError}");
+            }
             return 0;
         }
 
@@ -273,16 +281,39 @@ public partial class Program
             return 0;
         }
 
-        if (sub == "retry-all" && args.Length > 1 && int.TryParse(args[1], out var targetId))
+        if (sub == "retry-all")
         {
+            // The queue holds SNMP entries too (UC-3), so the bulk command is no longer
+            // webhook-only: "retry-all" with no argument re-queues everything, and an
+            // optional kind selects one side. "retry-all <id>" keeps its 1.1.0 meaning.
+            var filter = new Models.DTOs.DeadLetterQuery();
+            var arg = args.ElementAtOrDefault(1);
+            if (arg is not null)
+            {
+                if (int.TryParse(arg, out var targetId))
+                {
+                    filter.Kind = Models.Enums.DeadLetterTargetKind.Webhook;
+                    filter.TargetId = targetId;
+                }
+                else if (arg.Equals("webhook", StringComparison.OrdinalIgnoreCase))
+                    filter.Kind = Models.Enums.DeadLetterTargetKind.Webhook;
+                else if (arg.Equals("snmp", StringComparison.OrdinalIgnoreCase))
+                    filter.Kind = Models.Enums.DeadLetterTargetKind.Snmp;
+                else
+                {
+                    Console.Error.WriteLine($"Unknown argument '{arg}'. Expected a webhook target id, 'webhook' or 'snmp'.");
+                    return 1;
+                }
+            }
+
             using var scope = sp.CreateScope();
             var svc = scope.ServiceProvider.GetRequiredService<IDeadLetterService>();
-            await svc.RetryAllAsync(targetId);
-            Console.WriteLine($"All dead letters for webhook target {targetId} queued for retry.");
+            var count = await svc.RetryAllAsync(filter);
+            Console.WriteLine($"{count} dead letter(s) queued for retry.");
             return 0;
         }
 
-        Console.WriteLine("Usage: mail2snmp deadletter [list|retry <id>|retry-all <target-id>]");
+        Console.WriteLine("Usage: mail2snmp deadletter [list|retry <id>|retry-all [<webhook-target-id>|webhook|snmp]]");
         return 1;
     }
 }

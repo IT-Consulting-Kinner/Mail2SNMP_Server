@@ -11,7 +11,7 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Dead Letters <HelpLink Url="@Help.Value.DeadLetters" /></h3>
-    <button class="btn btn-outline-success btn-sm" @onclick="ExportCsv" disabled="@(_entries == null || _entries.Count == 0)">
+    <button class="btn btn-outline-success btn-sm" @onclick="ExportCsv" disabled="@(_totalCount == 0)">
         <i class="bi bi-download"></i> Export CSV
     </button>
 </div>
@@ -32,18 +32,52 @@
     </div>
 }
 
+@* The listing used to load the newest 500 rows and page them client-side, with no
+   filter and no total. On a queue larger than that the page silently presented a
+   truncated view as the whole queue, and Abandoned entries — the ones nothing will
+   ever retry, so the ones an operator most needs — were unreachable behind newer
+   Pending rows. Filters and paging now run server-side against the real count. *@
+<div class="row g-2 align-items-end mb-3">
+    <div class="col-auto">
+        <label class="form-label small mb-1" for="dl-status">Status</label>
+        <select id="dl-status" class="form-select form-select-sm" @bind="_statusFilter" @bind:after="ApplyFilters">
+            <option value="">All statuses</option>
+            @foreach (var s in Enum.GetValues<DeadLetterStatus>())
+            {
+                <option value="@s">@s</option>
+            }
+        </select>
+    </div>
+    <div class="col-auto">
+        <label class="form-label small mb-1" for="dl-kind">Target</label>
+        <select id="dl-kind" class="form-select form-select-sm" @bind="_kindFilter" @bind:after="ApplyFilters">
+            <option value="">All targets</option>
+            <option value="@nameof(DeadLetterTargetKind.Webhook)">HTTP webhook</option>
+            <option value="@nameof(DeadLetterTargetKind.Snmp)">SNMP trap</option>
+        </select>
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFilters"
+                disabled="@(_statusFilter.Length == 0 && _kindFilter.Length == 0)">Clear filters</button>
+    </div>
+</div>
+
 @if (_loading)
 {
     <div class="text-center py-5"><div class="spinner-border text-primary"><span class="visually-hidden">Loading...</span></div></div>
 }
-else if (_entries == null || _entries.Count == 0)
+else if (_entries.Count == 0)
 {
-    <div class="alert alert-info">No dead letter entries found.</div>
+    <div class="alert alert-info">
+        @(_statusFilter.Length == 0 && _kindFilter.Length == 0
+            ? "No dead letter entries found."
+            : "No dead letter entries match the selected filters.")
+    </div>
 }
 else
 {
-    var totalPages = (int)Math.Ceiling(_entries.Count / (double)_pageSize);
-    var paged = _entries.Skip((_currentPage - 1) * _pageSize).Take(_pageSize).ToList();
+    var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+    var paged = _entries;
 <div class="table-responsive">
     <table class="table table-striped table-hover">
         <thead class="table-dark">
@@ -106,20 +140,24 @@ else
 </div>
 <nav class="d-flex justify-content-between align-items-center" aria-label="Pagination">
     <div>
-        <small class="text-muted me-3">Showing @((_currentPage - 1) * _pageSize + 1)–@Math.Min(_currentPage * _pageSize, _entries.Count) of @_entries.Count entries</small>
+        <small class="text-muted me-3">Showing @((_currentPage - 1) * PageSize + 1)–@((_currentPage - 1) * PageSize + _entries.Count) of @_totalCount entries</small>
         <AuthorizeView Policy="Admin"><Authorized>
-            <button class="btn btn-warning btn-sm" @onclick="RetryAll" disabled="@_busy">Retry All Pending</button>
+            @* Acts on every entry matching the current filter, not just the visible page —
+               and says how many that is, so the operator can see what they are about to do. *@
+            <button class="btn btn-warning btn-sm" @onclick="RetryAll" disabled="@_busy">
+                Retry all @_totalCount matching
+            </button>
         </Authorized></AuthorizeView>
     </div>
     @if (totalPages > 1)
     {
         <ul class="pagination pagination-sm mb-0">
             <li class="page-item @(_currentPage == 1 ? "disabled" : "")">
-                <button class="page-link" @onclick="() => _currentPage = Math.Max(1, _currentPage - 1)">Previous</button>
+                <button class="page-link" @onclick="() => GoToPage(_currentPage - 1)">Previous</button>
             </li>
             <li class="page-item disabled" aria-current="page"><span class="page-link">Page @_currentPage of @totalPages</span></li>
             <li class="page-item @(_currentPage == totalPages ? "disabled" : "")">
-                <button class="page-link" @onclick="() => _currentPage = Math.Min(totalPages, _currentPage + 1)">Next</button>
+                <button class="page-link" @onclick="() => GoToPage(_currentPage + 1)">Next</button>
             </li>
         </ul>
     }
@@ -130,23 +168,74 @@ else
     // V1: page floor is Operator; Retry-All is Admin (mirrors the REST API).
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
-    private IReadOnlyList<DeadLetterEntry>? _entries;
+    private IReadOnlyList<DeadLetterEntry> _entries = Array.Empty<DeadLetterEntry>();
+    private int _totalCount;
     private string? _error;
     private string? _success;
     private bool _loading = true;
     private bool _busy;
-    private const int _pageSize = 50;
+    private const int PageSize = 50;
     private int _currentPage = 1;
+
+    // Bound to the two <select> elements. Empty string = no restriction; parsed into
+    // the nullable enums the query takes.
+    private string _statusFilter = string.Empty;
+    private string _kindFilter = string.Empty;
+
+    private DeadLetterQuery CurrentFilter() => new()
+    {
+        Status = Enum.TryParse<DeadLetterStatus>(_statusFilter, out var s) ? s : null,
+        Kind = Enum.TryParse<DeadLetterTargetKind>(_kindFilter, out var k) ? k : null
+    };
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
-    private async Task LoadData()
+    private async Task ApplyFilters()
+    {
+        _currentPage = 1;
+        await LoadData();
+    }
+
+    private async Task ClearFilters()
+    {
+        _statusFilter = string.Empty;
+        _kindFilter = string.Empty;
+        await ApplyFilters();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+        var target = Math.Clamp(page, 1, totalPages);
+        if (target == _currentPage) return;
+        _currentPage = target;
+        await LoadData(resetPage: false);
+    }
+
+    private async Task LoadData(bool resetPage = true)
     {
         _loading = true;
         try
         {
-            _entries = await DeadLetterService.GetAllAsync();
-            _currentPage = 1;
+            if (resetPage) _currentPage = 1;
+
+            var filter = CurrentFilter();
+            filter.Skip = (_currentPage - 1) * PageSize;
+            filter.Take = PageSize;
+
+            var result = await DeadLetterService.QueryAsync(filter);
+
+            // A delete or a drained retry between renders can leave the current page past
+            // the end of the result set; step back rather than showing an empty page.
+            if (result.Entries.Count == 0 && result.TotalCount > 0 && _currentPage > 1)
+            {
+                _currentPage = Math.Max(1, (int)Math.Ceiling(result.TotalCount / (double)PageSize));
+                filter.Skip = (_currentPage - 1) * PageSize;
+                result = await DeadLetterService.QueryAsync(filter);
+            }
+
+            _entries = result.Entries;
+            _totalCount = result.TotalCount;
         }
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "loading data"); }
         finally { _loading = false; }
@@ -165,40 +254,24 @@ else
     {
         if (_busy) return;
         if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin")) { _error = "Administrator role required."; return; }
-        var pending = _entries?.Count(e => e.Status == DeadLetterStatus.Pending) ?? 0;
-        if (pending == 0)
+        if (_totalCount == 0)
         {
-            _error = "No pending entries to retry.";
+            _error = "No entries to retry.";
             return;
         }
         if (!await Confirm.AskAsync(
-                $"Retry {pending} pending dead letter entries? This may send many webhook requests and SNMP traps."))
+                $"Retry {_totalCount} dead letter entries matching the current filter? " +
+                "This may send many webhook requests and SNMP traps."))
             return;
         _busy = true;
         try
         {
-            // UC-3: WebhookTargetId is null for SNMP entries — those are re-queued
-            // individually below; the per-webhook bulk API keeps working for HTTP.
-            var webhookIds = _entries?
-                .Where(e => e.Status == DeadLetterStatus.Pending && e.WebhookTargetId is not null)
-                .Select(e => e.WebhookTargetId!.Value)
-                .Distinct()
-                .ToList() ?? new List<int>();
-
-            foreach (var whId in webhookIds)
-            {
-                await DeadLetterService.RetryAllAsync(whId);
-            }
-
-            var snmpEntryIds = _entries?
-                .Where(e => e.Status == DeadLetterStatus.Pending && e.SnmpTargetId is not null)
-                .Select(e => e.Id)
-                .ToList() ?? new List<long>();
-            foreach (var dlId in snmpEntryIds)
-            {
-                await DeadLetterService.RetryAsync(dlId);
-            }
-            _success = "All pending entries queued for retry.";
+            // One kind-neutral call: the service re-queues webhook and SNMP entries the
+            // same way. This used to be an N+1 loop — one bulk call per webhook target
+            // plus one individual call per SNMP row — which also applied *different*
+            // resets to the two kinds. It also only ever covered the loaded 500 rows.
+            var count = await DeadLetterService.RetryAllAsync(CurrentFilter());
+            _success = $"{count} entr{(count == 1 ? "y" : "ies")} queued for retry.";
             await LoadData();
         }
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "retrying all entries"); }
@@ -208,14 +281,22 @@ else
     // T15: CSV export — same pattern as AuditLog and Events.
     private async Task ExportCsv()
     {
-        if (_entries == null || _entries.Count == 0) return;
+        if (_totalCount == 0) return;
         try
         {
+            // Export the whole filtered set, not just the page on screen — a CSV named
+            // "deadletters-<timestamp>" that silently contained 50 of 12 000 rows would
+            // be worse than no export. Still bounded by DeadLetterQuery.MaxTake; the
+            // header line below says so when the cap bites.
+            var exportFilter = CurrentFilter();
+            exportFilter.Take = DeadLetterQuery.MaxTake;
+            var export = await DeadLetterService.QueryAsync(exportFilter);
+
             var sb = new System.Text.StringBuilder();
             @* UC-3 (verified fix): entries reference either target kind — the export
                carries a Kind discriminator and both target-id columns. *@
             sb.AppendLine("CreatedUtc,Kind,WebhookTargetId,SnmpTargetId,EventId,Status,AttemptCount,NextRetryUtc,LastError");
-            foreach (var e in _entries)
+            foreach (var e in export.Entries)
             {
                 sb.Append(e.CreatedUtc.ToString("o")).Append(',')
                   .Append(e.SnmpTargetId is not null ? "SNMP" : "HTTP").Append(',')
@@ -229,6 +310,10 @@ else
             }
             var filename = $"deadletters-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv";
             await JS.InvokeVoidAsync("mail2snmp.downloadText", filename, "text/csv;charset=utf-8", sb.ToString());
+
+            _success = export.TotalCount > export.Entries.Count
+                ? $"Exported the newest {export.Entries.Count} of {export.TotalCount} matching entries (export is capped at {DeadLetterQuery.MaxTake} rows). Narrow the filter to export the rest."
+                : $"Exported {export.Entries.Count} entr{(export.Entries.Count == 1 ? "y" : "ies")}.";
         }
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "exporting dead letters"); }
     }
