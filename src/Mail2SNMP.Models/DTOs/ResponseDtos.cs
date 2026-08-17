@@ -411,6 +411,57 @@ public static class ResponseDtoMapper
     }
 
     /// <summary>
+    /// Projects a processed-mail trace onto its API response shape, including the delivery
+    /// half derived from the event it produced.
+    /// </summary>
+    /// <param name="mail">The source trace row.</param>
+    /// <param name="eventState">State of the event this mail produced, or <c>null</c> when there is none or it was purged.</param>
+    /// <param name="eventPurged">Whether the mail references an event that no longer exists (removed by retention).</param>
+    /// <param name="openDeadLetters">Number of non-locked dead-letter entries for that event.</param>
+    /// <returns>A response DTO carrying the full trace: what the mail became, and whether anyone was told.</returns>
+    public static MailLogResponse ToResponse(
+        this Entities.ProcessedMail mail,
+        Enums.EventState? eventState = null,
+        bool eventPurged = false,
+        int openDeadLetters = 0) => new()
+    {
+        Id = mail.Id,
+        MailboxId = mail.MailboxId,
+        MailboxName = mail.Mailbox?.Name,
+        JobId = mail.JobId,
+        MessageId = mail.MessageId,
+        From = mail.From,
+        Subject = mail.Subject,
+        ReceivedUtc = mail.ReceivedUtc,
+        ProcessedUtc = mail.ProcessedUtc,
+        Disposition = mail.Disposition,
+        EventId = mail.EventId,
+        EventState = eventState,
+        OpenDeadLetters = openDeadLetters,
+        Delivery = DescribeDelivery(mail, eventState, eventPurged, openDeadLetters)
+    };
+
+    /// <summary>
+    /// Collapses the event's state and dead-letter count into the single word an operator
+    /// actually wants: was this alert delivered or not?
+    /// </summary>
+    private static string DescribeDelivery(
+        Entities.ProcessedMail mail, Enums.EventState? eventState, bool eventPurged, int openDeadLetters)
+    {
+        if (mail.EventId is null) return "none";
+        if (openDeadLetters > 0) return "failed";
+        if (eventPurged || eventState is null) return "purged";
+
+        return eventState switch
+        {
+            Enums.EventState.Suppressed => "suppressed",
+            // Created but no channel reported a successful dispatch.
+            Enums.EventState.New or Enums.EventState.Expired => "not-delivered",
+            _ => "delivered"
+        };
+    }
+
+    /// <summary>
     /// Projects a dead-letter entry onto its API response shape.
     /// </summary>
     /// <param name="entry">The source dead-letter entity, optionally with its target navigation loaded.</param>

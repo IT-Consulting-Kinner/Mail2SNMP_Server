@@ -1,6 +1,7 @@
 using Mail2SNMP.Core.Exceptions;
 using Mail2SNMP.Core.Interfaces;
 using Mail2SNMP.Models.DTOs;
+using Mail2SNMP.Models.Enums;
 
 namespace Mail2SNMP.Api.Endpoints;
 
@@ -120,6 +121,71 @@ public static class JobEndpoints
         })
         .RequireAuthorization("Operator")
         .WithName("DryRunJob")
+        .WithOpenApi();
+
+        // UC-7 parity: Test Send existed only as a button in the management UI, so the
+        // one operation that proves a job's whole delivery path works end-to-end was
+        // unreachable from a deployment script or a monitoring check.
+        group.MapPost("/{id:int}/test-send", async (
+            int id, Severity? severity, IJobService service, CancellationToken ct) =>
+        {
+            var existing = await service.GetByIdAsync(id, ct);
+            if (existing is null)
+                return Results.NotFound();
+
+            var result = await service.SendTestEventAsync(id, severity ?? Severity.Information, ct);
+            return Results.Ok(new { JobId = id, Severity = (severity ?? Severity.Information).ToString(), Report = result });
+        })
+        .RequireAuthorization("Operator")
+        .WithName("TestSendJob")
+        .WithOpenApi();
+
+        // UX-5 parity: bulk activate/deactivate/delete existed only in the UI. Without
+        // this, "deactivate every job on the mailbox we're migrating" is a loop of
+        // read-modify-write PUTs that can each clobber a concurrent edit.
+        group.MapPost("/bulk", async (JobBulkRequest request, IJobService service, CancellationToken ct) =>
+        {
+            if (request.Ids is null || request.Ids.Count == 0)
+                return Results.BadRequest(new { error = "At least one job id is required." });
+
+            var succeeded = new List<int>();
+            var failed = new List<object>();
+
+            foreach (var id in request.Ids.Distinct())
+            {
+                try
+                {
+                    var job = await service.GetByIdAsync(id, ct);
+                    if (job is null)
+                    {
+                        failed.Add(new { Id = id, Error = "Not found." });
+                        continue;
+                    }
+
+                    if (request.Action == JobBulkAction.Delete)
+                    {
+                        await service.DeleteAsync(id, ct);
+                    }
+                    else
+                    {
+                        job.IsActive = request.Action == JobBulkAction.Activate;
+                        await service.UpdateAsync(job, ct);
+                    }
+                    succeeded.Add(id);
+                }
+                catch (DependencyException ex)
+                {
+                    // A job still referenced by a schedule cannot be deleted. Report it
+                    // per id rather than failing the whole batch — the caller asked for
+                    // several independent operations, not a transaction.
+                    failed.Add(new { Id = id, Error = ex.Message });
+                }
+            }
+
+            return Results.Ok(new { Action = request.Action.ToString(), Succeeded = succeeded, Failed = failed });
+        })
+        .RequireAuthorization("Admin")
+        .WithName("BulkUpdateJobs")
         .WithOpenApi();
 
         return endpoints;

@@ -32,6 +32,7 @@ public static class ApiEndpointRegistration
         app.MapDashboardEndpoints();
         app.MapLicenseEndpoints();
         app.MapDeadLetterEndpoints();
+        app.MapMailLogEndpoints();
         app.MapWorkerEndpoints();
         app.MapBulkExportEndpoints();
         return app;

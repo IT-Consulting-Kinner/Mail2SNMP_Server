@@ -79,7 +79,7 @@ public class DataRetentionService : BackgroundService
     /// Executes all retention cleanup steps in sequence: expire old events, delete terminal-state events,
     /// purge processed mail records, trim audit entries, remove dead letters, and clean event dedup entries.
     /// </summary>
-    private async Task RunRetentionCleanupAsync(CancellationToken ct)
+    internal async Task RunRetentionCleanupAsync(CancellationToken ct)
     {
         _logger.LogDebug("Starting data retention cleanup cycle");
 
@@ -142,63 +142,71 @@ public class DataRetentionService : BackgroundService
     /// <summary>
     /// Transitions New and Notified events older than the auto-expire threshold to the Expired state.
     /// </summary>
+    /// <remarks>
+    /// A set-based UPDATE. Loading the batch as tracked entities to flip two properties
+    /// meant the change tracker held up to a thousand event graphs per step, and the
+    /// retention cycle runs every hour for the life of the process.
+    /// </remarks>
     private async Task<int> ExpireOldEventsAsync(Mail2SnmpDbContext db, CancellationToken ct)
     {
         var cutoff = DateTime.UtcNow.AddDays(-_eventSettings.AutoExpireDays);
+        var now = DateTime.UtcNow;
         var expirableStates = new[] { EventState.New, EventState.Notified };
 
-        var eventsToExpire = await db.Events
+        var expired = await db.Events
             .Where(e => expirableStates.Contains(e.State) && e.CreatedUtc < cutoff)
             .Take(1000)
-            .ToListAsync(ct);
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(e => e.State, EventState.Expired)
+                      .SetProperty(e => e.LastStateChangeUtc, now),
+                ct);
 
-        foreach (var evt in eventsToExpire)
+        if (expired > 0)
         {
-            evt.State = EventState.Expired;
-            evt.LastStateChangeUtc = DateTime.UtcNow;
+            // AR-1: New/Notified are part of the active set, so the auto-expiry must
+            // decrement the active-events gauge like every other active -> terminal
+            // transition, or the gauge drifts upward by the auto-expired count on every
+            // retention cycle.
+            Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.ActiveEvents.Dec(expired);
+            _logger.LogInformation("Auto-expired {Count} events older than {Days} days", expired, _eventSettings.AutoExpireDays);
         }
 
-        if (eventsToExpire.Count > 0)
-        {
-            await db.SaveChangesAsync(ct);
-            // AR-1 (verified fix): New/Notified are part of the active set, so the
-            // auto-expiry must decrement the active-events gauge like every other
-            // active→terminal transition — otherwise the gauge drifts upward by the
-            // auto-expired count on every retention cycle.
-            Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.ActiveEvents.Dec(eventsToExpire.Count);
-            _logger.LogInformation("Auto-expired {Count} events older than {Days} days", eventsToExpire.Count, _eventSettings.AutoExpireDays);
-        }
-
-        return eventsToExpire.Count;
+        return expired;
     }
 
     /// <summary>
     /// Deletes Resolved, Suppressed, and Expired events whose last state change exceeds the retention period,
     /// along with their associated dedup entries.
     /// </summary>
+    /// <remarks>
+    /// The dedup rows are removed explicitly first, even though <c>EventDedup.EventId</c>
+    /// is a required foreign key and therefore already carries <c>ON DELETE CASCADE</c>.
+    /// That cascade is not a guarantee on the default provider: SQLite enforces foreign
+    /// keys only when <c>PRAGMA foreign_keys</c> is on, which is a per-connection runtime
+    /// setting rather than a property of the schema. An orphaned dedup row does not fail
+    /// loudly — it silently suppresses every future occurrence of that alert while
+    /// pointing at an event that no longer exists.
+    /// </remarks>
     private async Task<int> DeleteOldEventsAsync(Mail2SnmpDbContext db, CancellationToken ct)
     {
         var cutoff = DateTime.UtcNow.AddDays(-_eventSettings.ResolvedRetentionDays);
         var terminalStates = new[] { EventState.Resolved, EventState.Suppressed, EventState.Expired };
 
-        var eventsToDelete = await db.Events
+        // Materialize only the ids of this batch, not the event graphs.
+        var eventIds = await db.Events
             .Where(e => terminalStates.Contains(e.State) && e.LastStateChangeUtc < cutoff)
+            .Select(e => e.Id)
             .Take(1000)
             .ToListAsync(ct);
 
-        if (eventsToDelete.Count > 0)
-        {
-            // Also delete associated event dedup entries
-            var eventIds = eventsToDelete.Select(e => e.Id).ToList();
-            var dedups = await db.EventDedups.Where(d => eventIds.Contains(d.EventId)).ToListAsync(ct);
-            db.EventDedups.RemoveRange(dedups);
+        if (eventIds.Count == 0)
+            return 0;
 
-            db.Events.RemoveRange(eventsToDelete);
-            await db.SaveChangesAsync(ct);
-            _logger.LogInformation("Deleted {Count} terminal-state events older than {Days} days", eventsToDelete.Count, _eventSettings.ResolvedRetentionDays);
-        }
+        await db.EventDedups.Where(d => eventIds.Contains(d.EventId)).ExecuteDeleteAsync(ct);
+        var deleted = await db.Events.Where(e => eventIds.Contains(e.Id)).ExecuteDeleteAsync(ct);
 
-        return eventsToDelete.Count;
+        _logger.LogInformation("Deleted {Count} terminal-state events older than {Days} days", deleted, _eventSettings.ResolvedRetentionDays);
+        return deleted;
     }
 
     /// <summary>
@@ -208,21 +216,16 @@ public class DataRetentionService : BackgroundService
     {
         var cutoff = DateTime.UtcNow.AddDays(-_retentionSettings.ProcessedMailDays);
 
-        var toDelete = await db.ProcessedMails
+        var deleted = await db.ProcessedMails
             .Where(p => p.ProcessedUtc < cutoff)
             .Take(5000)
-            .ToListAsync(ct);
+            .ExecuteDeleteAsync(ct);
 
-        if (toDelete.Count > 0)
-        {
-            db.ProcessedMails.RemoveRange(toDelete);
-            await db.SaveChangesAsync(ct);
-            _logger.LogInformation("Deleted {Count} processed mail records older than {Days} days", toDelete.Count, _retentionSettings.ProcessedMailDays);
-        }
+        if (deleted > 0)
+            _logger.LogInformation("Deleted {Count} processed mail records older than {Days} days", deleted, _retentionSettings.ProcessedMailDays);
 
-        return toDelete.Count;
+        return deleted;
     }
-
     /// <summary>
     /// Deletes audit log entries older than the configured age limit and trims excess entries
     /// beyond the maximum count, keeping the most recent records.
@@ -233,17 +236,15 @@ public class DataRetentionService : BackgroundService
 
         // Delete by age
         var cutoff = DateTime.UtcNow.AddDays(-_retentionSettings.AuditEventDays);
-        var oldAudit = await db.AuditEvents
+        var byAge = await db.AuditEvents
             .Where(a => a.TimestampUtc < cutoff)
             .Take(5000)
-            .ToListAsync(ct);
+            .ExecuteDeleteAsync(ct);
 
-        if (oldAudit.Count > 0)
+        if (byAge > 0)
         {
-            db.AuditEvents.RemoveRange(oldAudit);
-            await db.SaveChangesAsync(ct);
-            deleted += oldAudit.Count;
-            _logger.LogInformation("Deleted {Count} audit events older than {Days} days", oldAudit.Count, _retentionSettings.AuditEventDays);
+            deleted += byAge;
+            _logger.LogInformation("Deleted {Count} audit events older than {Days} days", byAge, _retentionSettings.AuditEventDays);
         }
 
         // Delete by max count (keep the most recent)
@@ -252,15 +253,13 @@ public class DataRetentionService : BackgroundService
         {
             var excess = totalCount - _retentionSettings.MaxAuditEntries;
             var excessLimit = Math.Min(excess, 5000);
-            var excessAudit = await db.AuditEvents
+            var removed = await db.AuditEvents
                 .OrderBy(a => a.TimestampUtc)
                 .Take(excessLimit)
-                .ToListAsync(ct);
+                .ExecuteDeleteAsync(ct);
 
-            db.AuditEvents.RemoveRange(excessAudit);
-            await db.SaveChangesAsync(ct);
-            deleted += excessAudit.Count;
-            _logger.LogInformation("Deleted {Count} excess audit events (max {Max})", excessAudit.Count, _retentionSettings.MaxAuditEntries);
+            deleted += removed;
+            _logger.LogInformation("Deleted {Count} excess audit events (max {Max})", removed, _retentionSettings.MaxAuditEntries);
         }
 
         return deleted;
@@ -275,19 +274,15 @@ public class DataRetentionService : BackgroundService
     private async Task<int> DeleteOldDeadLettersAsync(Mail2SnmpDbContext db, CancellationToken ct)
     {
         var cutoff = DateTime.UtcNow.AddDays(-_retentionSettings.DeadLetterDays);
-        var toDelete = await db.DeadLetterEntries
+        var deleted = await db.DeadLetterEntries
             .Where(d => d.CreatedUtc < cutoff)
             .Take(1000)
-            .ToListAsync(ct);
+            .ExecuteDeleteAsync(ct);
 
-        if (toDelete.Count > 0)
-        {
-            db.DeadLetterEntries.RemoveRange(toDelete);
-            await db.SaveChangesAsync(ct);
-            _logger.LogInformation("Deleted {Count} dead letter entries older than {Days} days", toDelete.Count, _retentionSettings.DeadLetterDays);
-        }
+        if (deleted > 0)
+            _logger.LogInformation("Deleted {Count} dead letter entries older than {Days} days", deleted, _retentionSettings.DeadLetterDays);
 
-        return toDelete.Count;
+        return deleted;
     }
 
     /// <summary>
@@ -308,19 +303,15 @@ public class DataRetentionService : BackgroundService
         var cutoffMinutes = Math.Max(Math.Max(maxJobWindow, maxRuleWindow), _eventSettings.DefaultDedupWindowMinutes) * 2;
         var cutoff = DateTime.UtcNow.AddMinutes(-cutoffMinutes);
 
-        var toDelete = await db.EventDedups
+        var deleted = await db.EventDedups
             .Where(d => d.LastSeenUtc < cutoff)
             .Take(1000)
-            .ToListAsync(ct);
+            .ExecuteDeleteAsync(ct);
 
-        if (toDelete.Count > 0)
-        {
-            db.EventDedups.RemoveRange(toDelete);
-            await db.SaveChangesAsync(ct);
-            _logger.LogInformation("Deleted {Count} event dedup entries older than {Minutes} minutes", toDelete.Count, cutoffMinutes);
-        }
+        if (deleted > 0)
+            _logger.LogInformation("Deleted {Count} event dedup entries older than {Minutes} minutes", deleted, cutoffMinutes);
 
-        return toDelete.Count;
+        return deleted;
     }
 
     /// <summary>
@@ -329,18 +320,14 @@ public class DataRetentionService : BackgroundService
     private async Task<int> DeleteExpiredAuthTicketsAsync(Mail2SnmpDbContext db, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
-        var toDelete = await db.AuthTickets
+        var deleted = await db.AuthTickets
             .Where(t => t.ExpiresUtc != null && t.ExpiresUtc < now)
             .Take(1000)
-            .ToListAsync(ct);
+            .ExecuteDeleteAsync(ct);
 
-        if (toDelete.Count > 0)
-        {
-            db.AuthTickets.RemoveRange(toDelete);
-            await db.SaveChangesAsync(ct);
-            _logger.LogInformation("Deleted {Count} expired auth tickets", toDelete.Count);
-        }
+        if (deleted > 0)
+            _logger.LogInformation("Deleted {Count} expired auth tickets", deleted);
 
-        return toDelete.Count;
+        return deleted;
     }
 }

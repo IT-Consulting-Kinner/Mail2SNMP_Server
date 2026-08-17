@@ -258,6 +258,118 @@ public class ApiEndpointTests : IClassFixture<TestWebApplicationFactory>, IDispo
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    // ── API parity for the UI-only 1.1.0 features ────────────────────────
+
+    [Fact]
+    public async Task MailLog_IsReachableFromTheApi_WithFiltersAndATotal()
+    {
+        // UC-5 shipped as a UI-only page, so "why did this mail produce no trap?" could
+        // only be asked by a human with a browser.
+        var response = await _client.GetAsync("/api/v1/mail-log?disposition=NoMatch&take=10");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = (await response.Content.ReadAsStringAsync()).TrimStart();
+        Assert.StartsWith("[", body);
+        Assert.True(response.Headers.TryGetValues("X-Total-Count", out var totals));
+        Assert.True(int.TryParse(totals.Single(), out _));
+    }
+
+    [Fact]
+    public async Task MailLog_RejectsAnUnparseableDisposition()
+    {
+        var response = await _client.GetAsync("/api/v1/mail-log?disposition=NotADisposition");
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task TestSend_IsReachableFromTheApi_AndHonoursTheSeverity()
+    {
+        var job = await CreateMinimalJobAsync("Parity-TestSend");
+
+        // UC-7 parity: the operation that proves a job's whole delivery path works was
+        // previously a button and nothing else.
+        var response = await _client.PostAsync($"/api/v1/jobs/{job.Id}/test-send?severity=Critical", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var content = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Critical", content);
+        Assert.Contains("report", content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task TestSend_OnAMissingJob_Is404()
+    {
+        var response = await _client.PostAsync("/api/v1/jobs/999999/test-send", null);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task BulkJobs_DeactivatesEveryListedJob()
+    {
+        var a = await CreateMinimalJobAsync("Parity-BulkA");
+        var b = await CreateMinimalJobAsync("Parity-BulkB");
+
+        // UX-5 parity: emulating this with a loop of read-modify-write PUTs is how a
+        // concurrent edit gets clobbered.
+        var response = await _client.PostAsJsonAsync("/api/v1/jobs/bulk",
+            new { Ids = new[] { a.Id, b.Id }, Action = "Deactivate" });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        foreach (var id in new[] { a.Id, b.Id })
+        {
+            var reloaded = await _client.GetFromJsonAsync<JobResponse>($"/api/v1/jobs/{id}");
+            Assert.False(reloaded!.IsActive);
+        }
+    }
+
+    [Fact]
+    public async Task BulkJobs_ReportsPerIdFailuresInsteadOfFailingTheBatch()
+    {
+        var real = await CreateMinimalJobAsync("Parity-BulkPartial");
+
+        var response = await _client.PostAsJsonAsync("/api/v1/jobs/bulk",
+            new { Ids = new[] { real.Id, 999999 }, Action = "Deactivate" });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var content = await response.Content.ReadAsStringAsync();
+        // The caller asked for several independent operations, not a transaction.
+        Assert.Contains("999999", content);
+        Assert.Contains("succeeded", content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task BulkJobs_RejectsAnEmptyIdList()
+    {
+        var response = await _client.PostAsJsonAsync("/api/v1/jobs/bulk",
+            new { Ids = Array.Empty<int>(), Action = "Deactivate" });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    /// <summary>Creates a mailbox, rule and job so parity tests have something to act on.</summary>
+    private async Task<JobResponse> CreateMinimalJobAsync(string name)
+    {
+        var mailbox = await (await _client.PostAsJsonAsync("/api/v1/mailboxes", new
+        {
+            Name = $"{name}-MB", Host = "imap.test.invalid", Port = 993, UseSsl = true,
+            Username = "u", EncryptedPassword = "enc", Folder = "INBOX"
+        })).Content.ReadFromJsonAsync<MailboxResponse>();
+
+        // The rules endpoint returns the entity itself rather than a response DTO.
+        var rule = await (await _client.PostAsJsonAsync("/api/v1/rules", new
+        {
+            Name = $"{name}-Rule", Field = RuleFieldType.Subject,
+            MatchType = RuleMatchType.Contains, Criteria = "ALERT", Severity = Severity.Error
+        })).Content.ReadFromJsonAsync<Rule>();
+
+        var created = await _client.PostAsJsonAsync("/api/v1/jobs", new
+        {
+            Name = name, MailboxId = mailbox!.Id, RuleId = rule!.Id,
+            MaxEventsPerHour = 100, MaxActiveEvents = 100, IsActive = true,
+            SnmpTargetIds = Array.Empty<int>(), WebhookTargetIds = Array.Empty<int>()
+        });
+        return (await created.Content.ReadFromJsonAsync<JobResponse>())!;
+    }
+
     // ── Worker Endpoints ─────────────────────────────────────────────────
 
     [Fact]
