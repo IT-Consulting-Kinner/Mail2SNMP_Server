@@ -296,35 +296,22 @@ public class DeadLetterRetryService : BackgroundService
                     continue;
                 }
 
-                // Retry the webhook delivery — dispose content + response explicitly
-                // to release sockets and buffers immediately.
-                using var content = new StringContent(entry.PayloadJson, Encoding.UTF8, "application/json");
+                // H-7: the request is assembled by the SAME shared builder the
+                // first-attempt path uses (V6 signature AND the target's custom
+                // headers). The previous hand-rolled copy re-derived the signature but
+                // dropped the custom headers, so a receiver that authenticates by
+                // header rejected every retry — silently, and only for redeliveries.
+                // Dispose content + response explicitly to release sockets promptly.
+                using var content = Mail2SNMP.Infrastructure.Channels.WebhookRequestBuilder.BuildContent(
+                    entry.WebhookTarget, entry.PayloadJson, encryptor, license, _logger, out var signingFailed);
 
-                // V6: re-apply the HMAC-SHA256 signature for Enterprise targets,
-                // matching WebhookNotificationChannel.SendWebhookAsync so signed
-                // first-attempt and signed-retry are byte-for-byte consistent.
-                if (license.IsEnterprise() && !string.IsNullOrEmpty(entry.WebhookTarget.EncryptedSecret))
+                if (signingFailed)
                 {
-                    try
-                    {
-                        var secret = encryptor.Decrypt(entry.WebhookTarget.EncryptedSecret);
-                        var bodyBytes = Encoding.UTF8.GetBytes(entry.PayloadJson);
-                        var hmac = System.Security.Cryptography.HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), bodyBytes);
-                        content.Headers.Add("X-Mail2SNMP-Signature", "sha256=" + Convert.ToHexString(hmac).ToLowerInvariant());
-                        content.Headers.Add("X-Mail2SNMP-Timestamp", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString());
-                    }
-                    catch (Exception sigEx)
-                    {
-                        // A decrypt failure (master-key drift) must not silently send an
-                        // unsigned payload to a receiver that expects a signature.
-                        _logger.LogError(sigEx,
-                            "DeadLetter {Id}: failed to sign retry for target {Name}. Skipping this attempt.",
-                            entry.Id, entry.WebhookTarget.Name);
-                        entry.Status = DeadLetterStatus.Pending;
-                        entry.LockedUntilUtc = null;
-                        entry.LockedByInstanceId = null;
-                        continue;
-                    }
+                    // Master-key drift: never downgrade a signed delivery to unsigned.
+                    entry.Status = DeadLetterStatus.Pending;
+                    entry.LockedUntilUtc = null;
+                    entry.LockedByInstanceId = null;
+                    continue;
                 }
 
                 Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.DeadLetterRetried.Inc();

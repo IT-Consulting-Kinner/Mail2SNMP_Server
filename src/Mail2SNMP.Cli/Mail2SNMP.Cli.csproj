@@ -5,6 +5,14 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- H-6: every document (README, installation, troubleshooting, the upgrade
+         instructions and the CLI's own usage banner) calls the tool `mail2snmp`.
+         Name the produced executable accordingly instead of Mail2SNMP.Cli.exe so
+         the documented commands work verbatim. NOTE: the release pipeline's
+         code-signing filter was widened to a case-insensitive mail2snmp prefix so
+         this renamed executable is still signed. -->
+    <AssemblyName>mail2snmp</AssemblyName>
+    <RootNamespace>Mail2SNMP.Cli</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

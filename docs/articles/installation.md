@@ -16,19 +16,54 @@ The installer:
 3. Creates a `logs` directory
 4. Registers and starts the **Mail2SNMP** Windows Service (auto-start, LocalSystem)
 
+## What the installer contains
+
+| Path under `C:\Program Files\Mail2SNMP\` | Component |
+|------------------------------------------|-----------|
+| `Mail2SNMP.Worker.exe`                   | The polling service, registered as the `Mail2SNMP` Windows service and started automatically. |
+| `cli\mail2snmp.exe`                      | Command-line tool — database migrations, first admin, diagnostics, backups. |
+| `ui\Mail2SNMP.Web.exe`                   | Management web UI (Blazor Server), including the first-run `/setup` wizard. |
+| `mib\Mail2SNMP-MIB.mib`                  | MIB file for your monitoring system. |
+
 ## Post-Installation
 
-### 1. Configure the service
+### 1. Configure the database and settings
 
 Edit `C:\Program Files\Mail2SNMP\appsettings.json` to set your database connection and other settings. See [Configuration Reference](configuration.md).
 
-### 2. Verify the service
+### 2. Create the database schema
+
+```powershell
+cd "C:\Program Files\Mail2SNMP\cli"
+.\mail2snmp.exe db migrate
+```
+
+Schema creation and upgrades are performed exclusively by this command — the
+services never create or migrate the schema themselves, and they refuse to start
+against a database whose schema is missing.
+
+### 3. Start the management UI and create the first admin
+
+```powershell
+cd "C:\Program Files\Mail2SNMP\ui"
+.\Mail2SNMP.Web.exe
+```
+
+Then open the printed URL and complete the `/setup` wizard to create the first
+administrator account. From there, add mailboxes, rules, targets and jobs as
+described in [Examples](examples.md).
+
+> To run the UI as a service as well, register it with
+> `New-Service -Name Mail2SNMP-Web -BinaryPathName "C:\Program Files\Mail2SNMP\ui\Mail2SNMP.Web.exe"`,
+> or host it behind IIS/nginx.
+
+### 4. Verify the worker service
 
 ```powershell
 Get-Service Mail2SNMP
 ```
 
-### 3. Check logs
+### 5. Check logs
 
 Logs are written to `C:\Program Files\Mail2SNMP\logs\mail2snmp-worker-*.log`.
 
@@ -38,13 +73,12 @@ After installing a newer MSI over an existing deployment, apply any pending
 database migrations once before starting the services:
 
 ```powershell
-mail2snmp db migrate
+cd "C:\Program Files\Mail2SNMP\cli"
+.\mail2snmp.exe db migrate
 ```
 
-`db status` shows the connection state and applied migrations. Release 1.1.0
-ships four migrations (severity routing, mail-log disposition, SNMP
-dead-letter, events index); the upgrade is otherwise drop-in — no configuration
-changes are required.
+`.\mail2snmp.exe db status` shows the connection state and applied migrations.
+The upgrade is otherwise drop-in — no configuration changes are required.
 
 ## Uninstall
 

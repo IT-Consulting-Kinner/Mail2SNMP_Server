@@ -79,6 +79,41 @@ jobs:
           -p:FileVersion=${{ steps.version.outputs.version_four }}
           -p:InformationalVersion=${{ steps.version.outputs.version }}
 
+      # H-6: the MSI used to ship the Worker alone, so a clean install had a running
+      # service but no way to configure it: no management UI, no /setup wizard for the
+      # first admin, and no CLI to run the `mail2snmp db migrate` that the upgrade
+      # instructions mandate. Every documented workflow was unreachable without a
+      # source build. UI and CLI are now published into subfolders of the same payload
+      # root, so the installer's recursive Files include picks them up and the signing
+      # step (files-folder-recurse: true) covers them.
+      - name: Publish management UI
+        run: >
+          dotnet publish src/Mail2SNMP.Web/Mail2SNMP.Web.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained false
+          --output ./publish/worker/ui
+          -p:DebugType=none
+          -p:DebugSymbols=false
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:AssemblyVersion=${{ steps.version.outputs.version_four }}
+          -p:FileVersion=${{ steps.version.outputs.version_four }}
+          -p:InformationalVersion=${{ steps.version.outputs.version }}
+
+      - name: Publish CLI
+        run: >
+          dotnet publish src/Mail2SNMP.Cli/Mail2SNMP.Cli.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained false
+          --output ./publish/worker/cli
+          -p:DebugType=none
+          -p:DebugSymbols=false
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:AssemblyVersion=${{ steps.version.outputs.version_four }}
+          -p:FileVersion=${{ steps.version.outputs.version_four }}
+          -p:InformationalVersion=${{ steps.version.outputs.version }}
+
       - name: Install WiX Toolset
         run: dotnet tool install --global wix
 
@@ -115,10 +150,12 @@ jobs:
           files-folder-filter: exe,dll
           files-folder-recurse: true
           # Exclude the hundreds of shared third-party DLLs we don't own. The
-          # regex only matches files whose name starts with "Mail2SNMP." so
-          # Microsoft.*, Serilog.*, MailKit.* etc. stay untouched (they're
-          # already signed by their original publisher).
-          files-folder-filter-regex: '^Mail2SNMP\.'
+          # regex only matches our own assemblies so Microsoft.*, Serilog.*,
+          # MailKit.* etc. stay untouched (they're already signed by their
+          # original publisher). H-6: the character classes make the match
+          # case-insensitive so the renamed CLI executable (mail2snmp.exe) is
+          # signed too — '^Mail2SNMP\.' would have skipped it silently.
+          files-folder-filter-regex: '^[Mm]ail2[Ss][Nn][Mm][Pp]'
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256

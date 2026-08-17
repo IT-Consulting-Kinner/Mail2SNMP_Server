@@ -140,40 +140,18 @@ public class WebhookNotificationChannel : INotificationChannel
     {
         var payload = _templateEngine.BuildPayload(context, context.WebhookTemplate ?? target.PayloadTemplate);
         var json = JsonSerializer.Serialize(payload);
+
+        // H-7: signature + custom headers come from the shared builder, so the
+        // first-attempt and dead-letter-retry paths cannot drift apart.
         // N2: dispose StringContent explicitly to release its internal buffer.
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var content = WebhookRequestBuilder.BuildContent(
+            target, json, _encryptor, _license, _logger, out var signingFailed);
 
-        // Add HMAC signature for Enterprise
-        if (_license.IsEnterprise() && !string.IsNullOrEmpty(target.EncryptedSecret))
+        if (signingFailed)
         {
-            var secret = _encryptor.Decrypt(target.EncryptedSecret);
-            var bodyBytes = Encoding.UTF8.GetBytes(json);
-            var hmac = HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), bodyBytes);
-            var signature = "sha256=" + Convert.ToHexString(hmac).ToLowerInvariant();
-            content.Headers.Add("X-Mail2SNMP-Signature", signature);
-            content.Headers.Add("X-Mail2SNMP-Timestamp", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString());
-        }
-
-        // Add custom headers
-        if (!string.IsNullOrEmpty(target.Headers))
-        {
-            try
-            {
-                var headers = JsonSerializer.Deserialize<Dictionary<string, string>>(target.Headers);
-                if (headers != null)
-                {
-                    foreach (var (key, value) in headers)
-                        content.Headers.TryAddWithoutValidation(key, value);
-                }
-            }
-            catch (JsonException ex)
-            {
-                // N4: log the malformed-headers error so the operator notices
-                // misconfigured custom headers instead of silently dropping them.
-                _logger.LogWarning(ex,
-                    "Invalid headers JSON for webhook target {Name}. The default headers will be used.",
-                    target.Name);
-            }
+            throw new InvalidOperationException(
+                $"Webhook target '{target.Name}' expects a signed payload but the signing secret " +
+                "could not be decrypted (master-key mismatch). Refusing to send unsigned.");
         }
 
         // R1: SSRF guard. Refuse to POST to loopback / link-local / RFC1918 /

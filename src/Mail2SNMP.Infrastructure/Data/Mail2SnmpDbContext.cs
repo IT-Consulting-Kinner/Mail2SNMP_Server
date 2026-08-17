@@ -72,8 +72,8 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
 
     /// <summary>
     /// C-1: <c>true</c> when the context runs on SQLite, which has no server-generated
-    /// row-version concept. Cached because <see cref="OnModelCreating"/> and
-    /// <see cref="SaveChangesAsync(CancellationToken)"/> both need it on hot paths.
+    /// row-version concept. Consulted by <see cref="OnModelCreating"/> and by the
+    /// <c>SaveChanges</c> overrides below.
     /// </summary>
     private bool IsSqlite =>
         Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;

@@ -57,6 +57,15 @@ public static class AuthSetup
     }
 
     /// <summary>
+    /// Name of the <see cref="Microsoft.AspNetCore.Authentication.AuthenticationProperties"/>
+    /// item stamped at sign-in with the session's true start time. Sliding renewal
+    /// rewrites <c>IssuedUtc</c> on every refresh, so <c>IssuedUtc</c> alone can never
+    /// trip an absolute-expiry check on an actively-used session; custom property
+    /// items survive renewal untouched.
+    /// </summary>
+    private const string SessionStartKey = "m2s.session_start";
+
+    /// <summary>
     /// SEC-3 / V2: rejects the cookie principal when the backing user has been
     /// deleted or deactivated (<c>IsActive == false</c>) since the cookie was
     /// issued, forcing a fresh sign-in. Attach from every host's
@@ -70,15 +79,11 @@ public static class AuthSetup
     /// every request; the <c>UserManager</c> lookup is served from the request
     /// scope, so the cost is one indexed PK query.
     /// </remarks>
-    /// <summary>
-    /// Name of the <see cref="Microsoft.AspNetCore.Authentication.AuthenticationProperties"/>
-    /// item stamped at sign-in with the session's true start time. Sliding renewal
-    /// rewrites <c>IssuedUtc</c> on every refresh, so <c>IssuedUtc</c> alone can never
-    /// trip an absolute-expiry check on an actively-used session; custom property
-    /// items survive renewal untouched.
-    /// </summary>
-    private const string SessionStartKey = "m2s.session_start";
-
+    /// <param name="options">The cookie options to attach the validation events to.</param>
+    /// <param name="absoluteExpiry">
+    /// Optional hard ceiling measured from sign-in. When exceeded the principal is
+    /// rejected regardless of activity.
+    /// </param>
     public static void AttachDeactivatedUserRejection(CookieAuthenticationOptions options, TimeSpan? absoluteExpiry = null)
     {
         // AR-5 (verified fix): stamp the immutable session start at sign-in.
