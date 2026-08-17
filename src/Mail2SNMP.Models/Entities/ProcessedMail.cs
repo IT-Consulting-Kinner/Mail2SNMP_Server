@@ -31,4 +31,22 @@ public class ProcessedMail
 
     /// <summary>UTC time this server finished processing the email. Defaults to <see cref="DateTime.UtcNow"/> at construction.</summary>
     public DateTime ProcessedUtc { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// UC-5: the processing outcome of this mail (matched/no-match/deduplicated/
+    /// maintenance-suppressed) so "why was I (not) notified for mail X?" is
+    /// answerable from the product. <see cref="Enums.MailDisposition.Unknown"/>
+    /// on legacy rows created before dispositions were recorded.
+    /// </summary>
+    public Enums.MailDisposition Disposition { get; set; } = Enums.MailDisposition.Unknown;
+
+    /// <summary>
+    /// UC-5: the <see cref="Event"/> this mail produced or was collapsed into
+    /// (for <see cref="Enums.MailDisposition.EventCreated"/>, <see cref="Enums.MailDisposition.Deduplicated"/>
+    /// and <see cref="Enums.MailDisposition.MaintenanceSuppressed"/>); <c>null</c>
+    /// when no event resulted. Intentionally NOT a foreign key: events are purged
+    /// by retention on a different schedule than processed-mail rows, and the
+    /// trace record must survive the event's deletion.
+    /// </summary>
+    public long? EventId { get; set; }
 }

@@ -422,7 +422,10 @@ public class MailPollingService : BackgroundService
                     // catches the UNIQUE-constraint exception and skips the email
                     // entirely. The claim key falls back to a synthetic value when
                     // Message-ID is missing (see above).
-                    dbContext.ProcessedMails.Add(new ProcessedMail
+                    // UC-5: the claim row doubles as the per-mail disposition record.
+                    // Keep the tracked instance so the outcome can be stamped on it
+                    // after rule evaluation and event creation complete.
+                    var claim = new ProcessedMail
                     {
                         MessageId = claimKey,
                         MailboxId = mailbox.Id,
@@ -430,7 +433,8 @@ public class MailPollingService : BackgroundService
                         Subject = subject,
                         ReceivedUtc = message.Date.UtcDateTime,
                         ProcessedUtc = DateTime.UtcNow
-                    });
+                    };
+                    dbContext.ProcessedMails.Add(claim);
                     try
                     {
                         await dbContext.SaveChangesAsync(ct);
@@ -490,6 +494,14 @@ public class MailPollingService : BackgroundService
                             "Event {EventId} created for Job {JobId} (Rule: {RuleName}, Severity: {Severity})",
                             evt.Id, job.Id, rule.Name, evt.Severity);
 
+                        // UC-5: stamp the disposition. HitCount > 1 means EventService
+                        // collapsed this mail into an existing event (dedup) instead
+                        // of creating a new one.
+                        claim.EventId = evt.Id;
+                        claim.Disposition = inMaintenance ? MailDisposition.MaintenanceSuppressed
+                            : evt.HitCount > 1 ? MailDisposition.Deduplicated
+                            : MailDisposition.EventCreated;
+
                         if (inMaintenance)
                         {
                             // During maintenance: suppress the event, skip notifications
@@ -505,9 +517,16 @@ public class MailPollingService : BackgroundService
                                 notificationChannels, dedupCache, eventService, ct);
                         }
                     }
+                    else
+                    {
+                        // UC-5: record the no-match outcome so a "why no alarm for
+                        // mail X?" question is answerable from the Mail Log.
+                        claim.Disposition = MailDisposition.NoMatch;
+                    }
 
-                    // N3: ProcessedMails was already inserted as the atomic claim before
-                    // processing started. Nothing to do here on the success path.
+                    // UC-5: persist the disposition stamped above (the claim row was
+                    // inserted before processing; this updates it with the outcome).
+                    await dbContext.SaveChangesAsync(ct);
 
                     // Mark message as seen after processing
                     await folder.AddFlagsAsync(uid, MessageFlags.Seen, true, ct);
