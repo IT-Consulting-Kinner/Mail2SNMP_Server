@@ -94,11 +94,18 @@ public static class WorkerDependencyInjection
         // - DeadLetterRetry honors the webhook private-target opt-out.
         // - UpdateCheck never permits private targets: the update feed is a
         //   public vendor endpoint, so allowPrivate is hard-false.
-        var allowPrivateWebhook = configuration.GetValue<bool>("Security:AllowPrivateWebhookTargets");
+        // AR-6: resolved from the validated SecuritySettings rather than a raw
+        // configuration read, so this handler cannot disagree with what the channels use.
         services.AddHttpClient("DeadLetterRetry", c => c.Timeout = TimeSpan.FromSeconds(30))
-            .ConfigurePrimaryHttpMessageHandler(() => Mail2SNMP.Infrastructure.Security.SsrfGuard.CreateGuardedHandler(allowPrivateWebhook));
+            .ConfigurePrimaryHttpMessageHandler(sp => Mail2SNMP.Infrastructure.Security.SsrfGuard.CreateGuardedHandler(
+                sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Mail2SNMP.Models.Configuration.SecuritySettings>>()
+                  .Value.AllowPrivateWebhookTargets));
         services.AddHttpClient("UpdateCheck", c => c.Timeout = TimeSpan.FromSeconds(15))
             .ConfigurePrimaryHttpMessageHandler(() => Mail2SNMP.Infrastructure.Security.SsrfGuard.CreateGuardedHandler(allowPrivate: false));
+
+        // Per-mail processing. Scoped because it holds the scoped DbContext and
+        // IEventService; MailPollingService resolves one per work item from its own scope.
+        services.AddScoped<MailProcessingPipeline>();
 
         // Hosted services
         services.AddHostedService<HeartbeatService>();

@@ -24,4 +24,24 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!--
+    Web is the all-in-one host: it references both Mail2SNMP.Api and Mail2SNMP.Worker,
+    so their appsettings*.json flow into this project's publish set and collide with
+    Web's own (NETSDK1152). Suppressing the error instead of resolving it would let an
+    arbitrary one of the three win, which for a configuration file means the shipped
+    settings depend on build order.
+
+    Web's own configuration is the one the all-in-one host reads at runtime, so the
+    copies contributed by the referenced projects are dropped here. The standalone Api
+    and Worker publishes are produced from their own projects and are unaffected.
+  -->
+  <Target Name="DropReferencedHostAppSettings" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish
+        Remove="@(ResolvedFileToPublish)"
+        Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(RelativePath)', '^appsettings.*\.json$'))
+                   AND !$([System.String]::Copy('%(Identity)').Contains('Mail2SNMP.Web'))" />
+    </ItemGroup>
+  </Target>
+
 </Project>
