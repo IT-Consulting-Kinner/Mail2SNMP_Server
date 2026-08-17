@@ -71,6 +71,86 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
 
     /// <summary>
+    /// C-1: <c>true</c> when the context runs on SQLite, which has no server-generated
+    /// row-version concept. Cached because <see cref="OnModelCreating"/> and
+    /// <see cref="SaveChangesAsync(CancellationToken)"/> both need it on hot paths.
+    /// </summary>
+    private bool IsSqlite =>
+        Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    /// <summary>
+    /// C-1: configures the optimistic-concurrency token for an entity in a
+    /// provider-appropriate way.
+    /// </summary>
+    /// <remarks>
+    /// On SQL Server the column is a native <c>rowversion</c>: the server maintains it and
+    /// EF must not send a value. On SQLite there is no such mechanism —
+    /// <c>IsRowVersion()</c> nevertheless marks the property store-generated
+    /// (<c>ValueGenerated.OnAddOrUpdate</c>, whose <c>BeforeSaveBehavior</c> is
+    /// <c>Ignore</c>), so EF omitted the column from every INSERT while the migration
+    /// declares it <c>NOT NULL</c> without a default. The result was
+    /// <c>SQLite Error 19: NOT NULL constraint failed</c> on the first write of every
+    /// entity carrying a row version — i.e. the product could not persist any
+    /// configuration at all on its default provider. On SQLite the token is therefore
+    /// client-generated: still a concurrency token (so a concurrent overwrite is
+    /// detected), but written by <see cref="StampRowVersions"/> on each save.
+    /// </remarks>
+    private void ConfigureRowVersion<TEntity>(
+        Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<TEntity> e,
+        System.Linq.Expressions.Expression<Func<TEntity, byte[]>> property)
+        where TEntity : class
+    {
+        if (IsSqlite)
+            e.Property(property).IsConcurrencyToken().ValueGeneratedNever();
+        else
+            e.Property(property).IsRowVersion();
+    }
+
+    /// <summary>
+    /// C-1: assigns a fresh row-version value to every added or modified entity that
+    /// carries a client-generated concurrency token (SQLite only). On SQL Server the
+    /// database generates the value and this method does nothing.
+    /// </summary>
+    /// <remarks>
+    /// Implemented on the context rather than as an interceptor so that it applies no
+    /// matter how the context was constructed — including the direct
+    /// <c>new Mail2SnmpDbContext(options)</c> used by tests and design-time tooling,
+    /// which never sees DI-registered interceptors.
+    /// </remarks>
+    private void StampRowVersions()
+    {
+        if (!IsSqlite) return;
+
+        foreach (var entry in ChangeTracker.Entries())
+        {
+            if (entry.State is not (EntityState.Added or EntityState.Modified)) continue;
+
+            var rowVersion = entry.Metadata.FindProperty("RowVersion");
+            if (rowVersion is null || rowVersion.ClrType != typeof(byte[])) continue;
+
+            // A new value on every write is what makes the token detect concurrent
+            // overwrites: a second writer's UPDATE ... WHERE RowVersion = <old> matches
+            // zero rows and EF raises DbUpdateConcurrencyException, exactly as with a
+            // server-generated rowversion.
+            entry.Property(rowVersion.Name).CurrentValue = Guid.NewGuid().ToByteArray();
+        }
+    }
+
+    /// <inheritdoc />
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        StampRowVersions();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    /// <inheritdoc />
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        StampRowVersions();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>
     /// Configures entity mappings, column constraints, indexes, and relationships for all domain entities.
     /// </summary>
     protected override void OnModelCreating(ModelBuilder builder)
@@ -84,7 +164,7 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
             e.Property(x => x.Host).HasMaxLength(500).IsRequired();
             e.Property(x => x.Username).HasMaxLength(500);
             e.Property(x => x.EncryptedPassword).HasMaxLength(2000);
-            e.Property(x => x.RowVersion).IsRowVersion();
+            ConfigureRowVersion(e, x => x.RowVersion);
         });
 
         builder.Entity<Rule>(e =>
@@ -92,7 +172,7 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(200).IsRequired();
             e.Property(x => x.Criteria).HasMaxLength(2000).IsRequired();
-            e.Property(x => x.RowVersion).IsRowVersion();
+            ConfigureRowVersion(e, x => x.RowVersion);
         });
 
         // G6: API keys for header-based REST authentication
@@ -115,7 +195,7 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
             e.HasOne(x => x.Mailbox).WithMany(m => m.Jobs).HasForeignKey(x => x.MailboxId);
             e.HasOne(x => x.Rule).WithMany(r => r.Jobs).HasForeignKey(x => x.RuleId);
             e.Ignore(x => x.Channels); // Computed [NotMapped] property — derived from join tables
-            e.Property(x => x.RowVersion).IsRowVersion();
+            ConfigureRowVersion(e, x => x.RowVersion);
         });
 
         // Many-to-many: Job ↔ SnmpTarget (per-job target assignment)
@@ -143,7 +223,7 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(200);
             e.HasOne(x => x.Job).WithMany(j => j.Schedules).HasForeignKey(x => x.JobId);
-            e.Property(x => x.RowVersion).IsRowVersion();
+            ConfigureRowVersion(e, x => x.RowVersion);
         });
 
         builder.Entity<SnmpTarget>(e =>
@@ -157,7 +237,7 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
             e.Property(x => x.EncryptedPrivPassword).HasMaxLength(2000);
             e.Property(x => x.EngineId).HasMaxLength(200);
             e.Property(x => x.EnterpriseTrapOid).HasMaxLength(500);
-            e.Property(x => x.RowVersion).IsRowVersion();
+            ConfigureRowVersion(e, x => x.RowVersion);
         });
 
         builder.Entity<WebhookTarget>(e =>
@@ -166,7 +246,7 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
             e.Property(x => x.Name).HasMaxLength(200).IsRequired();
             e.Property(x => x.Url).HasMaxLength(2000).IsRequired();
             e.Property(x => x.EncryptedSecret).HasMaxLength(2000);
-            e.Property(x => x.RowVersion).IsRowVersion();
+            ConfigureRowVersion(e, x => x.RowVersion);
         });
 
         builder.Entity<Event>(e =>
@@ -182,7 +262,7 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
             // leading column is JobId, forcing a full scan + sort. This index makes the
             // state-filtered, newest-first Take(500) query seekable.
             e.HasIndex(x => new { x.State, x.CreatedUtc });
-            e.Property(x => x.RowVersion).IsRowVersion();
+            ConfigureRowVersion(e, x => x.RowVersion);
         });
 
         builder.Entity<EventDedup>(e =>
@@ -226,7 +306,7 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
             e.HasOne(x => x.Event).WithMany().HasForeignKey(x => x.EventId);
             e.Property(x => x.LockedByInstanceId).HasMaxLength(100);
             e.HasIndex(x => new { x.Status, x.LockedUntilUtc });
-            e.Property(x => x.RowVersion).IsRowVersion();
+            ConfigureRowVersion(e, x => x.RowVersion);
         });
 
         builder.Entity<ProcessedMail>(e =>

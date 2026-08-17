@@ -15,7 +15,6 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             migrationBuilder.AddColumn<int>(
                 name: "Disposition",
                 table: "ProcessedMails",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
@@ -24,7 +23,6 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             migrationBuilder.AddColumn<long>(
                 name: "EventId",
                 table: "ProcessedMails",
-                type: "INTEGER",
                 nullable: true);
         }
 

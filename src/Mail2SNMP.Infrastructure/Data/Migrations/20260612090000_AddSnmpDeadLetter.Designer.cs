@@ -22,45 +22,35 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.ApiKey", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
                     b.Property<string>("CreatedBy")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("CreatedUtc");
 
-                    b.Property<DateTime?>("ExpiresUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime?>("ExpiresUtc");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("IsActive");
 
                     b.Property<string>("KeyHash")
                         .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(128);
 
                     b.Property<string>("KeyPrefix")
                         .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(16);
 
-                    b.Property<DateTime?>("LastUsedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime?>("LastUsedUtc");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
                     b.Property<string>("Scopes")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
                     b.HasKey("Id");
 
@@ -74,68 +64,49 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Mail2SNMP.Models.Entities.AppUser", b =>
                 {
-                    b.Property<string>("Id")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("Id");
 
-                    b.Property<int>("AccessFailedCount")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("AccessFailedCount");
 
                     b.Property<string>("ConcurrencyStamp")
-                        .IsConcurrencyToken()
-                        .HasColumnType("TEXT");
+                        .IsConcurrencyToken();
 
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("CreatedUtc");
 
                     b.Property<string>("DisplayName")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                        .IsRequired();
 
                     b.Property<string>("Email")
-                        .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(256);
 
-                    b.Property<bool>("EmailConfirmed")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("EmailConfirmed");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("IsActive");
 
-                    b.Property<DateTime?>("LastLoginUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime?>("LastLoginUtc");
 
-                    b.Property<bool>("LockoutEnabled")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("LockoutEnabled");
 
-                    b.Property<DateTimeOffset?>("LockoutEnd")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTimeOffset?>("LockoutEnd");
 
                     b.Property<string>("NormalizedEmail")
-                        .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(256);
 
                     b.Property<string>("NormalizedUserName")
-                        .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(256);
 
-                    b.Property<string>("PasswordHash")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("PasswordHash");
 
-                    b.Property<string>("PhoneNumber")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("PhoneNumber");
 
-                    b.Property<bool>("PhoneNumberConfirmed")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("PhoneNumberConfirmed");
 
-                    b.Property<string>("SecurityStamp")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("SecurityStamp");
 
-                    b.Property<bool>("TwoFactorEnabled")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("TwoFactorEnabled");
 
                     b.Property<string>("UserName")
-                        .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(256);
 
                     b.HasKey("Id");
 
@@ -152,52 +123,39 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.AuditEvent", b =>
                 {
                     b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
                     b.Property<string>("Action")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
                     b.Property<string>("ActorId")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
-                    b.Property<int>("ActorType")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("ActorType");
 
                     b.Property<string>("CorrelationId")
-                        .HasMaxLength(100)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(100);
 
                     b.Property<string>("Details")
-                        .HasMaxLength(4096)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(4096);
 
                     b.Property<string>("IpAddress")
-                        .HasMaxLength(50)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(50);
 
-                    b.Property<int>("Result")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("Result");
 
-                    b.Property<int>("SchemaVersion")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("SchemaVersion");
 
-                    b.Property<string>("TargetId")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("TargetId");
 
-                    b.Property<string>("TargetType")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("TargetType");
 
-                    b.Property<DateTime>("TimestampUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("TimestampUtc");
 
                     b.Property<string>("UserAgent")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(500);
 
                     b.HasKey("Id");
 
@@ -211,18 +169,14 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.AuthTicket", b =>
                 {
                     b.Property<string>("Id")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
-                    b.Property<DateTime?>("ExpiresUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime?>("ExpiresUtc");
 
-                    b.Property<DateTime?>("LastActivity")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime?>("LastActivity");
 
                     b.Property<byte[]>("Value")
-                        .IsRequired()
-                        .HasColumnType("BLOB");
+                        .IsRequired();
 
                     b.HasKey("Id");
 
@@ -234,49 +188,36 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.DeadLetterEntry", b =>
                 {
                     b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
-                    b.Property<int>("AttemptCount")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("AttemptCount");
 
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("CreatedUtc");
 
-                    b.Property<long>("EventId")
-                        .HasColumnType("INTEGER");
+                    b.Property<long>("EventId");
 
-                    b.Property<string>("LastError")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("LastError");
 
                     b.Property<string>("LockedByInstanceId")
-                        .HasMaxLength(100)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(100);
 
-                    b.Property<DateTime?>("LockedUntilUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime?>("LockedUntilUtc");
 
-                    b.Property<DateTime?>("NextRetryUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime?>("NextRetryUtc");
 
                     b.Property<string>("PayloadJson")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                        .IsRequired();
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("BLOB");
+                        .ValueGeneratedOnAddOrUpdate();
 
-                    b.Property<int?>("SnmpTargetId")
-                        .HasColumnType("INTEGER");
+                    b.Property<int?>("SnmpTargetId");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("Status");
 
-                    b.Property<int?>("WebhookTargetId")
-                        .HasColumnType("INTEGER");
+                    b.Property<int?>("WebhookTargetId");
 
                     b.HasKey("Id");
 
@@ -294,61 +235,44 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.Event", b =>
                 {
                     b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
-                    b.Property<string>("AcknowledgedBy")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("AcknowledgedBy");
 
-                    b.Property<DateTime?>("AcknowledgedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime?>("AcknowledgedUtc");
 
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("CreatedUtc");
 
-                    b.Property<int>("HitCount")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("HitCount");
 
-                    b.Property<int>("JobId")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("JobId");
 
-                    b.Property<DateTime?>("LastStateChangeUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime?>("LastStateChangeUtc");
 
                     b.Property<string>("MailFrom")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(500);
 
-                    b.Property<string>("MessageId")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("MessageId");
 
-                    b.Property<DateTime?>("NotifiedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime?>("NotifiedUtc");
 
-                    b.Property<string>("ResolvedBy")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("ResolvedBy");
 
-                    b.Property<DateTime?>("ResolvedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime?>("ResolvedUtc");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("BLOB");
+                        .ValueGeneratedOnAddOrUpdate();
 
-                    b.Property<string>("RuleName")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("RuleName");
 
-                    b.Property<int>("Severity")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("Severity");
 
-                    b.Property<int>("State")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("State");
 
                     b.Property<string>("Subject")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(500);
 
                     b.HasKey("Id");
 
@@ -362,26 +286,20 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.EventDedup", b =>
                 {
                     b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
                     b.Property<string>("DedupKeyHash")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT")
                         .IsFixedLength();
 
-                    b.Property<long>("EventId")
-                        .HasColumnType("INTEGER");
+                    b.Property<long>("EventId");
 
-                    b.Property<DateTime>("FirstSeenUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("FirstSeenUtc");
 
-                    b.Property<int>("JobId")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("JobId");
 
-                    b.Property<DateTime>("LastSeenUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("LastSeenUtc");
 
                     b.HasKey("Id");
 
@@ -400,49 +318,36 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.Job", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("CreatedUtc");
 
-                    b.Property<int>("DedupWindowMinutes")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("DedupWindowMinutes");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("IsActive");
 
-                    b.Property<int>("MailboxId")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("MailboxId");
 
-                    b.Property<int>("MaxActiveEvents")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("MaxActiveEvents");
 
-                    b.Property<int>("MaxEventsPerHour")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("MaxEventsPerHour");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
-                    b.Property<string>("OidMapping")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("OidMapping");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("BLOB");
+                        .ValueGeneratedOnAddOrUpdate();
 
-                    b.Property<int>("RuleId")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("RuleId");
 
-                    b.Property<string>("TrapTemplate")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("TrapTemplate");
 
-                    b.Property<string>("WebhookTemplate")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("WebhookTemplate");
 
                     b.HasKey("Id");
 
@@ -455,11 +360,9 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Mail2SNMP.Models.Entities.JobSnmpTarget", b =>
                 {
-                    b.Property<int>("JobId")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("JobId");
 
-                    b.Property<int>("SnmpTargetId")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("SnmpTargetId");
 
                     b.HasKey("JobId", "SnmpTargetId");
 
@@ -470,11 +373,9 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Mail2SNMP.Models.Entities.JobWebhookTarget", b =>
                 {
-                    b.Property<int>("JobId")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("JobId");
 
-                    b.Property<int>("WebhookTargetId")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("WebhookTargetId");
 
                     b.HasKey("JobId", "WebhookTargetId");
 
@@ -486,57 +387,44 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.Mailbox", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("CreatedUtc");
 
                     b.Property<string>("EncryptedPassword")
                         .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(2000);
 
                     b.Property<string>("Folder")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(500);
 
                     b.Property<string>("Host")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(500);
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("IsActive");
 
-                    b.Property<DateTime?>("LastCheckedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime?>("LastCheckedUtc");
 
-                    b.Property<string>("LastError")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("LastError");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
-                    b.Property<int>("Port")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("Port");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("BLOB");
+                        .ValueGeneratedOnAddOrUpdate();
 
-                    b.Property<bool>("UseSsl")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("UseSsl");
 
                     b.Property<string>("Username")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(500);
 
                     b.HasKey("Id");
 
@@ -546,38 +434,29 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.MaintenanceWindow", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
                     b.Property<string>("CreatedBy")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("CreatedUtc");
 
-                    b.Property<DateTime>("EndUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("EndUtc");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("IsActive");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
-                    b.Property<string>("RecurringCron")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("RecurringCron");
 
                     b.Property<string>("Scope")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(500);
 
-                    b.Property<DateTime>("StartUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("StartUtc");
 
                     b.HasKey("Id");
 
@@ -587,34 +466,25 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.ProcessedMail", b =>
                 {
                     b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
-                    b.Property<int>("Disposition")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("Disposition");
 
-                    b.Property<long?>("EventId")
-                        .HasColumnType("INTEGER");
+                    b.Property<long?>("EventId");
 
-                    b.Property<string>("From")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("From");
 
-                    b.Property<int>("MailboxId")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("MailboxId");
 
                     b.Property<string>("MessageId")
                         .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(1000);
 
-                    b.Property<DateTime>("ProcessedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("ProcessedUtc");
 
-                    b.Property<DateTime>("ReceivedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("ReceivedUtc");
 
-                    b.Property<string>("Subject")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("Subject");
 
                     b.HasKey("Id");
 
@@ -631,45 +501,34 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.Rule", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("CreatedUtc");
 
                     b.Property<string>("Criteria")
                         .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(2000);
 
-                    b.Property<int?>("DedupWindowMinutes")
-                        .HasColumnType("INTEGER");
+                    b.Property<int?>("DedupWindowMinutes");
 
-                    b.Property<int>("Field")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("Field");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("IsActive");
 
-                    b.Property<int>("MatchType")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("MatchType");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
-                    b.Property<int>("Priority")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("Priority");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("BLOB");
+                        .ValueGeneratedOnAddOrUpdate();
 
-                    b.Property<int>("Severity")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("Severity");
 
                     b.HasKey("Id");
 
@@ -679,37 +538,28 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.Schedule", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("CreatedUtc");
 
-                    b.Property<int>("IntervalMinutes")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("IntervalMinutes");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("IsActive");
 
-                    b.Property<int>("JobId")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("JobId");
 
-                    b.Property<DateTime?>("LastRunUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime?>("LastRunUtc");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
-                    b.Property<DateTime?>("NextRunUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime?>("NextRunUtc");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("BLOB");
+                        .ValueGeneratedOnAddOrUpdate();
 
                     b.HasKey("Id");
 
@@ -721,15 +571,12 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.Setting", b =>
                 {
                     b.Property<string>("Key")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
-                    b.Property<DateTime>("UpdatedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("UpdatedUtc");
 
                     b.Property<string>("Value")
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(2000);
 
                     b.HasKey("Key");
 
@@ -739,75 +586,56 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.SnmpTarget", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
-                    b.Property<int>("AuthProtocol")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("AuthProtocol");
 
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("CreatedUtc");
 
                     b.Property<string>("EncryptedAuthPassword")
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(2000);
 
                     b.Property<string>("EncryptedCommunityString")
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(2000);
 
                     b.Property<string>("EncryptedPrivPassword")
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(2000);
 
                     b.Property<string>("EngineId")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
                     b.Property<string>("EnterpriseTrapOid")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(500);
 
                     b.Property<string>("Host")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(500);
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("IsActive");
 
-                    b.Property<int>("MaxTrapsPerMinute")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("MaxTrapsPerMinute");
 
-                    b.Property<int>("MinSeverity")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("MinSeverity");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
-                    b.Property<int>("Port")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("Port");
 
-                    b.Property<int>("PrivProtocol")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("PrivProtocol");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("BLOB");
+                        .ValueGeneratedOnAddOrUpdate();
 
                     b.Property<string>("SecurityName")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
-                    b.Property<bool>("SendKeepAlive")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("SendKeepAlive");
 
-                    b.Property<int>("Version")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("Version");
 
                     b.HasKey("Id");
 
@@ -817,48 +645,37 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.WebhookTarget", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("CreatedUtc");
 
                     b.Property<string>("EncryptedSecret")
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(2000);
 
                     b.Property<string>("Headers")
-                        .HasMaxLength(4000)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(4000);
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("IsActive");
 
-                    b.Property<int>("MaxRequestsPerMinute")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("MaxRequestsPerMinute");
 
-                    b.Property<int>("MinSeverity")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("MinSeverity");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
                     b.Property<string>("PayloadTemplate")
-                        .HasMaxLength(8000)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(8000);
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("BLOB");
+                        .ValueGeneratedOnAddOrUpdate();
 
                     b.Property<string>("Url")
                         .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(2000);
 
                     b.HasKey("Id");
 
@@ -868,28 +685,22 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Mail2SNMP.Models.Entities.WorkerLease", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
                     b.Property<string>("InstanceId")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(100);
 
-                    b.Property<DateTime>("LastHeartbeatUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("LastHeartbeatUtc");
 
                     b.Property<string>("LicenseEdition")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                        .IsRequired();
 
                     b.Property<string>("MachineName")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(200);
 
-                    b.Property<DateTime>("StartedUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("StartedUtc");
 
                     b.HasKey("Id");
 
@@ -903,20 +714,16 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
                 {
-                    b.Property<string>("Id")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("Id");
 
                     b.Property<string>("ConcurrencyStamp")
-                        .IsConcurrencyToken()
-                        .HasColumnType("TEXT");
+                        .IsConcurrencyToken();
 
                     b.Property<string>("Name")
-                        .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(256);
 
                     b.Property<string>("NormalizedName")
-                        .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(256);
 
                     b.HasKey("Id");
 
@@ -930,18 +737,14 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
-                    b.Property<string>("ClaimType")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("ClaimType");
 
-                    b.Property<string>("ClaimValue")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("ClaimValue");
 
                     b.Property<string>("RoleId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                        .IsRequired();
 
                     b.HasKey("Id");
 
@@ -953,18 +756,14 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<string>", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd();
 
-                    b.Property<string>("ClaimType")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("ClaimType");
 
-                    b.Property<string>("ClaimValue")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("ClaimValue");
 
                     b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                        .IsRequired();
 
                     b.HasKey("Id");
 
@@ -975,18 +774,14 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<string>", b =>
                 {
-                    b.Property<string>("LoginProvider")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("LoginProvider");
 
-                    b.Property<string>("ProviderKey")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("ProviderKey");
 
-                    b.Property<string>("ProviderDisplayName")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("ProviderDisplayName");
 
                     b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                        .IsRequired();
 
                     b.HasKey("LoginProvider", "ProviderKey");
 
@@ -997,11 +792,9 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<string>", b =>
                 {
-                    b.Property<string>("UserId")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("UserId");
 
-                    b.Property<string>("RoleId")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("RoleId");
 
                     b.HasKey("UserId", "RoleId");
 
@@ -1012,17 +805,13 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<string>", b =>
                 {
-                    b.Property<string>("UserId")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("UserId");
 
-                    b.Property<string>("LoginProvider")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("LoginProvider");
 
-                    b.Property<string>("Name")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("Name");
 
-                    b.Property<string>("Value")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("Value");
 
                     b.HasKey("UserId", "LoginProvider", "Name");
 

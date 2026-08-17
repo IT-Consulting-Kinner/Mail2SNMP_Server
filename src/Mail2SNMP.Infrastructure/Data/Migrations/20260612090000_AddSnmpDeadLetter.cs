@@ -17,15 +17,12 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             migrationBuilder.AlterColumn<int>(
                 name: "WebhookTargetId",
                 table: "DeadLetterEntries",
-                type: "INTEGER",
                 nullable: true,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
+                oldClrType: typeof(int));
 
             migrationBuilder.AddColumn<int>(
                 name: "SnmpTargetId",
                 table: "DeadLetterEntries",
-                type: "INTEGER",
                 nullable: true);
 
             migrationBuilder.CreateIndex(
@@ -64,11 +61,9 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             migrationBuilder.AlterColumn<int>(
                 name: "WebhookTargetId",
                 table: "DeadLetterEntries",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0,
                 oldClrType: typeof(int),
-                oldType: "INTEGER",
                 oldNullable: true);
         }
     }

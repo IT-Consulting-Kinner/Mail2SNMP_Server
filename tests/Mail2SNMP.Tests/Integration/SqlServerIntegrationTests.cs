@@ -20,6 +20,11 @@ public class SqlServerIntegrationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        // H-8: ONLY container startup may be swallowed into "skip". The previous
+        // version wrapped the migration in the same catch, so a broken schema
+        // (e.g. the SQLite-typed migration set that made SQL Server unusable in
+        // 1.1.0) reported itself as "Docker not available" and the suite went
+        // green. Everything after the container is up must be allowed to throw.
         try
         {
             _container = new MsSqlBuilder()
@@ -27,18 +32,20 @@ public class SqlServerIntegrationTests : IAsyncLifetime
                 .Build();
             await _container.StartAsync();
             _dockerAvailable = true;
-
-            var options = new DbContextOptionsBuilder<Mail2SnmpDbContext>()
-                .UseSqlServer(_container.GetConnectionString())
-                .Options;
-            _db = new Mail2SnmpDbContext(options);
-            await _db.Database.MigrateAsync();
         }
         catch (Exception)
         {
-            // Docker not available — tests will be skipped via Skip property
+            // Docker not available — tests will be skipped via Skip.IfNot
             _dockerAvailable = false;
+            return;
         }
+
+        // Deliberately OUTSIDE the catch: a migration failure is a real test failure.
+        var options = new DbContextOptionsBuilder<Mail2SnmpDbContext>()
+            .UseSqlServer(_container!.GetConnectionString())
+            .Options;
+        _db = new Mail2SnmpDbContext(options);
+        await _db.Database.MigrateAsync();
     }
 
     public async Task DisposeAsync()

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -15,10 +15,10 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "AspNetRoles",
                 columns: table => new
                 {
-                    Id = table.Column<string>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
-                    NormalizedName = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
-                    ConcurrencyStamp = table.Column<string>(type: "TEXT", nullable: true)
+                    Id = table.Column<string>(nullable: false),
+                    Name = table.Column<string>(maxLength: 256, nullable: true),
+                    NormalizedName = table.Column<string>(maxLength: 256, nullable: true),
+                    ConcurrencyStamp = table.Column<string>(nullable: true)
                 },
                 constraints: table =>
                 {
@@ -29,25 +29,25 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "AspNetUsers",
                 columns: table => new
                 {
-                    Id = table.Column<string>(type: "TEXT", nullable: false),
-                    DisplayName = table.Column<string>(type: "TEXT", nullable: false),
-                    CreatedUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    LastLoginUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    IsActive = table.Column<bool>(type: "INTEGER", nullable: false),
-                    UserName = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
-                    NormalizedUserName = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
-                    Email = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
-                    NormalizedEmail = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
-                    EmailConfirmed = table.Column<bool>(type: "INTEGER", nullable: false),
-                    PasswordHash = table.Column<string>(type: "TEXT", nullable: true),
-                    SecurityStamp = table.Column<string>(type: "TEXT", nullable: true),
-                    ConcurrencyStamp = table.Column<string>(type: "TEXT", nullable: true),
-                    PhoneNumber = table.Column<string>(type: "TEXT", nullable: true),
-                    PhoneNumberConfirmed = table.Column<bool>(type: "INTEGER", nullable: false),
-                    TwoFactorEnabled = table.Column<bool>(type: "INTEGER", nullable: false),
-                    LockoutEnd = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    LockoutEnabled = table.Column<bool>(type: "INTEGER", nullable: false),
-                    AccessFailedCount = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table.Column<string>(nullable: false),
+                    DisplayName = table.Column<string>(nullable: false),
+                    CreatedUtc = table.Column<DateTime>(nullable: false),
+                    LastLoginUtc = table.Column<DateTime>(nullable: true),
+                    IsActive = table.Column<bool>(nullable: false),
+                    UserName = table.Column<string>(maxLength: 256, nullable: true),
+                    NormalizedUserName = table.Column<string>(maxLength: 256, nullable: true),
+                    Email = table.Column<string>(maxLength: 256, nullable: true),
+                    NormalizedEmail = table.Column<string>(maxLength: 256, nullable: true),
+                    EmailConfirmed = table.Column<bool>(nullable: false),
+                    PasswordHash = table.Column<string>(nullable: true),
+                    SecurityStamp = table.Column<string>(nullable: true),
+                    ConcurrencyStamp = table.Column<string>(nullable: true),
+                    PhoneNumber = table.Column<string>(nullable: true),
+                    PhoneNumberConfirmed = table.Column<bool>(nullable: false),
+                    TwoFactorEnabled = table.Column<bool>(nullable: false),
+                    LockoutEnd = table.Column<DateTimeOffset>(nullable: true),
+                    LockoutEnabled = table.Column<bool>(nullable: false),
+                    AccessFailedCount = table.Column<int>(nullable: false)
                 },
                 constraints: table =>
                 {
@@ -58,20 +58,21 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "AuditEvents",
                 columns: table => new
                 {
-                    Id = table.Column<long>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    TimestampUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    SchemaVersion = table.Column<int>(type: "INTEGER", nullable: false),
-                    ActorType = table.Column<int>(type: "INTEGER", nullable: false),
-                    ActorId = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    Action = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    TargetType = table.Column<string>(type: "TEXT", nullable: true),
-                    TargetId = table.Column<string>(type: "TEXT", nullable: true),
-                    Details = table.Column<string>(type: "TEXT", maxLength: 4096, nullable: true),
-                    IpAddress = table.Column<string>(type: "TEXT", maxLength: 50, nullable: true),
-                    UserAgent = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    CorrelationId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
-                    Result = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table.Column<long>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    TimestampUtc = table.Column<DateTime>(nullable: false),
+                    SchemaVersion = table.Column<int>(nullable: false),
+                    ActorType = table.Column<int>(nullable: false),
+                    ActorId = table.Column<string>(maxLength: 200, nullable: false),
+                    Action = table.Column<string>(maxLength: 200, nullable: false),
+                    TargetType = table.Column<string>(nullable: true),
+                    TargetId = table.Column<string>(nullable: true),
+                    Details = table.Column<string>(maxLength: 4096, nullable: true),
+                    IpAddress = table.Column<string>(maxLength: 50, nullable: true),
+                    UserAgent = table.Column<string>(maxLength: 500, nullable: true),
+                    CorrelationId = table.Column<string>(maxLength: 100, nullable: true),
+                    Result = table.Column<int>(nullable: false)
                 },
                 constraints: table =>
                 {
@@ -82,20 +83,21 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "Mailboxes",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    Host = table.Column<string>(type: "TEXT", maxLength: 500, nullable: false),
-                    Port = table.Column<int>(type: "INTEGER", nullable: false),
-                    UseSsl = table.Column<bool>(type: "INTEGER", nullable: false),
-                    Username = table.Column<string>(type: "TEXT", maxLength: 500, nullable: false),
-                    EncryptedPassword = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: false),
-                    Folder = table.Column<string>(type: "TEXT", nullable: false),
-                    IsActive = table.Column<bool>(type: "INTEGER", nullable: false),
-                    CreatedUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    LastCheckedUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    LastError = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", rowVersion: true, nullable: false)
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Name = table.Column<string>(maxLength: 200, nullable: false),
+                    Host = table.Column<string>(maxLength: 500, nullable: false),
+                    Port = table.Column<int>(nullable: false),
+                    UseSsl = table.Column<bool>(nullable: false),
+                    Username = table.Column<string>(maxLength: 500, nullable: false),
+                    EncryptedPassword = table.Column<string>(maxLength: 2000, nullable: false),
+                    Folder = table.Column<string>(nullable: false),
+                    IsActive = table.Column<bool>(nullable: false),
+                    CreatedUtc = table.Column<DateTime>(nullable: false),
+                    LastCheckedUtc = table.Column<DateTime>(nullable: true),
+                    LastError = table.Column<string>(nullable: true),
+                    RowVersion = table.Column<byte[]>(rowVersion: true, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -106,16 +108,17 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "MaintenanceWindows",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    StartUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    EndUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    Scope = table.Column<string>(type: "TEXT", maxLength: 500, nullable: false),
-                    RecurringCron = table.Column<string>(type: "TEXT", nullable: true),
-                    CreatedBy = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    CreatedUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    IsActive = table.Column<bool>(type: "INTEGER", nullable: false)
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Name = table.Column<string>(maxLength: 200, nullable: false),
+                    StartUtc = table.Column<DateTime>(nullable: false),
+                    EndUtc = table.Column<DateTime>(nullable: false),
+                    Scope = table.Column<string>(maxLength: 500, nullable: false),
+                    RecurringCron = table.Column<string>(nullable: true),
+                    CreatedBy = table.Column<string>(maxLength: 200, nullable: false),
+                    CreatedUtc = table.Column<DateTime>(nullable: false),
+                    IsActive = table.Column<bool>(nullable: false)
                 },
                 constraints: table =>
                 {
@@ -126,17 +129,18 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "Rules",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    Field = table.Column<int>(type: "INTEGER", nullable: false),
-                    MatchType = table.Column<int>(type: "INTEGER", nullable: false),
-                    Criteria = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: false),
-                    Severity = table.Column<int>(type: "INTEGER", nullable: false),
-                    IsActive = table.Column<bool>(type: "INTEGER", nullable: false),
-                    Priority = table.Column<int>(type: "INTEGER", nullable: false),
-                    CreatedUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", rowVersion: true, nullable: false)
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Name = table.Column<string>(maxLength: 200, nullable: false),
+                    Field = table.Column<int>(nullable: false),
+                    MatchType = table.Column<int>(nullable: false),
+                    Criteria = table.Column<string>(maxLength: 2000, nullable: false),
+                    Severity = table.Column<int>(nullable: false),
+                    IsActive = table.Column<bool>(nullable: false),
+                    Priority = table.Column<int>(nullable: false),
+                    CreatedUtc = table.Column<DateTime>(nullable: false),
+                    RowVersion = table.Column<byte[]>(rowVersion: true, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -147,24 +151,25 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "SnmpTargets",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    Host = table.Column<string>(type: "TEXT", maxLength: 500, nullable: false),
-                    Port = table.Column<int>(type: "INTEGER", nullable: false),
-                    Version = table.Column<int>(type: "INTEGER", nullable: false),
-                    CommunityString = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    SecurityName = table.Column<string>(type: "TEXT", maxLength: 200, nullable: true),
-                    AuthProtocol = table.Column<int>(type: "INTEGER", nullable: false),
-                    EncryptedAuthPassword = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: true),
-                    PrivProtocol = table.Column<int>(type: "INTEGER", nullable: false),
-                    EncryptedPrivPassword = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: true),
-                    EngineId = table.Column<string>(type: "TEXT", maxLength: 200, nullable: true),
-                    EnterpriseTrapOid = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    MaxTrapsPerMinute = table.Column<int>(type: "INTEGER", nullable: false),
-                    IsActive = table.Column<bool>(type: "INTEGER", nullable: false),
-                    CreatedUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", rowVersion: true, nullable: false)
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Name = table.Column<string>(maxLength: 200, nullable: false),
+                    Host = table.Column<string>(maxLength: 500, nullable: false),
+                    Port = table.Column<int>(nullable: false),
+                    Version = table.Column<int>(nullable: false),
+                    CommunityString = table.Column<string>(maxLength: 500, nullable: true),
+                    SecurityName = table.Column<string>(maxLength: 200, nullable: true),
+                    AuthProtocol = table.Column<int>(nullable: false),
+                    EncryptedAuthPassword = table.Column<string>(maxLength: 2000, nullable: true),
+                    PrivProtocol = table.Column<int>(nullable: false),
+                    EncryptedPrivPassword = table.Column<string>(maxLength: 2000, nullable: true),
+                    EngineId = table.Column<string>(maxLength: 200, nullable: true),
+                    EnterpriseTrapOid = table.Column<string>(maxLength: 500, nullable: true),
+                    MaxTrapsPerMinute = table.Column<int>(nullable: false),
+                    IsActive = table.Column<bool>(nullable: false),
+                    CreatedUtc = table.Column<DateTime>(nullable: false),
+                    RowVersion = table.Column<byte[]>(rowVersion: true, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -175,17 +180,18 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "WebhookTargets",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    Url = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: false),
-                    Headers = table.Column<string>(type: "TEXT", nullable: true),
-                    PayloadTemplate = table.Column<string>(type: "TEXT", nullable: true),
-                    EncryptedSecret = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: true),
-                    MaxRequestsPerMinute = table.Column<int>(type: "INTEGER", nullable: false),
-                    IsActive = table.Column<bool>(type: "INTEGER", nullable: false),
-                    CreatedUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", rowVersion: true, nullable: false)
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Name = table.Column<string>(maxLength: 200, nullable: false),
+                    Url = table.Column<string>(maxLength: 2000, nullable: false),
+                    Headers = table.Column<string>(nullable: true),
+                    PayloadTemplate = table.Column<string>(nullable: true),
+                    EncryptedSecret = table.Column<string>(maxLength: 2000, nullable: true),
+                    MaxRequestsPerMinute = table.Column<int>(nullable: false),
+                    IsActive = table.Column<bool>(nullable: false),
+                    CreatedUtc = table.Column<DateTime>(nullable: false),
+                    RowVersion = table.Column<byte[]>(rowVersion: true, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -196,13 +202,14 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "WorkerLeases",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    InstanceId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    StartedUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    LastHeartbeatUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    LicenseEdition = table.Column<string>(type: "TEXT", nullable: false),
-                    MachineName = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false)
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    InstanceId = table.Column<string>(maxLength: 100, nullable: false),
+                    StartedUtc = table.Column<DateTime>(nullable: false),
+                    LastHeartbeatUtc = table.Column<DateTime>(nullable: false),
+                    LicenseEdition = table.Column<string>(nullable: false),
+                    MachineName = table.Column<string>(maxLength: 200, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -213,11 +220,12 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "AspNetRoleClaims",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    RoleId = table.Column<string>(type: "TEXT", nullable: false),
-                    ClaimType = table.Column<string>(type: "TEXT", nullable: true),
-                    ClaimValue = table.Column<string>(type: "TEXT", nullable: true)
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    RoleId = table.Column<string>(nullable: false),
+                    ClaimType = table.Column<string>(nullable: true),
+                    ClaimValue = table.Column<string>(nullable: true)
                 },
                 constraints: table =>
                 {
@@ -234,11 +242,12 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "AspNetUserClaims",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    UserId = table.Column<string>(type: "TEXT", nullable: false),
-                    ClaimType = table.Column<string>(type: "TEXT", nullable: true),
-                    ClaimValue = table.Column<string>(type: "TEXT", nullable: true)
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    UserId = table.Column<string>(nullable: false),
+                    ClaimType = table.Column<string>(nullable: true),
+                    ClaimValue = table.Column<string>(nullable: true)
                 },
                 constraints: table =>
                 {
@@ -255,10 +264,10 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "AspNetUserLogins",
                 columns: table => new
                 {
-                    LoginProvider = table.Column<string>(type: "TEXT", nullable: false),
-                    ProviderKey = table.Column<string>(type: "TEXT", nullable: false),
-                    ProviderDisplayName = table.Column<string>(type: "TEXT", nullable: true),
-                    UserId = table.Column<string>(type: "TEXT", nullable: false)
+                    LoginProvider = table.Column<string>(nullable: false),
+                    ProviderKey = table.Column<string>(nullable: false),
+                    ProviderDisplayName = table.Column<string>(nullable: true),
+                    UserId = table.Column<string>(nullable: false)
                 },
                 constraints: table =>
                 {
@@ -275,8 +284,8 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "AspNetUserRoles",
                 columns: table => new
                 {
-                    UserId = table.Column<string>(type: "TEXT", nullable: false),
-                    RoleId = table.Column<string>(type: "TEXT", nullable: false)
+                    UserId = table.Column<string>(nullable: false),
+                    RoleId = table.Column<string>(nullable: false)
                 },
                 constraints: table =>
                 {
@@ -299,10 +308,10 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "AspNetUserTokens",
                 columns: table => new
                 {
-                    UserId = table.Column<string>(type: "TEXT", nullable: false),
-                    LoginProvider = table.Column<string>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", nullable: false),
-                    Value = table.Column<string>(type: "TEXT", nullable: true)
+                    UserId = table.Column<string>(nullable: false),
+                    LoginProvider = table.Column<string>(nullable: false),
+                    Name = table.Column<string>(nullable: false),
+                    Value = table.Column<string>(nullable: true)
                 },
                 constraints: table =>
                 {
@@ -319,14 +328,15 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "ProcessedMails",
                 columns: table => new
                 {
-                    Id = table.Column<long>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    MailboxId = table.Column<int>(type: "INTEGER", nullable: false),
-                    MessageId = table.Column<string>(type: "TEXT", maxLength: 1000, nullable: false),
-                    From = table.Column<string>(type: "TEXT", nullable: true),
-                    Subject = table.Column<string>(type: "TEXT", nullable: true),
-                    ReceivedUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    ProcessedUtc = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<long>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    MailboxId = table.Column<int>(nullable: false),
+                    MessageId = table.Column<string>(maxLength: 1000, nullable: false),
+                    From = table.Column<string>(nullable: true),
+                    Subject = table.Column<string>(nullable: true),
+                    ReceivedUtc = table.Column<DateTime>(nullable: false),
+                    ProcessedUtc = table.Column<DateTime>(nullable: false)
                 },
                 constraints: table =>
                 {
@@ -343,21 +353,22 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "Jobs",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    MailboxId = table.Column<int>(type: "INTEGER", nullable: false),
-                    RuleId = table.Column<int>(type: "INTEGER", nullable: false),
-                    Channels = table.Column<string>(type: "TEXT", nullable: false),
-                    TrapTemplate = table.Column<string>(type: "TEXT", nullable: true),
-                    WebhookTemplate = table.Column<string>(type: "TEXT", nullable: true),
-                    OidMapping = table.Column<string>(type: "TEXT", nullable: true),
-                    MaxEventsPerHour = table.Column<int>(type: "INTEGER", nullable: false),
-                    MaxActiveEvents = table.Column<int>(type: "INTEGER", nullable: false),
-                    DedupWindowMinutes = table.Column<int>(type: "INTEGER", nullable: false),
-                    IsActive = table.Column<bool>(type: "INTEGER", nullable: false),
-                    CreatedUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", rowVersion: true, nullable: false)
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Name = table.Column<string>(maxLength: 200, nullable: false),
+                    MailboxId = table.Column<int>(nullable: false),
+                    RuleId = table.Column<int>(nullable: false),
+                    Channels = table.Column<string>(nullable: false),
+                    TrapTemplate = table.Column<string>(nullable: true),
+                    WebhookTemplate = table.Column<string>(nullable: true),
+                    OidMapping = table.Column<string>(nullable: true),
+                    MaxEventsPerHour = table.Column<int>(nullable: false),
+                    MaxActiveEvents = table.Column<int>(nullable: false),
+                    DedupWindowMinutes = table.Column<int>(nullable: false),
+                    IsActive = table.Column<bool>(nullable: false),
+                    CreatedUtc = table.Column<DateTime>(nullable: false),
+                    RowVersion = table.Column<byte[]>(rowVersion: true, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -380,24 +391,25 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "Events",
                 columns: table => new
                 {
-                    Id = table.Column<long>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    JobId = table.Column<int>(type: "INTEGER", nullable: false),
-                    State = table.Column<int>(type: "INTEGER", nullable: false),
-                    Severity = table.Column<int>(type: "INTEGER", nullable: false),
-                    MessageId = table.Column<string>(type: "TEXT", nullable: true),
-                    MailFrom = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    Subject = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    RuleName = table.Column<string>(type: "TEXT", nullable: true),
-                    HitCount = table.Column<int>(type: "INTEGER", nullable: false),
-                    CreatedUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    NotifiedUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    AcknowledgedUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    ResolvedUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    LastStateChangeUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    AcknowledgedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    ResolvedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", rowVersion: true, nullable: false)
+                    Id = table.Column<long>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    JobId = table.Column<int>(nullable: false),
+                    State = table.Column<int>(nullable: false),
+                    Severity = table.Column<int>(nullable: false),
+                    MessageId = table.Column<string>(nullable: true),
+                    MailFrom = table.Column<string>(maxLength: 500, nullable: true),
+                    Subject = table.Column<string>(maxLength: 500, nullable: true),
+                    RuleName = table.Column<string>(nullable: true),
+                    HitCount = table.Column<int>(nullable: false),
+                    CreatedUtc = table.Column<DateTime>(nullable: false),
+                    NotifiedUtc = table.Column<DateTime>(nullable: true),
+                    AcknowledgedUtc = table.Column<DateTime>(nullable: true),
+                    ResolvedUtc = table.Column<DateTime>(nullable: true),
+                    LastStateChangeUtc = table.Column<DateTime>(nullable: true),
+                    AcknowledgedBy = table.Column<string>(nullable: true),
+                    ResolvedBy = table.Column<string>(nullable: true),
+                    RowVersion = table.Column<byte[]>(rowVersion: true, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -414,16 +426,17 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "Schedules",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    JobId = table.Column<int>(type: "INTEGER", nullable: false),
-                    IntervalMinutes = table.Column<int>(type: "INTEGER", nullable: false),
-                    IsActive = table.Column<bool>(type: "INTEGER", nullable: false),
-                    CreatedUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    NextRunUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    LastRunUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", rowVersion: true, nullable: false)
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Name = table.Column<string>(maxLength: 200, nullable: false),
+                    JobId = table.Column<int>(nullable: false),
+                    IntervalMinutes = table.Column<int>(nullable: false),
+                    IsActive = table.Column<bool>(nullable: false),
+                    CreatedUtc = table.Column<DateTime>(nullable: false),
+                    NextRunUtc = table.Column<DateTime>(nullable: true),
+                    LastRunUtc = table.Column<DateTime>(nullable: true),
+                    RowVersion = table.Column<byte[]>(rowVersion: true, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -440,19 +453,20 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "DeadLetterEntries",
                 columns: table => new
                 {
-                    Id = table.Column<long>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    WebhookTargetId = table.Column<int>(type: "INTEGER", nullable: false),
-                    EventId = table.Column<long>(type: "INTEGER", nullable: false),
-                    PayloadJson = table.Column<string>(type: "TEXT", nullable: false),
-                    LastError = table.Column<string>(type: "TEXT", nullable: true),
-                    AttemptCount = table.Column<int>(type: "INTEGER", nullable: false),
-                    CreatedUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    NextRetryUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    LockedUntilUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    LockedByInstanceId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
-                    Status = table.Column<int>(type: "INTEGER", nullable: false),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", rowVersion: true, nullable: false)
+                    Id = table.Column<long>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    WebhookTargetId = table.Column<int>(nullable: false),
+                    EventId = table.Column<long>(nullable: false),
+                    PayloadJson = table.Column<string>(nullable: false),
+                    LastError = table.Column<string>(nullable: true),
+                    AttemptCount = table.Column<int>(nullable: false),
+                    CreatedUtc = table.Column<DateTime>(nullable: false),
+                    NextRetryUtc = table.Column<DateTime>(nullable: true),
+                    LockedUntilUtc = table.Column<DateTime>(nullable: true),
+                    LockedByInstanceId = table.Column<string>(maxLength: 100, nullable: true),
+                    Status = table.Column<int>(nullable: false),
+                    RowVersion = table.Column<byte[]>(rowVersion: true, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -475,13 +489,14 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "EventDedups",
                 columns: table => new
                 {
-                    Id = table.Column<long>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    DedupKeyHash = table.Column<string>(type: "TEXT", fixedLength: true, maxLength: 64, nullable: false),
-                    JobId = table.Column<int>(type: "INTEGER", nullable: false),
-                    EventId = table.Column<long>(type: "INTEGER", nullable: false),
-                    FirstSeenUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    LastSeenUtc = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<long>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    DedupKeyHash = table.Column<string>(fixedLength: true, maxLength: 64, nullable: false),
+                    JobId = table.Column<int>(nullable: false),
+                    EventId = table.Column<long>(nullable: false),
+                    FirstSeenUtc = table.Column<DateTime>(nullable: false),
+                    LastSeenUtc = table.Column<DateTime>(nullable: false)
                 },
                 constraints: table =>
                 {

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -15,10 +15,10 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "AuthTickets",
                 columns: table => new
                 {
-                    Id = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    Value = table.Column<byte[]>(type: "BLOB", nullable: false),
-                    LastActivity = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    ExpiresUtc = table.Column<DateTime>(type: "TEXT", nullable: true)
+                    Id = table.Column<string>(maxLength: 200, nullable: false),
+                    Value = table.Column<byte[]>(nullable: false),
+                    LastActivity = table.Column<DateTime>(nullable: true),
+                    ExpiresUtc = table.Column<DateTime>(nullable: true)
                 },
                 constraints: table =>
                 {

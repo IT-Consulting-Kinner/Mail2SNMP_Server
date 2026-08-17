@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -17,7 +17,6 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "EncryptedCommunityString",
                 table: "SnmpTargets",
-                type: "TEXT",
                 maxLength: 2000,
                 nullable: true);
         }
@@ -32,7 +31,6 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "CommunityString",
                 table: "SnmpTargets",
-                type: "TEXT",
                 maxLength: 500,
                 nullable: true);
         }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -14,24 +14,24 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             migrationBuilder.AddColumn<int>(
                 name: "DedupWindowMinutes",
                 table: "Rules",
-                type: "INTEGER",
                 nullable: true);
 
             migrationBuilder.CreateTable(
                 name: "ApiKeys",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    KeyHash = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
-                    KeyPrefix = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
-                    Scopes = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    IsActive = table.Column<bool>(type: "INTEGER", nullable: false),
-                    CreatedUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    ExpiresUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    LastUsedUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    CreatedBy = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false)
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Name = table.Column<string>(maxLength: 200, nullable: false),
+                    KeyHash = table.Column<string>(maxLength: 128, nullable: false),
+                    KeyPrefix = table.Column<string>(maxLength: 16, nullable: false),
+                    Scopes = table.Column<string>(maxLength: 200, nullable: false),
+                    IsActive = table.Column<bool>(nullable: false),
+                    CreatedUtc = table.Column<DateTime>(nullable: false),
+                    ExpiresUtc = table.Column<DateTime>(nullable: true),
+                    LastUsedUtc = table.Column<DateTime>(nullable: true),
+                    CreatedBy = table.Column<string>(maxLength: 200, nullable: false)
                 },
                 constraints: table =>
                 {

@@ -16,14 +16,12 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             migrationBuilder.AddColumn<int>(
                 name: "MinSeverity",
                 table: "SnmpTargets",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "MinSeverity",
                 table: "WebhookTargets",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
         }

@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -18,8 +18,8 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "JobSnmpTargets",
                 columns: table => new
                 {
-                    JobId = table.Column<int>(type: "INTEGER", nullable: false),
-                    SnmpTargetId = table.Column<int>(type: "INTEGER", nullable: false)
+                    JobId = table.Column<int>(nullable: false),
+                    SnmpTargetId = table.Column<int>(nullable: false)
                 },
                 constraints: table =>
                 {
@@ -42,8 +42,8 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "JobWebhookTargets",
                 columns: table => new
                 {
-                    JobId = table.Column<int>(type: "INTEGER", nullable: false),
-                    WebhookTargetId = table.Column<int>(type: "INTEGER", nullable: false)
+                    JobId = table.Column<int>(nullable: false),
+                    WebhookTargetId = table.Column<int>(nullable: false)
                 },
                 constraints: table =>
                 {
@@ -85,7 +85,6 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "Channels",
                 table: "Jobs",
-                type: "TEXT",
                 nullable: false,
                 defaultValue: "");
         }

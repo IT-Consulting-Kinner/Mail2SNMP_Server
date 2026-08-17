@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -14,7 +14,6 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
             migrationBuilder.AddColumn<bool>(
                 name: "SendKeepAlive",
                 table: "SnmpTargets",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: false);
 
@@ -22,9 +21,9 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                 name: "Settings",
                 columns: table => new
                 {
-                    Key = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    Value = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: true),
-                    UpdatedUtc = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Key = table.Column<string>(maxLength: 200, nullable: false),
+                    Value = table.Column<string>(maxLength: 2000, nullable: true),
+                    UpdatedUtc = table.Column<DateTime>(nullable: false)
                 },
                 constraints: table =>
                 {
