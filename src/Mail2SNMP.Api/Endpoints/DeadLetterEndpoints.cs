@@ -1,4 +1,5 @@
 using Mail2SNMP.Core.Interfaces;
+using Mail2SNMP.Models.DTOs;
 
 namespace Mail2SNMP.Api.Endpoints;
 
@@ -26,7 +27,10 @@ public static class DeadLetterEndpoints
         group.MapGet("/", async (IDeadLetterService service, CancellationToken ct) =>
         {
             var entries = await service.GetAllAsync(ct);
-            return Results.Ok(entries);
+            // Project to the response DTO: serializing the entities directly dragged the
+            // eager-loaded target navigations — and therefore their encrypted secrets —
+            // into the JSON.
+            return Results.Ok(entries.Select(e => e.ToResponse()));
         })
         .RequireAuthorization("Operator")
         .WithName("GetDeadLetters")

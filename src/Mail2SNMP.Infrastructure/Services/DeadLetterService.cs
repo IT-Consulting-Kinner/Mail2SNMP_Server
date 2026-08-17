@@ -76,7 +76,14 @@ public class DeadLetterService : IDeadLetterService
         entry.NextRetryUtc = DateTime.UtcNow;
         entry.LockedUntilUtc = null;
         entry.LockedByInstanceId = null;
+        // An Abandoned entry has AttemptCount >= MaxAttempts, so the retry worker's
+        // claim query (AttemptCount < max) skipped it forever: the API and UI reported
+        // "queued for retry" and nothing ever happened. An explicit operator retry is a
+        // fresh start, so the attempt counter is reset along with the status.
+        entry.AttemptCount = 0;
+        entry.LastError = null;
         await _db.SaveChangesAsync(ct);
+        _logger.LogInformation("Dead letter {Id} re-queued for retry by operator request.", id);
     }
 
     /// <summary>

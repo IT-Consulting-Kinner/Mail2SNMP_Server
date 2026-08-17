@@ -140,7 +140,27 @@ public class SnmpTargetService : ISnmpTargetService
 
         try
         {
-            var endpoint = new IPEndPoint(IPAddress.Parse(target.Host), target.Port);
+            // Test was broken for every hostname-configured target: IPAddress.Parse
+            // throws FormatException on anything that is not a literal address, so the
+            // button reported failure for targets that work perfectly in production
+            // (the notification channel has always resolved names). Resolve the same
+            // way the channel does — IPv4 preferred, hard timeout, no thread blocking.
+            IPAddress ipAddress;
+            if (!IPAddress.TryParse(target.Host, out ipAddress!))
+            {
+                using var dnsCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                dnsCts.CancelAfter(TimeSpan.FromSeconds(5));
+                var addresses = await Dns.GetHostAddressesAsync(target.Host, dnsCts.Token);
+                if (addresses.Length == 0)
+                {
+                    _logger.LogWarning("SNMP test failed for {Name}: '{Host}' resolved to no addresses.", target.Name, target.Host);
+                    return false;
+                }
+                ipAddress = addresses.FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                            ?? addresses[0];
+            }
+
+            var endpoint = new IPEndPoint(ipAddress, target.Port);
 
             // R2: decrypt the community string at the moment of use. Failure to
             // decrypt is fail-fast (master key mismatch) so we never silently

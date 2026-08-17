@@ -307,6 +307,48 @@ public class JobTargetInfo
 }
 
 /// <summary>
+/// API response DTO for a dead-letter entry. Carries the failing target's identity
+/// but never its credentials — the endpoint used to serialize the entity graph, which
+/// exposed <c>EncryptedSecret</c> and the SNMP community/auth/priv ciphertexts that
+/// every other endpoint deliberately hides behind <c>Has*</c> flags.
+/// </summary>
+public class DeadLetterResponse
+{
+    /// <summary>Primary key of the dead-letter entry; use it with the retry endpoint.</summary>
+    public long Id { get; set; }
+
+    /// <summary>Which channel failed: <c>snmp</c> or <c>webhook</c> (UC-3: the queue holds both).</summary>
+    public string Kind { get; set; } = string.Empty;
+
+    /// <summary>Id of the webhook target, or <c>null</c> for an SNMP entry.</summary>
+    public int? WebhookTargetId { get; set; }
+
+    /// <summary>Id of the SNMP target, or <c>null</c> for a webhook entry.</summary>
+    public int? SnmpTargetId { get; set; }
+
+    /// <summary>Display name of whichever target this entry belongs to; <c>null</c> if the target row is gone.</summary>
+    public string? TargetName { get; set; }
+
+    /// <summary>Id of the originating event whose notification failed.</summary>
+    public long EventId { get; set; }
+
+    /// <summary>Message from the most recent failed attempt; <c>null</c> after an operator re-queued the entry.</summary>
+    public string? LastError { get; set; }
+
+    /// <summary>Delivery attempts made so far; drives the exponential backoff and the abandon threshold.</summary>
+    public int AttemptCount { get; set; }
+
+    /// <summary>UTC time the delivery was dead-lettered.</summary>
+    public DateTime CreatedUtc { get; set; }
+
+    /// <summary>Earliest UTC time the entry is eligible for its next retry; <c>null</c> means immediately.</summary>
+    public DateTime? NextRetryUtc { get; set; }
+
+    /// <summary>Processing status: Pending, Locked or Abandoned.</summary>
+    public Enums.DeadLetterStatus Status { get; set; }
+}
+
+/// <summary>
 /// Extension methods for mapping entities to response DTOs.
 /// </summary>
 public static class ResponseDtoMapper
@@ -374,6 +416,34 @@ public static class ResponseDtoMapper
     /// </summary>
     /// <param name="target">The source webhook target entity.</param>
     /// <returns>A response DTO safe to serialize to API clients.</returns>
+    /// <summary>
+    /// Projects a dead-letter entry onto its API response shape.
+    /// </summary>
+    /// <remarks>
+    /// The endpoint used to serialize the entity graph directly, which dragged the
+    /// fully-populated <c>WebhookTarget</c>/<c>SnmpTarget</c> navigations into the JSON —
+    /// including <c>EncryptedSecret</c>, <c>EncryptedCommunityString</c> and the SNMPv3
+    /// auth/priv ciphertexts. Every other endpoint deliberately hides those behind
+    /// <c>Has*</c> flags; this one handed them to any Operator. The response now carries
+    /// only the target's identity.
+    /// </remarks>
+    public static DeadLetterResponse ToResponse(this Entities.DeadLetterEntry entry) => new()
+    {
+        Id = entry.Id,
+        Kind = entry.SnmpTargetId is not null ? "snmp" : "webhook",
+        WebhookTargetId = entry.WebhookTargetId,
+        SnmpTargetId = entry.SnmpTargetId,
+        TargetName = entry.SnmpTargetId is not null
+            ? entry.SnmpTarget?.Name
+            : entry.WebhookTarget?.Name,
+        EventId = entry.EventId,
+        LastError = entry.LastError,
+        AttemptCount = entry.AttemptCount,
+        CreatedUtc = entry.CreatedUtc,
+        NextRetryUtc = entry.NextRetryUtc,
+        Status = entry.Status
+    };
+
     public static WebhookTargetResponse ToResponse(this Entities.WebhookTarget target)
     {
         return new WebhookTargetResponse

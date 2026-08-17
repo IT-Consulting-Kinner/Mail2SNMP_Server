@@ -21,19 +21,23 @@
 
 <AutoDismissAlert Type="danger" @bind-Message="_error" />
 
+@* The search box is rendered unconditionally, OUTSIDE the loading branch. The
+   filter runs server-side, so re-querying flips the loading flag — if the input
+   lived inside the branch it was torn out of the DOM on every keystroke-triggered
+   search, losing focus and swallowing characters typed while the query ran. It
+   also has to survive an empty result, which previously showed a false
+   "no mails recorded" state and dead-ended the page. *@
+<div class="mb-3" style="max-width:300px;">
+    <DebouncedSearchInput Value="_searchTerm" ValueChanged="OnSearchChanged"
+                          Placeholder="Search by sender or subject…" />
+</div>
+
 @if (_loading)
 {
     <div class="spinner-border" role="status"><span class="visually-hidden">Loading…</span></div>
 }
 else
 {
-    @* Verified fix: the search box must survive an empty result — the filter is
-       applied server-side, so a no-hit search previously unmounted the box and
-       showed a false "no mails recorded" state, dead-ending the page. *@
-    <div class="mb-3" style="max-width:300px;">
-        <DebouncedSearchInput Value="_searchTerm" ValueChanged="OnSearchChanged"
-                              Placeholder="Search by sender or subject…" />
-    </div>
     @if (_mails.Count == 0)
     {
         @if (string.IsNullOrWhiteSpace(_searchTerm))

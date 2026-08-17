@@ -86,13 +86,16 @@ else
                 <th>SSL</th>
                 <th>Active</th>
                 <th>Last Checked</th>
+                @* The dashboard's "Mail ingestion degraded" banner links here telling the
+                   operator to read the error details — so the error has to be here. *@
+                <th>Last Error</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             @if (filtered.Count == 0)
             {
-                <tr><td colspan="10" class="text-center text-muted py-3">No mailboxes match the search term.</td></tr>
+                <tr><td colspan="11" class="text-center text-muted py-3">No mailboxes match the search term.</td></tr>
             }
             @foreach (var mb in filtered)
             {
@@ -108,6 +111,17 @@ else
                     <td><span class="badge @(mb.UseSsl ? "bg-success" : "bg-secondary")">@(mb.UseSsl ? "Yes" : "No")</span></td>
                     <td><span class="badge @(mb.IsActive ? "bg-success" : "bg-secondary")">@(mb.IsActive ? "Active" : "Inactive")</span></td>
                     <td>@(mb.LastCheckedUtc?.ToString("g") ?? "Never")</td>
+                    <td>
+                        @if (!string.IsNullOrEmpty(mb.LastError))
+                        {
+                            <span class="badge bg-danger text-truncate d-inline-block" style="max-width:260px;"
+                                  title="@mb.LastError">@mb.LastError</span>
+                        }
+                        else
+                        {
+                            <span class="text-success">OK</span>
+                        }
+                    </td>
                     <td>
                         <AuthorizeView Policy="Admin"><Authorized>
                             <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => ShowEditForm(mb)" disabled="@_busy"><i class="bi bi-pencil"></i> Edit</button>
