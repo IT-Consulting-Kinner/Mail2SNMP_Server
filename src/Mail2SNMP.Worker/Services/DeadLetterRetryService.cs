@@ -175,6 +175,7 @@ public class DeadLetterRetryService : BackgroundService
         // never fetched) exactly like the original bug.
         var entries = await db.DeadLetterEntries
             .Include(d => d.WebhookTarget)
+            .Include(d => d.SnmpTarget)
             .Where(d => d.LockedByInstanceId == _instanceId && d.Status == DeadLetterStatus.Locked)
             .OrderBy(d => d.NextRetryUtc)
             .ToListAsync(ct);
@@ -197,6 +198,60 @@ public class DeadLetterRetryService : BackgroundService
 
             try
             {
+                // UC-3: SNMP entries are retried through the real channel (the trap is
+                // rebuilt from the serialized NotificationContext). Handled first;
+                // everything below this block is the webhook retry path.
+                if (entry.SnmpTargetId is not null)
+                {
+                    if (entry.SnmpTarget is null || !entry.SnmpTarget.IsActive)
+                    {
+                        _logger.LogWarning(
+                            "DeadLetter {Id}: SnmpTarget {TargetId} inactive or missing. Abandoning.",
+                            entry.Id, entry.SnmpTargetId);
+                        entry.Status = DeadLetterStatus.Abandoned;
+                        entry.LockedUntilUtc = null;
+                        entry.LockedByInstanceId = null;
+                        continue;
+                    }
+
+                    var context = System.Text.Json.JsonSerializer
+                        .Deserialize<Mail2SNMP.Models.DTOs.NotificationContext>(entry.PayloadJson);
+                    if (context is null)
+                    {
+                        entry.Status = DeadLetterStatus.Abandoned;
+                        entry.LastError = "Stored NotificationContext could not be deserialized.";
+                        entry.LockedUntilUtc = null;
+                        entry.LockedByInstanceId = null;
+                        continue;
+                    }
+                    // Mark as redelivery so the channel bypasses notification-dedup and
+                    // does NOT enqueue a fresh dead-letter entry on failure — this
+                    // entry's backoff/abandon lifecycle is owned here.
+                    context.IsRedelivery = true;
+
+                    var snmpChannel = scope.ServiceProvider
+                        .GetServices<Mail2SNMP.Core.Interfaces.INotificationChannel>()
+                        .FirstOrDefault(c => c.ChannelName == Mail2SNMP.Core.Interfaces.INotificationChannel.Snmp);
+
+                    Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.DeadLetterRetried.Inc();
+                    var sent = snmpChannel != null &&
+                               await snmpChannel.SendToSnmpTargetAsync(context, entry.SnmpTarget, ct);
+                    if (sent)
+                    {
+                        db.DeadLetterEntries.Remove(entry);
+                        _logger.LogInformation(
+                            "DeadLetter {Id} (SNMP) retried successfully to {Host}:{Port} (attempt {Attempt})",
+                            entry.Id, entry.SnmpTarget.Host, entry.SnmpTarget.Port, entry.AttemptCount + 1);
+                    }
+                    else
+                    {
+                        // Same backoff/abandon handling as the webhook catch-path below.
+                        throw new InvalidOperationException(
+                            $"SNMP trap redelivery to '{entry.SnmpTarget.Name}' failed (see channel log).");
+                    }
+                    continue;
+                }
+
                 if (entry.WebhookTarget is null || !entry.WebhookTarget.IsActive)
                 {
                     _logger.LogWarning(

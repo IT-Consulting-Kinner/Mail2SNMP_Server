@@ -13,6 +13,14 @@ public class NotificationContext
     /// </summary>
     public long EventId { get; set; }
 
+    /// <summary>
+    /// UC-3: <c>true</c> when this delivery is a dead-letter retry. Channels must
+    /// NOT enqueue a failed redelivery as a fresh dead-letter entry (the retry
+    /// service owns the existing entry's backoff/abandon lifecycle); without this
+    /// flag every failed retry would spawn a duplicate entry.
+    /// </summary>
+    public bool IsRedelivery { get; set; }
+
     /// <summary>Name of the job that produced the event. Available to templates as <c>{{JobName}}</c>.</summary>
     public string JobName { get; set; } = string.Empty;
 

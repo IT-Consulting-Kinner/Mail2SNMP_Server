@@ -27,6 +27,7 @@ public class SnmpNotificationChannel : INotificationChannel
     private readonly TemplateEngine _templateEngine;
     private readonly FloodProtectionService _floodProtection;
     private readonly NotificationDedupCache _dedupCache;
+    private readonly IDeadLetterService _deadLetterService;
     private readonly ILogger<SnmpNotificationChannel> _logger;
 
     /// <summary>
@@ -77,6 +78,7 @@ public class SnmpNotificationChannel : INotificationChannel
     /// <param name="templateEngine">Used to render and length-truncate strings so they fit SNMP <c>OctetString</c> limits.</param>
     /// <param name="floodProtection">Per-target rate limiter enforcing each target's maximum traps-per-minute.</param>
     /// <param name="dedupCache">Suppresses duplicate traps for the same target/event pair.</param>
+    /// <param name="deadLetterService">UC-3: queues failed trap sends for automatic retry, mirroring the webhook channel.</param>
     /// <param name="logger">Diagnostic logger; trap delivery failures are logged rather than thrown (traps are fire-and-forget UDP).</param>
     public SnmpNotificationChannel(
         Mail2SnmpDbContext db,
@@ -85,6 +87,7 @@ public class SnmpNotificationChannel : INotificationChannel
         TemplateEngine templateEngine,
         FloodProtectionService floodProtection,
         NotificationDedupCache dedupCache,
+        IDeadLetterService deadLetterService,
         ILogger<SnmpNotificationChannel> logger)
     {
         _db = db;
@@ -93,6 +96,7 @@ public class SnmpNotificationChannel : INotificationChannel
         _templateEngine = templateEngine;
         _floodProtection = floodProtection;
         _dedupCache = dedupCache;
+        _deadLetterService = deadLetterService;
         _logger = logger;
     }
 
@@ -113,7 +117,10 @@ public class SnmpNotificationChannel : INotificationChannel
     {
         var targetKey = $"snmp:{target.Id}";
 
-        if (_dedupCache.IsDuplicate(targetKey, context.EventId))
+        // UC-3: a dead-letter redelivery must bypass the notification-dedup check —
+        // the ORIGINAL (failed) attempt already registered the event/target pair,
+        // so the cache would otherwise report the retry as "already covered".
+        if (!context.IsRedelivery && _dedupCache.IsDuplicate(targetKey, context.EventId))
         {
             _logger.LogDebug("Notification dedup: skipping duplicate SNMP trap to {Target} for event {EventId}", target.Name, context.EventId);
             // An earlier send already covered this event/target pair — delivered.
@@ -125,6 +132,8 @@ public class SnmpNotificationChannel : INotificationChannel
             Services.Mail2SnmpMetrics.TrapsRateLimited.Inc();
             Services.Mail2SnmpMetrics.RateLimitHits.WithLabels("snmp-target").Inc();
             _logger.LogWarning("SNMP trap to {Target} rate-limited ({Max}/min)", target.Name, target.MaxTrapsPerMinute);
+            // Deliberate policy drop — NOT dead-lettered (a delayed re-send would
+            // defeat the flood protection's purpose).
             return false;
         }
 
@@ -141,6 +150,7 @@ public class SnmpNotificationChannel : INotificationChannel
             else
             {
                 Services.Mail2SnmpMetrics.NotificationsFailed.WithLabels("snmp").Inc();
+                await CreateDeadLetterAsync(target, context, "Trap dropped (DNS/credentials/licence — see log)", ct);
             }
             return sent;
         }
@@ -148,7 +158,39 @@ public class SnmpNotificationChannel : INotificationChannel
         {
             Services.Mail2SnmpMetrics.NotificationsFailed.WithLabels("snmp").Inc();
             _logger.LogError(ex, "Failed to send SNMP trap to {Host}:{Port}: {Message}", target.Host, target.Port, ex.Message);
+            await CreateDeadLetterAsync(target, context, ex.Message, ct);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// UC-3: queues a failed trap send for automatic retry, mirroring the webhook
+    /// channel's dead-lettering. The serialized <see cref="NotificationContext"/>
+    /// is stored so the trap can be rebuilt verbatim on retry. Never called for a
+    /// redelivery (the retry service owns the existing entry's lifecycle) and
+    /// never for synthetic test events (negative EventId — no Event row exists
+    /// for the FK).
+    /// </summary>
+    private async Task CreateDeadLetterAsync(Models.Entities.SnmpTarget target, NotificationContext context, string error, CancellationToken ct)
+    {
+        if (context.IsRedelivery || context.EventId <= 0) return;
+        try
+        {
+            await _deadLetterService.CreateAsync(new Models.Entities.DeadLetterEntry
+            {
+                SnmpTargetId = target.Id,
+                EventId = context.EventId,
+                PayloadJson = System.Text.Json.JsonSerializer.Serialize(context),
+                LastError = error,
+                AttemptCount = 1,
+                Status = Models.Enums.DeadLetterStatus.Pending
+            }, ct);
+        }
+        catch (Exception dlEx)
+        {
+            // Dead-lettering is best-effort: a failure here must not mask the
+            // original send failure or crash the notification loop.
+            _logger.LogError(dlEx, "Failed to dead-letter SNMP trap for target {Name}, event {EventId}", target.Name, context.EventId);
         }
     }
 

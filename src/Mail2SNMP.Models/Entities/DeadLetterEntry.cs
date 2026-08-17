@@ -3,18 +3,39 @@ using Mail2SNMP.Models.Enums;
 namespace Mail2SNMP.Models.Entities;
 
 /// <summary>
-/// A failed webhook delivery queued for automatic retry with exponential backoff (Enterprise only).
+/// A failed notification delivery queued for automatic retry with exponential
+/// backoff (retry is Enterprise-gated; entries are persisted in both editions).
+/// UC-3: originally webhook-only — the flagship SNMP channel dropped failed traps
+/// with only a log line while the secondary webhook channel survived the same
+/// outage via retry. An entry now references EITHER a webhook target (with the
+/// serialized HTTP payload) OR an SNMP target (with the serialized
+/// <c>NotificationContext</c> the trap is rebuilt from); exactly one of the two
+/// FKs is set, enforced by the services that create entries.
 /// </summary>
 public class DeadLetterEntry
 {
     /// <summary>Surrogate primary key. 64-bit because the dead-letter table can be high-volume. Database-generated.</summary>
     public long Id { get; set; }
 
-    /// <summary>FK to the <see cref="WebhookTarget"/> whose delivery failed and is to be retried.</summary>
-    public int WebhookTargetId { get; set; }
+    /// <summary>
+    /// FK to the <see cref="WebhookTarget"/> whose delivery failed and is to be retried.
+    /// UC-3: <c>null</c> for SNMP entries (then <see cref="SnmpTargetId"/> is set).
+    /// </summary>
+    public int? WebhookTargetId { get; set; }
 
-    /// <summary>Navigation property for the target referenced by <see cref="WebhookTargetId"/>. Lazy-loaded.</summary>
-    public WebhookTarget WebhookTarget { get; set; } = null!;
+    /// <summary>Navigation property for the target referenced by <see cref="WebhookTargetId"/>. Lazy-loaded; <c>null</c> for SNMP entries.</summary>
+    public WebhookTarget? WebhookTarget { get; set; }
+
+    /// <summary>
+    /// UC-3: FK to the <see cref="SnmpTarget"/> whose trap send failed locally
+    /// (send exception, DNS failure, credential-decrypt failure). <c>null</c> for
+    /// webhook entries. Note SNMP traps are fire-and-forget UDP — the retry covers
+    /// local send failures, not receiver-side loss, which is undetectable.
+    /// </summary>
+    public int? SnmpTargetId { get; set; }
+
+    /// <summary>Navigation property for the target referenced by <see cref="SnmpTargetId"/>. Lazy-loaded; <c>null</c> for webhook entries.</summary>
+    public SnmpTarget? SnmpTarget { get; set; }
 
     /// <summary>FK to the originating <see cref="Entities.Event"/> whose notification is being retried.</summary>
     public long EventId { get; set; }
@@ -22,7 +43,12 @@ public class DeadLetterEntry
     /// <summary>Navigation property for the event referenced by <see cref="EventId"/>. Lazy-loaded.</summary>
     public Event Event { get; set; } = null!;
 
-    /// <summary>Serialized JSON webhook payload captured at enqueue time, replayed verbatim on each retry. Plaintext.</summary>
+    /// <summary>
+    /// Serialized JSON captured at enqueue time. For webhook entries: the HTTP
+    /// payload, replayed verbatim on each retry. For SNMP entries (UC-3): the
+    /// <c>NotificationContext</c> from which the trap is rebuilt on retry.
+    /// Plaintext.
+    /// </summary>
     public string PayloadJson { get; set; } = string.Empty;
 
     /// <summary>Message from the most recent failed delivery attempt; <c>null</c> before the first attempt.</summary>

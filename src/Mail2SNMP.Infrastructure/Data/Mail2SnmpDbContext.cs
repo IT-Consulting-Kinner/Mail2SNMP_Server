@@ -219,7 +219,10 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
         builder.Entity<DeadLetterEntry>(e =>
         {
             e.HasKey(x => x.Id);
+            // UC-3: an entry references EITHER a webhook target OR an SNMP target
+            // (both FKs nullable; exactly-one-set is enforced by the creating services).
             e.HasOne(x => x.WebhookTarget).WithMany().HasForeignKey(x => x.WebhookTargetId);
+            e.HasOne(x => x.SnmpTarget).WithMany().HasForeignKey(x => x.SnmpTargetId);
             e.HasOne(x => x.Event).WithMany().HasForeignKey(x => x.EventId);
             e.Property(x => x.LockedByInstanceId).HasMaxLength(100);
             e.HasIndex(x => new { x.Status, x.LockedUntilUtc });

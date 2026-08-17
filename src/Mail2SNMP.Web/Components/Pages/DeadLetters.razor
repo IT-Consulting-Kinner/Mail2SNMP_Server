@@ -50,7 +50,17 @@ else
             {
                 <tr>
                     <td>@entry.Id</td>
-                    <td>@(entry.WebhookTarget?.Name ?? $"ID:{entry.WebhookTargetId}")</td>
+                    @* UC-3: an entry references either a webhook target or an SNMP target. *@
+                    <td>
+                        @if (entry.SnmpTargetId is not null)
+                        {
+                            <span class="badge bg-info text-dark me-1">SNMP</span>@(entry.SnmpTarget?.Name ?? $"ID:{entry.SnmpTargetId}")
+                        }
+                        else
+                        {
+                            <span class="badge bg-primary me-1">HTTP</span>@(entry.WebhookTarget?.Name ?? $"ID:{entry.WebhookTargetId}")
+                        }
+                    </td>
                     <td>@entry.EventId</td>
                     <td><span class="badge bg-@GetStatusColor(entry.Status)">@entry.Status</span></td>
                     <td>@entry.AttemptCount</td>
@@ -152,15 +162,26 @@ else
         _busy = true;
         try
         {
+            // UC-3: WebhookTargetId is null for SNMP entries — those are re-queued
+            // individually below; the per-webhook bulk API keeps working for HTTP.
             var webhookIds = _entries?
-                .Where(e => e.Status == DeadLetterStatus.Pending)
-                .Select(e => e.WebhookTargetId)
+                .Where(e => e.Status == DeadLetterStatus.Pending && e.WebhookTargetId is not null)
+                .Select(e => e.WebhookTargetId!.Value)
                 .Distinct()
                 .ToList() ?? new List<int>();
 
             foreach (var whId in webhookIds)
             {
                 await DeadLetterService.RetryAllAsync(whId);
+            }
+
+            var snmpEntryIds = _entries?
+                .Where(e => e.Status == DeadLetterStatus.Pending && e.SnmpTargetId is not null)
+                .Select(e => e.Id)
+                .ToList() ?? new List<long>();
+            foreach (var dlId in snmpEntryIds)
+            {
+                await DeadLetterService.RetryAsync(dlId);
             }
             _success = "All pending entries queued for retry.";
             await LoadData();
