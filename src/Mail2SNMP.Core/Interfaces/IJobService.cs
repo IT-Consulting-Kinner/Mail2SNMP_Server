@@ -62,7 +62,21 @@ public interface IJobService
     /// <param name="id">The unique identifier of the job to test.</param>
     /// <param name="ct">Optional cancellation token.</param>
     /// <returns>A human-readable per-target delivery summary.</returns>
-    Task<string> SendTestEventAsync(int id, CancellationToken ct = default);
+    /// <summary>
+    /// Sends a synthetic event through the job's real delivery path and reports the
+    /// per-target outcome.
+    /// </summary>
+    /// <param name="id">The job to test.</param>
+    /// <param name="severity">
+    /// Severity to stamp on the synthetic event. Test Send was fixed at
+    /// <see cref="Models.Enums.Severity.Information"/>, which made it useless for verifying
+    /// the very feature most likely to be misconfigured: a target set to "Critical only"
+    /// could only ever be reported as skipped, so an operator could not confirm that
+    /// severity routing reaches the right target.
+    /// </param>
+    /// <param name="ct">Token used to cancel the operation.</param>
+    /// <returns>A human-readable per-target report.</returns>
+    Task<string> SendTestEventAsync(int id, Models.Enums.Severity severity = Models.Enums.Severity.Information, CancellationToken ct = default);
 
     /// <summary>
     /// Updates the SNMP and Webhook target assignments for a job, replacing existing entries.

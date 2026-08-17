@@ -27,6 +27,8 @@ try
 
     // ── Infrastructure (DbContext, services, channels, etc.) ───────────────
     builder.Services.AddMail2SnmpInfrastructure(builder.Configuration);
+    // Attribute audited changes to the calling user or API key instead of "system".
+    builder.Services.AddHttpActorContext();
 
     // ── Identity ───────────────────────────────────────────────────────────
     // P-2: shared bootstrap — see AuthSetup. Host-specific cookie config stays below.

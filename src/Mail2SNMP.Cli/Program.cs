@@ -48,6 +48,13 @@ public partial class Program
         services.AddSingleton<IConfiguration>(configuration);
         services.AddMail2SnmpInfrastructure(configuration);
 
+        // A CLI change is made by a person at a console, not by a background service.
+        // Recording it as plain "system" would make an operator-run `mail2snmp` command
+        // indistinguishable from a scheduled one in the audit log.
+        services.AddScoped<Mail2SNMP.Core.Interfaces.ICurrentActor>(_ =>
+            new Mail2SNMP.Infrastructure.Security.SystemCurrentActor(
+                $"cli:{Environment.UserDomainName}\\{Environment.UserName}"));
+
         // Identity services for user management commands (create-admin, reset-password)
         services.AddIdentity<AppUser, IdentityRole>(options =>
         {

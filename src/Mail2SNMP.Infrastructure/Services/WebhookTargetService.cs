@@ -69,7 +69,7 @@ public class WebhookTargetService : IWebhookTargetService
 
         _db.WebhookTargets.Add(target);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "WebhookTarget.Created", "WebhookTarget", target.Id.ToString(), ct: ct);
+        await _audit.LogAsync("WebhookTarget.Created", "WebhookTarget", target.Id.ToString(), ct: ct);
         return target;
     }
 
@@ -88,7 +88,7 @@ public class WebhookTargetService : IWebhookTargetService
         else
             _db.WebhookTargets.Update(target);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "WebhookTarget.Updated", "WebhookTarget", target.Id.ToString(), ct: ct);
+        await _audit.LogAsync("WebhookTarget.Updated", "WebhookTarget", target.Id.ToString(), ct: ct);
         return target;
     }
 
@@ -120,7 +120,7 @@ public class WebhookTargetService : IWebhookTargetService
 
         _db.WebhookTargets.Remove(target);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "WebhookTarget.Deleted", "WebhookTarget", id.ToString(), ct: ct);
+        await _audit.LogAsync("WebhookTarget.Deleted", "WebhookTarget", id.ToString(), ct: ct);
     }
 
     /// <summary>

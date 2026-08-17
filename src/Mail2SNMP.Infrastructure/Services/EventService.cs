@@ -321,7 +321,7 @@ public class EventService : IEventService
         evt.LastStateChangeUtc = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         Mail2SnmpMetrics.ActiveEvents.Dec();
-        await _audit.LogAsync(ActorType.System, "system", "Event.Suppressed", "Event", id.ToString(), ct: ct);
+        await _audit.LogAsync("Event.Suppressed", "Event", id.ToString(), ct: ct);
     }
 
     private static void ValidateStateTransition(Event evt, EventState targetState)
@@ -388,7 +388,7 @@ public class EventService : IEventService
                 await webhookChannel.SendToWebhookTargetAsync(context, jwt.WebhookTarget, ct);
         }
 
-        await _audit.LogAsync(ActorType.System, "system", "Event.Replayed", "Event", id.ToString(), ct: ct);
+        await _audit.LogAsync("Event.Replayed", "Event", id.ToString(), ct: ct);
         _logger.LogInformation("Event {EventId} replayed successfully", id);
     }
 }

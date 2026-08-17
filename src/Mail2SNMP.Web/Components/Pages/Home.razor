@@ -5,9 +5,10 @@
 @using Mail2SNMP.Models.Entities
 @using Microsoft.EntityFrameworkCore
 @using System.Reflection
-@* PF-1 (verified cleanup): the five list-service injections were removed — after
-   the aggregate-count rewrite all tile numbers come from Db + MaintenanceService. *@
-@inject IMaintenanceWindowService MaintenanceService
+@* The dashboard tiles come from DashboardService, which the REST endpoint uses too,
+   so the two views of the system cannot drift apart. Db is still injected for this
+   page's own extras: the onboarding banner counts and the 14-day event trend. *@
+@inject IDashboardService DashboardService
 @inject ILicenseProvider LicenseProvider
 @inject Mail2SnmpDbContext Db
 @using Mail2SNMP.Infrastructure.Services
@@ -308,18 +309,11 @@ else
     {
         try
         {
-            // PF-1: server-side COUNT aggregates instead of materializing full entity
-            // graphs (jobs with 4-level Includes, events/dead-letters capped at 500)
-            // just to render tile numbers. Also fixes two counting bugs: OpenEvents
-            // was bounded by GetAllAsync's Take(500) and missed Acknowledged events.
-            var activeEventStates = new[] { EventState.New, EventState.Notified, EventState.Acknowledged };
-            var activeMailboxes = await Db.Mailboxes.CountAsync(m => m.IsActive);
-            var mailboxesInError = await Db.Mailboxes.CountAsync(m => m.IsActive && m.LastError != null);
-            var activeJobs = await Db.Jobs.CountAsync(j => j.IsActive);
-            var activeSchedules = await Db.Schedules.CountAsync(s => s.IsActive);
-            var openEvents = await Db.Events.CountAsync(e => activeEventStates.Contains(e.State));
-            var pendingDeadLetters = await Db.DeadLetterEntries.CountAsync(d => d.Status == DeadLetterStatus.Pending);
-            var inMaintenance = await MaintenanceService.IsInMaintenanceAsync();
+            // The aggregation lives in DashboardService, shared with GET /api/v1/dashboard.
+            // Both used to compute it independently — same counters, same active-state set,
+            // same health rule, duplicated — and had already drifted (the API surfaced the
+            // active maintenance window's name, this page did not).
+            _dashboard = await DashboardService.GetAsync();
 
             // T6: counts for the onboarding banner.
             _ruleCount = await Db.Rules.CountAsync();
@@ -327,20 +321,6 @@ else
             var webhookCount = await Db.WebhookTargets.CountAsync(t => t.IsActive);
             _missingTargets = snmpCount == 0 && webhookCount == 0;
 
-            _dashboard = new DashboardDto
-            {
-                ActiveMailboxes = activeMailboxes,
-                ActiveJobs = activeJobs,
-                ActiveSchedules = activeSchedules,
-                OpenEvents = openEvents,
-                PendingDeadLetters = pendingDeadLetters,
-                MaintenanceActive = inMaintenance,
-                LicenseEdition = LicenseProvider.Current.Edition.ToString(),
-                // UC-1: health is computed — a broken active mailbox means ingestion
-                // is failing for its jobs, which the dashboard must surface.
-                MailboxesInError = mailboxesInError,
-                IsHealthy = mailboxesInError == 0
-            };
             _license = LicenseProvider.Current;
 
             // M3: read the in-process Prometheus counter so the dashboard surfaces

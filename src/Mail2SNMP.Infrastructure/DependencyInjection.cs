@@ -70,7 +70,11 @@ public static class DependencyInjection
         // Database with automatic CRUD audit interceptor (v5.8)
         var dbSettings = configuration.GetSection("Database").Get<DatabaseSettings>() ?? new DatabaseSettings();
         var effectiveConnectionString = dbSettings.GetEffectiveConnectionString();
-        services.AddSingleton<AuditSaveChangesInterceptor>();
+        // Scoped, not singleton: the interceptor attributes its rows to the ambient
+        // ICurrentActor, which is scoped to the request. A singleton would capture the
+        // root provider and could never resolve it — every automatic audit row would
+        // silently fall back to "system", which is the defect being fixed.
+        services.AddScoped<AuditSaveChangesInterceptor>();
         services.AddDbContext<Mail2SnmpDbContext>((sp, options) =>
         {
             if (dbSettings.Provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
@@ -132,6 +136,11 @@ public static class DependencyInjection
         services.AddSingleton<NotificationDedupCache>();
         services.AddSingleton<RuleEvaluator>();
 
+        // Audit actor. Defaults to the system actor, which is correct for the worker and
+        // the CLI; request-serving hosts call AddHttpActorContext() to attribute changes
+        // to the authenticated user or API key instead.
+        services.AddScoped<ICurrentActor>(_ => new SystemCurrentActor());
+
         // Business services
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IMailboxService, MailboxService>();
@@ -144,6 +153,9 @@ public static class DependencyInjection
         services.AddScoped<IMaintenanceWindowService, MaintenanceWindowService>();
         services.AddScoped<IDeadLetterService, DeadLetterService>();
         services.AddScoped<IWorkerLeaseService, WorkerLeaseService>();
+        // Shared by the REST endpoint and the management UI so the two cannot disagree
+        // about the system's state.
+        services.AddScoped<IDashboardService, DashboardService>();
 
         // Server-side session store for authentication cookies (keeps cookies small for OIDC scenarios)
         services.AddSingleton<ITicketStore, DbTicketStore>();
@@ -162,6 +174,26 @@ public static class DependencyInjection
         // was dead and confusing, so it's removed.
         services.AddScoped<INotificationChannel, WebhookNotificationChannel>();
 
+        return services;
+    }
+
+    /// <summary>
+    /// Attributes audit entries to the authenticated principal of the current request
+    /// instead of the generic system actor. Call this from every host that serves
+    /// requests (the API and the management UI).
+    /// </summary>
+    /// <remarks>
+    /// Without this, a configuration change made through the UI or the REST API is
+    /// recorded as <c>system</c> and the audit log cannot answer who made it. The
+    /// implementation falls back to the system actor when there is no ambient request, so
+    /// hosted services running inside a web host are still attributed correctly.
+    /// </remarks>
+    /// <param name="services">The service collection to register into.</param>
+    /// <returns>The same <paramref name="services"/> collection, for chaining.</returns>
+    public static IServiceCollection AddHttpActorContext(this IServiceCollection services)
+    {
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentActor, HttpContextCurrentActor>();
         return services;
     }
 }

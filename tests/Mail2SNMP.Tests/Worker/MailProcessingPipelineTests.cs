@@ -109,7 +109,7 @@ public class MailProcessingPipelineTests : IDisposable
 
         var job = new Job
         {
-            Name = jobName, MailboxId = _mailbox!.Id, RuleId = _rule.Id, IsActive = true,
+            Name = jobName, MailboxId = _mailbox!.Id, RuleId = _rule!.Id, IsActive = true,
             MaxEventsPerHour = maxEventsPerHour, DedupWindowMinutes = dedupWindowMinutes
         };
         _db.Jobs.Add(job);

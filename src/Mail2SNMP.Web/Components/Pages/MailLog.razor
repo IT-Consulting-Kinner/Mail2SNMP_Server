@@ -61,6 +61,12 @@ else
                     <th>Subject</th>
                     <th>Outcome</th>
                     <th>Event</th>
+                    @* The trace used to stop at event creation, so the page answered
+                       "did this mail become an event?" but not "did anyone get told?" —
+                       which is the actual question behind "we emailed at 03:14 and got
+                       no trap". The delivery half is read back from the event's state
+                       and its dead letters. *@
+                    <th>Delivery</th>
                 </tr>
             </thead>
             <tbody>
@@ -82,6 +88,14 @@ else
                             else
                             {
                                 <span class="text-muted">—</span>
+                            }
+                        </td>
+                        <td>
+                            @{ var delivery = DeliveryOf(m); }
+                            <span class="badge @delivery.Badge" title="@delivery.Title">@delivery.Label</span>
+                            @if (delivery.DeadLetters > 0)
+                            {
+                                <a class="ms-1 small" href="/dead-letters">view</a>
                             }
                         </td>
                     </tr>
@@ -133,6 +147,8 @@ else
                 .OrderByDescending(m => m.ProcessedUtc)
                 .Take(MaxRows)
                 .ToListAsync();
+
+            await LoadDeliveryAsync();
         }
         catch (Exception ex)
         {
@@ -142,6 +158,77 @@ else
         {
             _loading = false;
         }
+    }
+
+    // Delivery state of the events this page's mails produced, keyed by event id.
+    // ProcessedMail.EventId is deliberately NOT a foreign key — retention purges events
+    // on a different schedule than mail traces — so this is a manual lookup and a missing
+    // entry legitimately means "the event has already been purged", not "no event".
+    private Dictionary<long, EventState> _eventStates = new();
+    private Dictionary<long, int> _openDeadLetters = new();
+
+    private async Task LoadDeliveryAsync()
+    {
+        var eventIds = _mails.Where(m => m.EventId.HasValue).Select(m => m.EventId!.Value).Distinct().ToList();
+        if (eventIds.Count == 0)
+        {
+            _eventStates = new();
+            _openDeadLetters = new();
+            return;
+        }
+
+        // Two set-based queries for the whole page rather than one per row.
+        _eventStates = await Db.Events.AsNoTracking()
+            .Where(e => eventIds.Contains(e.Id))
+            .Select(e => new { e.Id, e.State })
+            .ToDictionaryAsync(e => e.Id, e => e.State);
+
+        _openDeadLetters = await Db.DeadLetterEntries.AsNoTracking()
+            .Where(d => eventIds.Contains(d.EventId) && d.Status != DeadLetterStatus.Locked)
+            .GroupBy(d => d.EventId)
+            .Select(g => new { EventId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.EventId, g => g.Count);
+    }
+
+    private record DeliveryView(string Label, string Badge, string Title, int DeadLetters);
+
+    /// <summary>
+    /// Renders the second half of the trace: what happened to the event this mail produced.
+    /// </summary>
+    private DeliveryView DeliveryOf(ProcessedMail mail)
+    {
+        if (mail.EventId is not long id)
+        {
+            // No event was raised, so there was nothing to deliver — the Outcome column
+            // already explains why.
+            return new("—", "bg-light text-muted", "No event was raised for this mail.", 0);
+        }
+
+        _openDeadLetters.TryGetValue(id, out var dead);
+
+        if (!_eventStates.TryGetValue(id, out var state))
+        {
+            return new("purged", "bg-light text-muted",
+                "The event has been removed by retention; its delivery outcome is no longer available.", dead);
+        }
+
+        if (dead > 0)
+        {
+            return new($"failed ({dead})", "bg-danger",
+                $"{dead} delivery attempt(s) for this event are in the dead-letter queue.", dead);
+        }
+
+        return state switch
+        {
+            EventState.Suppressed => new("suppressed", "bg-warning text-dark",
+                "A maintenance window was active, so no notification was sent.", 0),
+            EventState.New => new("not delivered", "bg-danger",
+                "The event was created but no channel reported a successful delivery.", 0),
+            EventState.Expired => new("not delivered", "bg-danger",
+                "The event expired without any channel reporting a successful delivery.", 0),
+            _ => new("delivered", "bg-success",
+                "At least one channel reported a successful delivery.", 0)
+        };
     }
 
     private static string DispositionBadge(MailDisposition d) => d switch

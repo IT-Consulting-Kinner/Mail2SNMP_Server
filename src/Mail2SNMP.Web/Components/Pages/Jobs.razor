@@ -137,8 +137,20 @@ else
                         <AuthorizeView Policy="Operator"><Authorized>
                             <button class="btn btn-outline-warning btn-sm me-1" @onclick="() => DryRun(job.Id)" disabled="@_busy"><i class="bi bi-play-circle"></i> Dry Run</button>
                             @* UC-7: unlike Dry Run (which skips delivery), Test Send pushes a
-                               synthetic event through the job's REAL templates + targets. *@
-                            <button class="btn btn-outline-info btn-sm me-1" @onclick="() => TestSend(job.Id)" disabled="@_busy" title="Send a synthetic test event through this job's real targets"><i class="bi bi-send-check"></i> Test Send</button>
+                               synthetic event through the job's REAL templates + targets.
+                               The severity is chosen by the operator: fixed at Information
+                               it could never reach a "Critical only" target, so the one
+                               setting most likely to be misconfigured was the one thing
+                               Test Send could not verify. *@
+                            <div class="btn-group btn-group-sm me-1" role="group">
+                                <button class="btn btn-outline-info" @onclick="() => TestSend(job.Id)" disabled="@_busy" title="Send a synthetic test event through this job's real targets"><i class="bi bi-send-check"></i> Test Send</button>
+                                <select class="form-select form-select-sm" style="max-width:8.5rem;" @bind="_testSeverity" disabled="@_busy" aria-label="Test event severity">
+                                    @foreach (var s in Enum.GetValues<Severity>())
+                                    {
+                                        <option value="@s">@s</option>
+                                    }
+                                </select>
+                            </div>
                         </Authorized></AuthorizeView>
                         <AuthorizeView Policy="Admin"><Authorized>
                             <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(job.Id)" disabled="@_busy"><i class="bi bi-trash"></i> Delete</button>
@@ -381,6 +393,11 @@ else
     private string? _error;
     private string? _success;
     private string? _dryRunResult;
+
+    // Severity stamped on the synthetic Test Send event. Information keeps the previous
+    // default, but the operator can raise it to verify a severity-routed target actually
+    // fires rather than only ever seeing it reported as skipped.
+    private Severity _testSeverity = Severity.Information;
     private HashSet<int> _selectedSnmpIds = new();
     private HashSet<int> _selectedWebhookIds = new();
     // UX-5: row selection for the bulk-action bar (distinct from the in-form
@@ -620,14 +637,14 @@ else
         if (_busy) return;
         if (!await RoleGuard.HasAnyRoleAsync(AuthState, "Admin", "Operator")) { _error = "Operator role required."; return; }
         if (!await Confirm.AskAsync(
-                "Send a synthetic TEST event through this job's real targets? " +
+                $"Send a synthetic TEST event at severity {_testSeverity} through this job's real targets? " +
                 "The assigned SNMP receivers / webhooks WILL receive it.",
                 title: "Send test event", confirmLabel: "Send", danger: false))
             return;
         _busy = true;
         try
         {
-            _dryRunResult = await JobService.SendTestEventAsync(id);
+            _dryRunResult = await JobService.SendTestEventAsync(id, _testSeverity);
         }
         catch (Exception ex) { _error = ErrorMessageFormatter.ToFriendly(ex, "sending the test event"); }
         finally { _busy = false; }

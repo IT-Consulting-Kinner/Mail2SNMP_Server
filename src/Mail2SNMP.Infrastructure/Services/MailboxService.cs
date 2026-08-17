@@ -78,7 +78,7 @@ public class MailboxService : IMailboxService
 
         _db.Mailboxes.Add(mailbox);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Mailbox.Created", "Mailbox", mailbox.Id.ToString(), ct: ct);
+        await _audit.LogAsync("Mailbox.Created", "Mailbox", mailbox.Id.ToString(), ct: ct);
         return mailbox;
     }
 
@@ -101,7 +101,7 @@ public class MailboxService : IMailboxService
             _db.Mailboxes.Update(mailbox);
 
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Mailbox.Updated", "Mailbox", mailbox.Id.ToString(), ct: ct);
+        await _audit.LogAsync("Mailbox.Updated", "Mailbox", mailbox.Id.ToString(), ct: ct);
         return mailbox;
     }
 
@@ -120,7 +120,7 @@ public class MailboxService : IMailboxService
 
         _db.Mailboxes.Remove(mailbox);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Mailbox.Deleted", "Mailbox", id.ToString(), ct: ct);
+        await _audit.LogAsync("Mailbox.Deleted", "Mailbox", id.ToString(), ct: ct);
     }
 
     /// <summary>

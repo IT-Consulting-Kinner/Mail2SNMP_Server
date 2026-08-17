@@ -2,6 +2,34 @@
 
 All notable changes to Mail2SNMP Server. Entries are grouped by **release** and by the development **waves** that made up each release. Each wave fixes the findings of a multi-agent comprehensive code review of the previous wave; the wave pattern is documented in the repo's development history.
 
+## Unreleased
+
+### Fixed
+
+- **Audit trail names who made a change.** Every configuration mutation was recorded
+  as `System` / `system`, so the log showed that a job was deleted but never by
+  whom — the one question an audit trail exists to answer. Changes are now
+  attributed to the signed-in user, to `apikey:<name>` for API-key callers, or to
+  `cli:<domain>\<user>` for CLI runs; the worker's own changes remain `system`,
+  which is the honest answer there. Login and event-lifecycle actions already
+  carried a real actor and are unchanged.
+- **Mail Log covers the delivery half.** The trace stopped at event creation, so
+  the page answered "did this mail become an event?" but not "did anyone get
+  told?" — which is the actual question behind "we emailed at 03:14 and got no
+  trap". A Delivery column now reports delivered / not delivered / suppressed /
+  failed (with the dead-letter count) / purged.
+- **Test Send is no longer locked to Information severity.** A target set to
+  "Critical only" could only ever be reported as skipped, so the setting most
+  likely to be misconfigured was the one thing Test Send could not verify. The
+  severity is now chosen per test; Information remains the default.
+
+### Changed
+
+- The dashboard aggregation lives in one place (`IDashboardService`) instead of
+  being implemented separately in the REST endpoint and the Blazor home page. The
+  two had already drifted — the API surfaced the active maintenance window's name
+  and the UI did not.
+
 ## 1.2.0 — 2026-08-17 (Blocker fixes)
 
 > **1.1.0 is defective and has been withdrawn from the "latest" slot.** It could

@@ -33,6 +33,8 @@ try
 
     // Infrastructure (DbContext, services, channels, encryption, license)
     builder.Services.AddMail2SnmpInfrastructure(builder.Configuration);
+    // Attribute audited changes to the signed-in user instead of "system".
+    builder.Services.AddHttpActorContext();
 
     // All-in-One mode: embed Worker background services (Quartz, mail polling, dead-letter retry,
     // data retention) in this Web process — no separate Worker or API process needed.

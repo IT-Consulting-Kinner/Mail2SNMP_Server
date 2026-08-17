@@ -1,3 +1,4 @@
+using Mail2SNMP.Core.Interfaces;
 using Mail2SNMP.Models.Entities;
 using Mail2SNMP.Models.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +26,37 @@ namespace Mail2SNMP.Infrastructure.Data;
 /// </summary>
 public class AuditSaveChangesInterceptor : SaveChangesInterceptor
 {
+    private readonly IServiceProvider _services;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AuditSaveChangesInterceptor"/> class.
+    /// </summary>
+    /// <param name="services">
+    /// The scope's provider, used to resolve the ambient <see cref="ICurrentActor"/> for each
+    /// save. Resolved per save rather than injected directly so that a save issued during
+    /// scope teardown degrades to the system actor instead of throwing.
+    /// </param>
+    public AuditSaveChangesInterceptor(IServiceProvider services) => _services = services;
+
+    /// <summary>
+    /// Resolves the ambient actor, falling back to the system actor when no scope is
+    /// available (which is the honest answer for a save outside any request).
+    /// </summary>
+    private (ActorType Type, string Id) ResolveActor()
+    {
+        try
+        {
+            var actor = _services.GetService(typeof(ICurrentActor)) as ICurrentActor;
+            return actor is null ? (ActorType.System, "system") : (actor.Type, actor.Id);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Host shutdown: a final save can outlive the provider. Never let audit
+            // attribution break the write it is describing.
+            return (ActorType.System, "system");
+        }
+    }
+
     // Entity types that are excluded from automatic CRUD audit to prevent recursion,
     // noise, or duplication with explicit service-layer audit calls.
     private static readonly HashSet<Type> ExcludedTypes = new()
@@ -61,7 +93,7 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
         if (eventData.Context is not null)
-            RecordAuditEntries(eventData.Context);
+            RecordAuditEntries(eventData.Context, ResolveActor());
         return base.SavingChanges(eventData, result);
     }
 
@@ -78,11 +110,11 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
         DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
     {
         if (eventData.Context is not null)
-            RecordAuditEntries(eventData.Context);
+            RecordAuditEntries(eventData.Context, ResolveActor());
         return base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
-    private static void RecordAuditEntries(DbContext context)
+    private static void RecordAuditEntries(DbContext context, (ActorType Type, string Id) actor)
     {
         context.ChangeTracker.DetectChanges();
 
@@ -122,8 +154,8 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
             context.Set<AuditEvent>().Add(new AuditEvent
             {
                 TimestampUtc = DateTime.UtcNow,
-                ActorType = ActorType.System,
-                ActorId = "ef-interceptor",
+                ActorType = actor.Type,
+                ActorId = actor.Id,
                 Action = action,
                 TargetType = entityType,
                 TargetId = entityId,

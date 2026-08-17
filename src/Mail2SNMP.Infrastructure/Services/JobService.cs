@@ -75,7 +75,7 @@ public class JobService : IJobService
 
         _db.Jobs.Add(job);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Job.Created", "Job", job.Id.ToString(), ct: ct);
+        await _audit.LogAsync("Job.Created", "Job", job.Id.ToString(), ct: ct);
         return job;
     }
 
@@ -91,7 +91,7 @@ public class JobService : IJobService
         else
             _db.Jobs.Update(job);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Job.Updated", "Job", job.Id.ToString(), ct: ct);
+        await _audit.LogAsync("Job.Updated", "Job", job.Id.ToString(), ct: ct);
         return job;
     }
 
@@ -110,7 +110,7 @@ public class JobService : IJobService
 
         _db.Jobs.Remove(job);
         await _db.SaveChangesAsync(ct);
-        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Job.Deleted", "Job", id.ToString(), ct: ct);
+        await _audit.LogAsync("Job.Deleted", "Job", id.ToString(), ct: ct);
     }
 
     /// <summary>
@@ -120,7 +120,7 @@ public class JobService : IJobService
     /// never suppresses a repeated test; per-target rate limits still apply
     /// (deliberately, so a test cannot flood a production NMS).
     /// </summary>
-    public async Task<string> SendTestEventAsync(int id, CancellationToken ct = default)
+    public async Task<string> SendTestEventAsync(int id, Models.Enums.Severity severity = Models.Enums.Severity.Information, CancellationToken ct = default)
     {
         var job = await GetByIdAsync(id, ct)
             ?? throw new KeyNotFoundException($"Job {id} not found.");
@@ -133,8 +133,10 @@ public class JobService : IJobService
             JobName = job.Name,
             Mailbox = job.Mailbox?.Name ?? string.Empty,
             From = "test@mail2snmp.local",
-            Subject = $"Mail2SNMP test event for job '{job.Name}'",
-            Severity = Models.Enums.Severity.Information,
+            Subject = $"Mail2SNMP test event for job '{job.Name}' ({severity})",
+            // Operator-chosen: a fixed Information severity could never reach a
+            // Critical-only target, so severity routing was untestable from the product.
+            Severity = severity,
             RuleName = job.Rule?.Name ?? string.Empty,
             HitCount = 1,
             TimestampUtc = DateTime.UtcNow,
@@ -154,8 +156,9 @@ public class JobService : IJobService
 
         foreach (var jst in job.JobSnmpTargets.Where(t => t.SnmpTarget.IsActive))
         {
-            // UC-4: the test event is Severity.Information — surface severity routing
-            // instead of silently skipping, so the operator sees why a target stays quiet.
+            // UC-4: surface severity routing instead of silently skipping, so the operator
+            // sees why a target stays quiet — and can re-run at a higher severity to
+            // confirm it then fires.
             if (context.Severity < jst.SnmpTarget.MinSeverity)
             {
                 skippedCount++;
@@ -185,7 +188,7 @@ public class JobService : IJobService
         if (okCount == 0 && failCount == 0 && skippedCount == 0)
             report.AppendLine("No active targets are assigned to this job — nothing was sent.");
 
-        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Job.TestSend", "Job", id.ToString(), ct: ct);
+        await _audit.LogAsync("Job.TestSend", "Job", id.ToString(), ct: ct);
         _logger.LogInformation("Test event sent through Job {JobId}: {Ok} ok, {Failed} failed", id, okCount, failCount);
 
         return $"Test event for '{job.Name}': {okCount} delivered, {failCount} failed.\n{report}".TrimEnd();
@@ -234,7 +237,7 @@ public class JobService : IJobService
             if (transaction != null) await transaction.DisposeAsync();
         }
 
-        await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Job.TargetsUpdated", "Job", jobId.ToString(), ct: ct);
+        await _audit.LogAsync("Job.TargetsUpdated", "Job", jobId.ToString(), ct: ct);
     }
 
     /// <summary>

@@ -13,16 +13,23 @@ namespace Mail2SNMP.Infrastructure.Services;
 public class AuditService : IAuditService
 {
     private readonly Mail2SnmpDbContext _db;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<AuditService> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AuditService"/> class.
     /// </summary>
     /// <param name="db">The database context used to read and persist audit events.</param>
+    /// <param name="actor">
+    /// Resolves who is responsible for the current operation. Resolving it here rather than
+    /// in each caller is what keeps attribution from silently degrading to "system" as new
+    /// audited operations are added.
+    /// </param>
     /// <param name="logger">The logger that mirrors each audit entry at debug level.</param>
-    public AuditService(Mail2SnmpDbContext db, ILogger<AuditService> logger)
+    public AuditService(Mail2SnmpDbContext db, ICurrentActor actor, ILogger<AuditService> logger)
     {
         _db = db;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -42,7 +49,15 @@ public class AuditService : IAuditService
     }
 
     /// <summary>
-    /// Persists a new audit trail entry. Detail strings longer than 4 KB are truncated.
+    /// Persists a new audit trail entry attributed to the ambient actor.
+    /// </summary>
+    public Task LogAsync(string action, string? targetType = null, string? targetId = null,
+        string? details = null, AuditResult result = AuditResult.Success, CancellationToken ct = default)
+        => LogAsync(_actor.Type, _actor.Id, action, targetType, targetId, details, result, ct: ct);
+
+    /// <summary>
+    /// Persists a new audit trail entry for an explicitly named actor. Detail strings longer
+    /// than 4 KB are truncated.
     /// </summary>
     public async Task LogAsync(ActorType actorType, string actorId, string action, string? targetType = null,
         string? targetId = null, string? details = null, AuditResult result = AuditResult.Success,
