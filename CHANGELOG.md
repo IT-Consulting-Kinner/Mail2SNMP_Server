@@ -2,11 +2,15 @@
 
 All notable changes to Mail2SNMP Server. Entries are grouped by **release** and by the development **waves** that made up each release. Each wave fixes the findings of a multi-agent comprehensive code review of the previous wave; the wave pattern is documented in the repo's development history.
 
-## Unreleased
+## 1.1.0 — 2026-08-17 (Quality & Features)
 
 Full-surface review (UX consistency, security, correctness, use cases,
 architecture, performance) with adversarially verified findings; all 26
-verified findings addressed across 12 fix batches.
+verified findings addressed across 14 fix batches, each fix re-checked by an
+independent adversarial verification pass (whose own findings are included).
+**All 1.0.x deployments can upgrade; run `mail2snmp db migrate` once — this
+release ships four schema migrations (severity routing, mail-log disposition,
+SNMP dead-letter, events index).**
 
 ### Fixed — silent failure paths
 
@@ -74,6 +78,27 @@ verified findings addressed across 12 fix batches.
 - **UX-1..UX-4/UX-6** UI consistency: dead theme toggle removed, keyboard focus
   restored on navigation, nav menu mirrors role gates, unified error surfaces,
   explicit page authorization on Home.
+
+### Verification pass (fixes to the fixes)
+
+An independent adversarial verification of all batches surfaced and fixed:
+
+- Sessions are invalidated again after a password change on both hosts —
+  installing the custom cookie validation had silently discarded Identity's
+  `SecurityStampValidator` (pre-existing on the Web host, newly introduced on
+  the API host); it is now chained explicitly.
+- The absolute session lifetime actually fires: sliding renewal rewrites
+  `IssuedUtc`, so the check now uses an immutable sign-in timestamp.
+- A failing webhook **Test Send** no longer crashes with a foreign-key error
+  (synthetic test events are never dead-lettered).
+- Long dedup windows (> 2x the global default) are no longer truncated by the
+  hourly retention sweep.
+- Deleting a target with dead-letter entries works again (the nullable FK had
+  dropped the former cascade); SNMP dead letters get their own metric
+  (`mail2snmp_snmp_deadletter_total`) instead of inflating the webhook counter;
+  acknowledge traps respect severity routing; the dead-letter lock lease is
+  floored to outlast a worst-case batch (default raised 5 → 7 min); plus
+  several smaller UI/logging/metrics corrections.
 
 ### Documented scope decisions
 
