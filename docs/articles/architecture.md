@@ -62,3 +62,30 @@ Command-line tool for administrative tasks (database migration, license manageme
 - Credentials (IMAP passwords, SNMP auth/priv passwords, webhook secrets) are encrypted at rest using AES-256-GCM
 - Authentication via ASP.NET Core Identity (local) or OIDC/SSO (Enterprise)
 - Role-based authorization: ReadOnly, Operator, Admin
+- **Content-Security-Policy note:** the Web UI ships a CSP whose `script-src`
+  includes `'unsafe-inline'` and `'unsafe-eval'`. This is a known, deliberate
+  Blazor Server tradeoff (the framework's bootstrap script and SignalR
+  negotiation require it in the shipped configuration); with it, the CSP's
+  script-injection protection is limited and the policy's effective value is
+  `frame-ancestors`/`base-uri`/`form-action` hardening. Moving to a nonce-based
+  `script-src` is tracked as a future hardening step.
+
+## Scope decisions
+
+Two frequently requested capabilities are deliberately **out of scope** for
+Mail2SNMP. They are documented here so deployments can plan around them rather
+than discovering the boundary in production:
+
+- **Escalation, on-call schedules and paging.** Mail2SNMP is an
+  *alerting bridge*: it converts inbound email into SNMP traps and webhooks and
+  manages the event lifecycle up to acknowledge/resolve. Escalation chains,
+  ack-timeout re-notification, on-call rotations and paging policies are the
+  responsibility of the downstream NMS / incident-management system (e.g.
+  Zabbix, PRTG, Opsgenie, PagerDuty via webhook). Severity-based routing
+  (`MinSeverity` per target) is supported so critical events can be steered at
+  the bridge level.
+- **Multi-tenancy.** There is no tenant/team dimension on the data model: every
+  Operator sees all mailboxes, jobs and events. The supported model for MSPs
+  serving multiple customers is **one instance per tenant** (each with its own
+  database and service account). Running multiple customers in one instance
+  provides no data segregation and is not a supported configuration.

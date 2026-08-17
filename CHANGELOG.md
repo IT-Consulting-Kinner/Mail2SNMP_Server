@@ -2,6 +2,84 @@
 
 All notable changes to Mail2SNMP Server. Entries are grouped by **release** and by the development **waves** that made up each release. Each wave fixes the findings of a multi-agent comprehensive code review of the previous wave; the wave pattern is documented in the repo's development history.
 
+## Unreleased
+
+Full-surface review (UX consistency, security, correctness, use cases,
+architecture, performance) with adversarially verified findings; all 26
+verified findings addressed across 12 fix batches.
+
+### Fixed — silent failure paths
+
+- **FN-1** Dead-letter claim no longer strands entries: the claim is bounded to
+  the batch size and expired locks are reclaimable by any instance. Previously
+  every eligible row was locked but only one batch processed — surplus rows
+  were orphaned permanently on worker restart (silent loss of failed webhooks
+  on a routine deploy).
+- **FN-2** `Job.DedupWindowMinutes` is now actually honored (base value with
+  per-rule override; `0` genuinely disables dedup). It was a dead config field.
+- **UC-1** A failing mailbox is no longer invisible: the dashboard computes
+  real health (`MailboxesInError`, red banner "Mail ingestion degraded"),
+  instead of hardcoding `IsHealthy = true` while KeepAlive kept reporting green.
+- **AR-1** All Prometheus metrics are now emitted (previously 18 of 19 were
+  defined but never incremented — alerts on `notifications_failed_total` could
+  never fire).
+- **FN-3** `Notified` is honest: an event is only marked Notified when at least
+  one channel actually dispatched (channels return a delivery outcome).
+- **FN-4** `MaxActiveEvents` is enforced even when the active set is saturated
+  with Acknowledged events.
+
+### Security
+
+- **SEC-1** IMAP without SSL now requires STARTTLS (`SecureSocketOptions.StartTls`)
+  instead of silently proceeding over cleartext when the capability is missing.
+- **SEC-3** The deactivated-user session revalidation now applies to both hosts
+  (shared in `AuthSetup`), and an absolute session lifetime is enforced.
+- **SEC-2** The Blazor Server CSP tradeoff (`'unsafe-inline'`) is documented as
+  an accepted, known limitation (see architecture docs).
+
+### Added
+
+- **UC-4** Severity-based routing: `MinSeverity` per SNMP/webhook target —
+  "page the NOC only for Critical" within a single job. (Migration
+  `AddTargetMinSeverity`.)
+- **UC-5** Per-mail disposition trace + **Mail Log** page: every inbound mail
+  records its outcome (no-match / event created / deduplicated / maintenance-
+  suppressed) with a link to the resulting event. (Migration
+  `AddProcessedMailDisposition`.)
+- **UC-3** SNMP dead-letter retry: failed trap sends (DNS, sockets, credentials)
+  are queued and retried like webhooks. (Migration `AddSnmpDeadLetter`.)
+- **UC-7** "Test Send" on the Jobs page pushes a synthetic event through the
+  job's real templates and targets with a per-target outcome report.
+- **UX-5** Bulk activate/deactivate/delete on the Jobs page (parity with the
+  other config pages).
+
+### Changed
+
+- **AR-3** One shared registration for the REST API surface in both hosts
+  (adds bulk-export to the standalone API); `/api/*` auth failures return
+  401/403 in All-in-One mode too (previously 302 to the login page).
+- **AR-4** Configuration is validated at startup (`ValidateOnStart` +
+  `[Range]` annotations) — bad appsettings values fail the boot with a clear
+  message instead of deep runtime errors.
+- **AR-5** Session lifetimes come from the `Session` config section (previously
+  a dead settings class and diverging hardcoded values per host).
+- **AR-2/AR-6** Notification-channel contract cleaned up (dead broadcast method
+  removed, string dispatch replaced by constants); options injected via
+  `IOptions<T>` consistently.
+- **PF-1..PF-6** Performance: dashboard uses `COUNT` aggregates (fixes two
+  wrong tile counts), poll passes are bounded (`Imap:MaxMessagesPerPoll`),
+  retention drains fully each cycle, SQLite gets a busy-timeout, a
+  `(State, CreatedUtc)` index serves the events list, and SNMP DNS lookups are
+  async with a timeout.
+- **UX-1..UX-4/UX-6** UI consistency: dead theme toggle removed, keyboard focus
+  restored on navigation, nav menu mirrors role gates, unified error surfaces,
+  explicit page authorization on Home.
+
+### Documented scope decisions
+
+- Escalation/on-call/paging remain the downstream NMS's responsibility;
+  multi-tenancy is one-instance-per-tenant (see architecture docs).
+
 ## 1.0.2 — 2026-06-11 (Quality)
 
 Maintenance release. No functional or security behaviour changes — this ships
