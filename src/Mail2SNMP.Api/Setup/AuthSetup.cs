@@ -70,31 +70,66 @@ public static class AuthSetup
     /// every request; the <c>UserManager</c> lookup is served from the request
     /// scope, so the cost is one indexed PK query.
     /// </remarks>
+    /// <summary>
+    /// Name of the <see cref="Microsoft.AspNetCore.Authentication.AuthenticationProperties"/>
+    /// item stamped at sign-in with the session's true start time. Sliding renewal
+    /// rewrites <c>IssuedUtc</c> on every refresh, so <c>IssuedUtc</c> alone can never
+    /// trip an absolute-expiry check on an actively-used session; custom property
+    /// items survive renewal untouched.
+    /// </summary>
+    private const string SessionStartKey = "m2s.session_start";
+
     public static void AttachDeactivatedUserRejection(CookieAuthenticationOptions options, TimeSpan? absoluteExpiry = null)
     {
+        // AR-5 (verified fix): stamp the immutable session start at sign-in.
+        options.Events.OnSigningIn = context =>
+        {
+            context.Properties.SetString(SessionStartKey, DateTimeOffset.UtcNow.ToString("O"));
+            return Task.CompletedTask;
+        };
+
         options.Events.OnValidatePrincipal = async context =>
         {
             // AR-5: absolute session lifetime. Sliding expiration alone lets an
-            // actively-used session live forever; when configured, a ticket older
-            // than the absolute window is rejected regardless of activity.
-            if (absoluteExpiry is TimeSpan max &&
-                context.Properties.IssuedUtc is DateTimeOffset issued &&
-                DateTimeOffset.UtcNow - issued > max)
+            // actively-used session live forever. The check uses the sign-in
+            // timestamp stamped above (renewal-immune); IssuedUtc is only the
+            // fallback for tickets issued before this property existed.
+            if (absoluteExpiry is TimeSpan max)
             {
-                context.RejectPrincipal();
-                return;
+                DateTimeOffset? start = null;
+                var stamped = context.Properties.GetString(SessionStartKey);
+                if (stamped is not null &&
+                    DateTimeOffset.TryParse(stamped, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
+                    start = parsed;
+                start ??= context.Properties.IssuedUtc;
+
+                if (start is DateTimeOffset issued && DateTimeOffset.UtcNow - issued > max)
+                {
+                    context.RejectPrincipal();
+                    return;
+                }
             }
 
             var userId = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(userId)) return;
-            var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager<AppUser>>();
-            var user = await userManager.FindByIdAsync(userId);
-            if (user is null || !user.IsActive)
+            if (!string.IsNullOrEmpty(userId))
             {
-                context.RejectPrincipal();
-                var signInManager = context.HttpContext.RequestServices.GetRequiredService<SignInManager<AppUser>>();
-                await signInManager.SignOutAsync();
+                var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager<AppUser>>();
+                var user = await userManager.FindByIdAsync(userId);
+                if (user is null || !user.IsActive)
+                {
+                    context.RejectPrincipal();
+                    var signInManager = context.HttpContext.RequestServices.GetRequiredService<SignInManager<AppUser>>();
+                    await signInManager.SignOutAsync();
+                    return;
+                }
             }
+
+            // Verified fix: assigning OnValidatePrincipal replaces the delegate that
+            // AddIdentity installed — SecurityStampValidator.ValidatePrincipalAsync —
+            // which is what invalidates existing sessions after a password change.
+            // Chain it explicitly so stamp validation still runs in addition to the
+            // checks above (this also closes a pre-existing gap on the Web host).
+            await SecurityStampValidator.ValidatePrincipalAsync(context);
         };
     }
 

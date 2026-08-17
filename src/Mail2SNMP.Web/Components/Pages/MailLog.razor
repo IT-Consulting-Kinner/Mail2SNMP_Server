@@ -25,16 +25,28 @@
 {
     <div class="spinner-border" role="status"><span class="visually-hidden">Loading…</span></div>
 }
-else if (_mails.Count == 0)
-{
-    <div class="alert alert-info">No processed mails recorded yet.</div>
-}
 else
 {
+    @* Verified fix: the search box must survive an empty result — the filter is
+       applied server-side, so a no-hit search previously unmounted the box and
+       showed a false "no mails recorded" state, dead-ending the page. *@
     <div class="mb-3" style="max-width:300px;">
         <DebouncedSearchInput Value="_searchTerm" ValueChanged="OnSearchChanged"
                               Placeholder="Search by sender or subject…" />
     </div>
+    @if (_mails.Count == 0)
+    {
+        @if (string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            <div class="alert alert-info">No processed mails recorded yet.</div>
+        }
+        else
+        {
+            <div class="alert alert-info">No mails match your search.</div>
+        }
+    }
+    else
+    {
     <div class="table-responsive">
         <table class="table table-striped table-hover">
             <thead class="table-dark">
@@ -61,7 +73,7 @@ else
                         <td>
                             @if (m.EventId is long evtId)
                             {
-                                <a href="/events">#@evtId</a>
+                                <a href="/events" title="Opens the events list — the event may need to be located by id #@evtId (older events may already be purged by retention)">#@evtId</a>
                             }
                             else
                             {
@@ -77,6 +89,7 @@ else
         Showing the most recent @_mails.Count entries. Older entries are removed by
         data retention (Retention:ProcessedMailDays).
     </p>
+    }
 }
 
 @code {

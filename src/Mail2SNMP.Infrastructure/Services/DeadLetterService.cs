@@ -27,11 +27,13 @@ public class DeadLetterService : IDeadLetterService
     }
 
     /// <summary>
-    /// Returns up to 500 dead-letter entries ordered by creation date, including the related webhook target.
+    /// Returns up to 500 dead-letter entries ordered by creation date, including the
+    /// related webhook or SNMP target (UC-3: an entry references exactly one of the two).
     /// </summary>
     public async Task<IReadOnlyList<DeadLetterEntry>> GetAllAsync(CancellationToken ct = default)
         => await _db.DeadLetterEntries.AsNoTracking()
             .Include(d => d.WebhookTarget)
+            .Include(d => d.SnmpTarget)
             .OrderByDescending(d => d.CreatedUtc)
             .Take(500)
             .ToListAsync(ct);
@@ -44,11 +46,22 @@ public class DeadLetterService : IDeadLetterService
         entry.NextRetryUtc = DateTime.UtcNow.AddMinutes(15);
         _db.DeadLetterEntries.Add(entry);
         await _db.SaveChangesAsync(ct);
-        // AR-1: single funnel for dead-letter creation — every failed webhook delivery
-        // passes through here, so this is the one place the counter must live.
-        Mail2SnmpMetrics.WebhookDeadLetterTotal.Inc();
-        _logger.LogWarning("Dead letter created for webhook target {TargetId}, event {EventId}: {Error}",
-            entry.WebhookTargetId, entry.EventId, entry.LastError);
+        // AR-1: single funnel for dead-letter creation — every failed delivery passes
+        // through here, so this is the one place the counters must live. UC-3
+        // (verified fix): SNMP entries get their own counter and log line instead of
+        // silently inflating the webhook-named metric.
+        if (entry.SnmpTargetId is not null)
+        {
+            Mail2SnmpMetrics.SnmpDeadLetterTotal.Inc();
+            _logger.LogWarning("Dead letter created for SNMP target {TargetId}, event {EventId}: {Error}",
+                entry.SnmpTargetId, entry.EventId, entry.LastError);
+        }
+        else
+        {
+            Mail2SnmpMetrics.WebhookDeadLetterTotal.Inc();
+            _logger.LogWarning("Dead letter created for webhook target {TargetId}, event {EventId}: {Error}",
+                entry.WebhookTargetId, entry.EventId, entry.LastError);
+        }
         return entry;
     }
 

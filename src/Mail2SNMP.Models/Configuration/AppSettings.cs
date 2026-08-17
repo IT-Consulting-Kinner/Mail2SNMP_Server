@@ -104,11 +104,15 @@ public class DatabaseSettings
         }
 
         // SQLite — DatabaseName is the file path.
-        // PF-4: "Default Timeout" is Microsoft.Data.Sqlite's busy-wait window. With
-        // multiple consumer tasks writing concurrently (event creation runs in a
-        // Serializable transaction that takes SQLite's database-wide write lock), a
-        // second writer previously failed immediately with SQLITE_BUSY ("database is
-        // locked"); now it queues for up to ConnectTimeoutSeconds instead.
+        // PF-4 (scope corrected after verification): "Default Timeout" sets
+        // Microsoft.Data.Sqlite's busy-wait window for commands that use the
+        // CONNECTION default. EF Core commands do NOT — the DbContext registration
+        // applies CommandTimeout(CommandTimeoutSeconds) per command, which already
+        // drives the SQLITE_BUSY retry loop for all EF traffic. This keyword
+        // therefore only covers non-EF commands on the same connection (e.g.
+        // transaction bookkeeping) and deployments that customize
+        // ConnectTimeoutSeconds. It is a small consistency win, not the primary
+        // busy-timeout mechanism.
         return $"Data Source={DatabaseName};Default Timeout={Math.Max(1, ConnectTimeoutSeconds)}";
     }
 }

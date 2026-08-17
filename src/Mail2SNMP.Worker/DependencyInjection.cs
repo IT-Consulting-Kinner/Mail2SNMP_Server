@@ -23,16 +23,25 @@ public static class WorkerDependencyInjection
             .GetSection("Imap")
             .Get<ImapSettings>() ?? new ImapSettings();
 
+        // AR-4 (verified fix): this value is consumed at registration time, BEFORE the
+        // options pipeline (ValidateOnStart) exists — an out-of-range value would
+        // surface as a bare BoundedChannelOptions stack trace instead of the friendly
+        // options error. Clamp defensively; the ValidateOnStart registration in
+        // AddMail2SnmpInfrastructure still reports the misconfiguration at boot.
+        var channelCapacity = Math.Max(1, imapSettings.ChannelBoundedCapacity);
+
         services.AddSingleton(Channel.CreateBounded<MailWorkItem>(
-            new BoundedChannelOptions(imapSettings.ChannelBoundedCapacity)
+            new BoundedChannelOptions(channelCapacity)
             {
                 FullMode = BoundedChannelFullMode.DropWrite,
                 SingleReader = false,
                 SingleWriter = false
             }));
 
-        // Register ImapSettings so ImapPollingJob can check capacity for misfire logging
-        services.Configure<ImapSettings>(configuration.GetSection("Imap"));
+        // AR-4/AR-6 (verified fix): the duplicate Configure<ImapSettings> registration
+        // was removed — AddMail2SnmpInfrastructure owns the single validated
+        // AddOptions<ImapSettings>().Bind().ValidateDataAnnotations().ValidateOnStart()
+        // registration, and every host that calls this method also calls that one.
 
         // Quartz scheduler with DI
         var dbSettings = configuration

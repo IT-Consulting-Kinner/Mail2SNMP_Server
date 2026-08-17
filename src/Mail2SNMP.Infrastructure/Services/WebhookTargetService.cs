@@ -107,6 +107,17 @@ public class WebhookTargetService : IWebhookTargetService
         if (referencingJoin != null)
             throw new DependencyException($"Webhook Target '{target.Name}' cannot be deleted — it is used by Job '{referencingJoin.Job.Name}'.");
 
+        // Verified fix: the FK became optional in UC-3 (nullable WebhookTargetId),
+        // which dropped the former ON DELETE CASCADE — a target with dead-letter
+        // rows (Pending or Abandoned, which persist up to Retention:DeadLetterDays)
+        // would otherwise fail deletion with a raw FK-constraint error. Remove the
+        // target's dead letters explicitly; they are meaningless without the target.
+        var orphanedDeadLetters = await _db.DeadLetterEntries
+            .Where(d => d.WebhookTargetId == id)
+            .ToListAsync(ct);
+        if (orphanedDeadLetters.Count > 0)
+            _db.DeadLetterEntries.RemoveRange(orphanedDeadLetters);
+
         _db.WebhookTargets.Remove(target);
         await _db.SaveChangesAsync(ct);
         await _audit.LogAsync(Models.Enums.ActorType.System, "system", "WebhookTarget.Deleted", "WebhookTarget", id.ToString(), ct: ct);

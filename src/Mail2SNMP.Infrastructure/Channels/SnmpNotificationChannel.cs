@@ -211,7 +211,10 @@ public class SnmpNotificationChannel : INotificationChannel
         //   eventID, eventName, eventSeverity, eventMessage
         var varbinds = new List<Variable>
         {
-            new(new ObjectIdentifier(EventIDOid),       new Integer32((int)Math.Min(context.EventId, int.MaxValue))),
+            // UC-7 (verified fix): clamp BOTH bounds. Synthetic test events use a large
+            // negative EventId; the old upper-bound-only Min let the unchecked cast
+            // wrap it into an arbitrary int. Test traps now report eventID 0.
+            new(new ObjectIdentifier(EventIDOid),       new Integer32((int)Math.Clamp(context.EventId, 0, int.MaxValue))),
             new(new ObjectIdentifier(EventNameOid),     new OctetString(_templateEngine.TruncateForSnmp(context.JobName))),
             new(new ObjectIdentifier(EventSeverityOid), new OctetString(context.Severity.ToString())),
             new(new ObjectIdentifier(EventMessageOid),  new OctetString(_templateEngine.TruncateForSnmp(message)))
@@ -230,10 +233,14 @@ public class SnmpNotificationChannel : INotificationChannel
         // Resolve the assigned SNMP targets via the event's job. We deliberately do NOT
         // broadcast to every active target — only the targets the job was configured for
         // should be informed about an acknowledge for that event.
+        // UC-4 (verified fix): apply the same severity routing as the original event
+        // dispatch — a target that never received the EventCreated trap (severity below
+        // its threshold) must not receive a confirm trap referencing an eventID the
+        // receiver has never seen.
         var assignedTargets = await _db.Events
             .Where(e => e.Id == eventId)
-            .SelectMany(e => e.Job.JobSnmpTargets)
-            .Where(jst => jst.SnmpTarget.IsActive)
+            .SelectMany(e => e.Job.JobSnmpTargets
+                .Where(jst => jst.SnmpTarget.IsActive && e.Severity >= jst.SnmpTarget.MinSeverity))
             .Select(jst => jst.SnmpTarget)
             .ToListAsync(ct);
 

@@ -53,10 +53,11 @@ public class Rule
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// G3: Per-rule deduplication window in minutes. When greater than 0, the EventService
-    /// suppresses creation of a new event if an event with the same JobId+RuleId+Subject was
-    /// created within this many minutes. When 0 or null, the global
-    /// <c>Events:DefaultDedupWindowMinutes</c> is used.
+    /// Per-rule deduplication window in minutes, overriding <see cref="Job.DedupWindowMinutes"/>
+    /// for every job that uses this rule (FN-2 semantics). <c>null</c> (the default)
+    /// inherits the job's window; an explicit <c>0</c> DISABLES deduplication for
+    /// those jobs. Duplicates are matched by the hashed Message-ID (or the
+    /// subject+sender fallback key), not by subject alone.
     /// </summary>
     public int? DedupWindowMinutes { get; set; }
 

@@ -5,11 +5,8 @@
 @using Mail2SNMP.Models.Entities
 @using Microsoft.EntityFrameworkCore
 @using System.Reflection
-@inject IMailboxService MailboxService
-@inject IJobService JobService
-@inject IScheduleService ScheduleService
-@inject IEventService EventService
-@inject IDeadLetterService DeadLetterService
+@* PF-1 (verified cleanup): the five list-service injections were removed — after
+   the aggregate-count rewrite all tile numbers come from Db + MaintenanceService. *@
 @inject IMaintenanceWindowService MaintenanceService
 @inject ILicenseProvider LicenseProvider
 @inject Mail2SnmpDbContext Db

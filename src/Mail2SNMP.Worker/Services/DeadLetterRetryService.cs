@@ -43,7 +43,24 @@ public class DeadLetterRetryService : BackgroundService
         _pollInterval = TimeSpan.FromSeconds(section.GetValue("PollIntervalSeconds", 900));
         _batchSize = section.GetValue("BatchSize", 10);
         _maxAttempts = section.GetValue("MaxAttempts", 10);
-        _lockDuration = TimeSpan.FromMinutes(section.GetValue("LockDurationMinutes", 5));
+        // Default raised 5 -> 7 minutes so the out-of-the-box lease clears the safe
+        // minimum below (10 x 35s + 60s = 410s) without a startup warning.
+        _lockDuration = TimeSpan.FromMinutes(section.GetValue("LockDurationMinutes", 7));
+
+        // Verified fix (FN-1 follow-up): the lease must comfortably outlast the
+        // worst-case batch (BatchSize x 30s HTTP timeout, plus SNMP DNS timeouts and
+        // the final save). If it lapsed mid-batch, a second instance could legally
+        // re-claim rows still being processed — duplicate delivery plus a RowVersion
+        // conflict that discards the first instance's batch bookkeeping. Floor the
+        // effective lease at BatchSize x 35s + 60s headroom.
+        var minLease = TimeSpan.FromSeconds(_batchSize * 35 + 60);
+        if (_lockDuration < minLease)
+        {
+            _logger.LogWarning(
+                "DeadLetter:LockDurationMinutes ({Configured}) is below the safe minimum for BatchSize {BatchSize}; using {Effective} instead.",
+                _lockDuration, _batchSize, minLease);
+            _lockDuration = minLease;
+        }
         _backoffBaseMinutes = section.GetValue("BackoffBaseMinutes", 15);
         _initialDelay = TimeSpan.FromSeconds(section.GetValue("InitialDelaySeconds", 15));
 

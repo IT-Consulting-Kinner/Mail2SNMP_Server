@@ -150,6 +150,7 @@ public class JobService : IJobService
         var report = new StringBuilder();
         var okCount = 0;
         var failCount = 0;
+        var skippedCount = 0;
 
         foreach (var jst in job.JobSnmpTargets.Where(t => t.SnmpTarget.IsActive))
         {
@@ -157,6 +158,7 @@ public class JobService : IJobService
             // instead of silently skipping, so the operator sees why a target stays quiet.
             if (context.Severity < jst.SnmpTarget.MinSeverity)
             {
+                skippedCount++;
                 report.AppendLine($"SNMP  {jst.SnmpTarget.Name}: skipped (target requires >= {jst.SnmpTarget.MinSeverity})");
                 continue;
             }
@@ -169,6 +171,7 @@ public class JobService : IJobService
         {
             if (context.Severity < jwt.WebhookTarget.MinSeverity)
             {
+                skippedCount++;
                 report.AppendLine($"HTTP  {jwt.WebhookTarget.Name}: skipped (target requires >= {jwt.WebhookTarget.MinSeverity})");
                 continue;
             }
@@ -177,7 +180,9 @@ public class JobService : IJobService
             if (ok) okCount++; else failCount++;
         }
 
-        if (okCount == 0 && failCount == 0)
+        // Verified fix: only claim "no targets" when there truly were none — a report
+        // full of severity-skipped targets must not end with a contradictory line.
+        if (okCount == 0 && failCount == 0 && skippedCount == 0)
             report.AppendLine("No active targets are assigned to this job — nothing was sent.");
 
         await _audit.LogAsync(Models.Enums.ActorType.System, "system", "Job.TestSend", "Job", id.ToString(), ct: ct);

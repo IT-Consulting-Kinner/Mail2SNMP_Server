@@ -157,7 +157,7 @@ else
             return;
         }
         if (!await Confirm.AskAsync(
-                $"Retry {pending} pending dead letter entries? This may send many webhook requests."))
+                $"Retry {pending} pending dead letter entries? This may send many webhook requests and SNMP traps."))
             return;
         _busy = true;
         try
@@ -197,11 +197,15 @@ else
         try
         {
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine("CreatedUtc,WebhookTargetId,EventId,Status,AttemptCount,NextRetryUtc,LastError");
+            @* UC-3 (verified fix): entries reference either target kind — the export
+               carries a Kind discriminator and both target-id columns. *@
+            sb.AppendLine("CreatedUtc,Kind,WebhookTargetId,SnmpTargetId,EventId,Status,AttemptCount,NextRetryUtc,LastError");
             foreach (var e in _entries)
             {
                 sb.Append(e.CreatedUtc.ToString("o")).Append(',')
+                  .Append(e.SnmpTargetId is not null ? "SNMP" : "HTTP").Append(',')
                   .Append(e.WebhookTargetId).Append(',')
+                  .Append(e.SnmpTargetId).Append(',')
                   .Append(e.EventId).Append(',')
                   .Append(Csv(e.Status.ToString())).Append(',')
                   .Append(e.AttemptCount).Append(',')

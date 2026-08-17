@@ -157,6 +157,11 @@ public class DataRetentionService : BackgroundService
         if (eventsToExpire.Count > 0)
         {
             await db.SaveChangesAsync(ct);
+            // AR-1 (verified fix): New/Notified are part of the active set, so the
+            // auto-expiry must decrement the active-events gauge like every other
+            // active→terminal transition — otherwise the gauge drifts upward by the
+            // auto-expired count on every retention cycle.
+            Mail2SNMP.Infrastructure.Services.Mail2SnmpMetrics.ActiveEvents.Dec(eventsToExpire.Count);
             _logger.LogInformation("Auto-expired {Count} events older than {Days} days", eventsToExpire.Count, _eventSettings.AutoExpireDays);
         }
 
@@ -282,12 +287,21 @@ public class DataRetentionService : BackgroundService
     }
 
     /// <summary>
-    /// Deletes event deduplication entries whose last-seen timestamp exceeds twice the default dedup window.
+    /// Deletes event deduplication entries whose last-seen timestamp exceeds twice the
+    /// LARGEST effective dedup window configured anywhere (per-job, per-rule, or the
+    /// global default).
     /// </summary>
     private async Task<int> DeleteOldEventDedupsAsync(Mail2SnmpDbContext db, CancellationToken ct)
     {
-        // Delete dedup entries older than 2x the default dedup window
-        var cutoffMinutes = _eventSettings.DefaultDedupWindowMinutes * 2;
+        // FN-2 (verified fix): the purge cutoff must respect the longest configured
+        // window, not just the global default. Basing it on DefaultDedupWindowMinutes
+        // alone silently truncated any per-job/per-rule window > 2x the default
+        // (e.g. a 1440-minute window for a daily repeating alert): the dedup row was
+        // purged after ~60 min of quiet and the repeat spawned a fresh event —
+        // reproducing the very "window has no effect" bug FN-2 fixed.
+        var maxJobWindow = await db.Jobs.Select(j => (int?)j.DedupWindowMinutes).MaxAsync(ct) ?? 0;
+        var maxRuleWindow = await db.Rules.Select(r => r.DedupWindowMinutes).MaxAsync(ct) ?? 0;
+        var cutoffMinutes = Math.Max(Math.Max(maxJobWindow, maxRuleWindow), _eventSettings.DefaultDedupWindowMinutes) * 2;
         var cutoff = DateTime.UtcNow.AddMinutes(-cutoffMinutes);
 
         var toDelete = await db.EventDedups

@@ -340,10 +340,12 @@ public class MailPollingService : BackgroundService
             // the remainder stays unseen and is picked up by the next cycle.
             if (_imapSettings.MaxMessagesPerPoll > 0 && uids.Count > _imapSettings.MaxMessagesPerPoll)
             {
+                // Verified fix: placeholder count must equal argument count — a
+                // formatter-based log consumer string.Format-crashes on a mismatch.
                 _logger.LogWarning(
                     "Mailbox {Name}: {Total} unseen messages exceed MaxMessagesPerPoll ({Cap}). " +
-                    "Processing the oldest {Cap}; the rest will be handled next cycle.",
-                    mailbox.Name, uids.Count, _imapSettings.MaxMessagesPerPoll);
+                    "Processing the oldest {Cap2}; the rest will be handled next cycle.",
+                    mailbox.Name, uids.Count, _imapSettings.MaxMessagesPerPoll, _imapSettings.MaxMessagesPerPoll);
                 uids = uids.Take(_imapSettings.MaxMessagesPerPoll).ToList();
             }
 

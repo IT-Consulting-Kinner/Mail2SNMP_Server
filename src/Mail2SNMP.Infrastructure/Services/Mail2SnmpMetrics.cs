@@ -109,12 +109,22 @@ public static class Mail2SnmpMetrics
         "Total webhook deliveries sent to dead letter");
 
     /// <summary>
+    /// Counter <c>mail2snmp_snmp_deadletter_total</c>: total SNMP trap sends that failed
+    /// locally and were written to the dead-letter store (UC-3). Unlabeled.
+    /// </summary>
+    public static readonly Counter SnmpDeadLetterTotal = Metrics.CreateCounter(
+        "mail2snmp_snmp_deadletter_total",
+        "Total SNMP trap sends written to dead letter");
+
+    /// <summary>
     /// Gauge <c>mail2snmp_webhook_deadletter_pending</c>: current number of dead-letter
-    /// entries awaiting retry. Unlabeled.
+    /// entries awaiting retry. Unlabeled. Since UC-3 the queue holds BOTH webhook and
+    /// SNMP entries; the metric name is kept for dashboard compatibility, but the value
+    /// is channel-agnostic.
     /// </summary>
     public static readonly Gauge DeadLetterPending = Metrics.CreateGauge(
         "mail2snmp_webhook_deadletter_pending",
-        "Number of pending dead letter entries");
+        "Number of pending dead letter entries (webhook and SNMP)");
 
     /// <summary>
     /// Counter <c>mail2snmp_deadletter_retried_total</c>: total dead-letter retry attempts

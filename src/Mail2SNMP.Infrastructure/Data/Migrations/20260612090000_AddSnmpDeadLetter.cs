@@ -44,6 +44,11 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            // SNMP entries cannot survive the rollback: re-tightening WebhookTargetId
+            // to NOT NULL DEFAULT 0 would turn them into rows referencing
+            // WebhookTargets.Id = 0 and fail the FK check during the table rebuild.
+            migrationBuilder.Sql("DELETE FROM DeadLetterEntries WHERE SnmpTargetId IS NOT NULL;");
+
             migrationBuilder.DropForeignKey(
                 name: "FK_DeadLetterEntries_SnmpTargets_SnmpTargetId",
                 table: "DeadLetterEntries");

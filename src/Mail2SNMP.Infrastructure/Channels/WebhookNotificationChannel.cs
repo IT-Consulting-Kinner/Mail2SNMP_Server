@@ -202,15 +202,30 @@ public class WebhookNotificationChannel : INotificationChannel
     /// </summary>
     private async Task CreateDeadLetterAsync(WebhookTarget target, NotificationContext context, string error, CancellationToken ct)
     {
-        var payload = _templateEngine.BuildPayload(context, context.WebhookTemplate ?? target.PayloadTemplate);
-        await _deadLetterService.CreateAsync(new DeadLetterEntry
+        // V-fix: mirror the SNMP channel's guards. A redelivery's lifecycle is owned
+        // by the retry service, and a synthetic test event (negative EventId, UC-7)
+        // has no Events row — inserting it would violate the required EventId FK,
+        // throw from inside the caller's catch block, break the Task<bool> delivery
+        // contract and crash the test-send report.
+        if (context.IsRedelivery || context.EventId <= 0) return;
+        try
         {
-            WebhookTargetId = target.Id,
-            EventId = context.EventId,
-            PayloadJson = JsonSerializer.Serialize(payload),
-            LastError = error,
-            AttemptCount = 1,
-            Status = DeadLetterStatus.Pending
-        }, ct);
+            var payload = _templateEngine.BuildPayload(context, context.WebhookTemplate ?? target.PayloadTemplate);
+            await _deadLetterService.CreateAsync(new DeadLetterEntry
+            {
+                WebhookTargetId = target.Id,
+                EventId = context.EventId,
+                PayloadJson = JsonSerializer.Serialize(payload),
+                LastError = error,
+                AttemptCount = 1,
+                Status = DeadLetterStatus.Pending
+            }, ct);
+        }
+        catch (Exception dlEx)
+        {
+            // Dead-lettering is best-effort — it must never mask the original
+            // delivery failure.
+            _logger.LogError(dlEx, "Failed to dead-letter webhook for target {Name}, event {EventId}", target.Name, context.EventId);
+        }
     }
 }

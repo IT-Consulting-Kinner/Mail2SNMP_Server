@@ -105,6 +105,15 @@ public class SnmpTargetService : ISnmpTargetService
         if (referencingJoin != null)
             throw new DependencyException($"SNMP Target '{target.Name}' cannot be deleted — it is used by Job '{referencingJoin.Job.Name}'.");
 
+        // Verified fix: the UC-3 SnmpTargetId FK carries no ON DELETE action, so a
+        // target with dead-letter rows would fail deletion with a raw FK error.
+        // Remove them explicitly; they are meaningless without the target.
+        var orphanedDeadLetters = await _db.DeadLetterEntries
+            .Where(d => d.SnmpTargetId == id)
+            .ToListAsync(ct);
+        if (orphanedDeadLetters.Count > 0)
+            _db.DeadLetterEntries.RemoveRange(orphanedDeadLetters);
+
         _db.SnmpTargets.Remove(target);
         await _db.SaveChangesAsync(ct);
         await _audit.LogAsync(Models.Enums.ActorType.System, "system", "SnmpTarget.Deleted", "SnmpTarget", id.ToString(), ct: ct);
