@@ -2,12 +2,23 @@
 
 All notable changes to Mail2SNMP Server. Entries are grouped by **release** and by the development **waves** that made up each release. Each wave fixes the findings of a multi-agent comprehensive code review of the previous wave; the wave pattern is documented in the repo's development history.
 
-## Unreleased
+## 1.2.0 — 2026-08-17 (Blocker fixes)
+
+> **1.1.0 is defective and has been withdrawn from the "latest" slot.** It could
+> not write to a SQLite database at all — the default configuration — and its
+> migrations produced an unusable schema on SQL Server. Upgrade directly to
+> 1.2.0. No data migration is needed beyond the usual `mail2snmp db migrate`;
+> a 1.1.0 SQLite installation will have no data to lose, because it could not
+> create any.
 
 Second full-surface review (UX consistency, security, correctness, use cases,
 architecture, performance) with adversarially verified findings, implemented in
-batches. **1.1.0 shipped with two blocking defects — see below; upgrade is
-strongly recommended.**
+batches. This release ships the blocker fixes immediately rather than waiting
+for the remaining findings.
+
+**Upgrading:** run `mail2snmp db migrate` once. From SQL Server on 1.1.0, check
+the generated schema before migrating — 1.1.0 may have created tables with
+SQLite column types (see C-2).
 
 ### Fixed — blockers in 1.1.0
 
