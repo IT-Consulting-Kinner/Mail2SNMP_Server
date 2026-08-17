@@ -314,7 +314,17 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
             e.HasKey(x => x.Id);
             e.HasOne(x => x.Mailbox).WithMany().HasForeignKey(x => x.MailboxId);
             e.Property(x => x.MessageId).HasMaxLength(1000);
+            // Retention deletes by ProcessedUtc.
             e.HasIndex(x => x.ProcessedUtc);
+            // The Mail Log sorts and range-filters by ReceivedUtc, so without this the
+            // "show me recent mail" query — the page's entire purpose — sorts the whole
+            // table. Paired with the mailbox composite below, which covers the common
+            // "why is THIS mailbox quiet?" view. Deliberately only two extra indexes:
+            // ProcessedMails is written once per mail per active job, the hottest write
+            // path in the product, so indexing every filterable column would trade
+            // ingestion throughput for a diagnostic screen.
+            e.HasIndex(x => x.ReceivedUtc);
+            e.HasIndex(x => new { x.MailboxId, x.ReceivedUtc });
             // H-1: the claim is scoped per JOB, not just per mailbox. With the old
             // (MessageId, MailboxId) key the first job to poll won the claim and every
             // other job on the same mailbox silently never fired.

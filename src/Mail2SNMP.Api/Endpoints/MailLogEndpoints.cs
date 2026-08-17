@@ -62,9 +62,12 @@ public static class MailLogEndpoints
 
             var total = await query.CountAsync(ct);
 
+            // Sorted by the same column the from/to filter uses, so both are served by
+            // one index rather than range-filtering on one column and sorting on another.
             var rows = await query
                 .Include(m => m.Mailbox)
-                .OrderByDescending(m => m.ProcessedUtc)
+                .OrderByDescending(m => m.ReceivedUtc)
+                .ThenByDescending(m => m.Id)
                 .Skip(Math.Max(0, skip ?? 0))
                 .Take(Math.Clamp(take ?? 100, 1, maxTake))
                 .ToListAsync(ct);

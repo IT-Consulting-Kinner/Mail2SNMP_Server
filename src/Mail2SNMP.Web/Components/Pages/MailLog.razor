@@ -143,8 +143,14 @@ else
                     (m.Subject != null && m.Subject.Contains(term)));
             }
 
+            // Ordered by the column the table actually displays. It used to sort by
+            // ProcessedUtc while showing ReceivedUtc — for most mail the two are seconds
+            // apart, but while a backlog drains they diverge and the list reads as
+            // unsorted. ReceivedUtc is also what the date filter uses, so filter and sort
+            // now share one index instead of forcing a sort over the whole table.
             _mails = await query
-                .OrderByDescending(m => m.ProcessedUtc)
+                .OrderByDescending(m => m.ReceivedUtc)
+                .ThenByDescending(m => m.Id)
                 .Take(MaxRows)
                 .ToListAsync();
 

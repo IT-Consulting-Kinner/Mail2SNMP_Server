@@ -125,6 +125,59 @@ public class DatabaseProviderTests
     }
 
     /// <summary>
+    /// The Mail Log sorts and range-filters by <c>ReceivedUtc</c>, so the indexes backing
+    /// that query must actually exist in the migrated schema — not just in the model.
+    /// </summary>
+    /// <remarks>
+    /// Asserted against the real migrated database rather than the model, because a model
+    /// change without the matching migration compiles, passes every model-level check, and
+    /// then does nothing whatsoever in production.
+    /// </remarks>
+    [Fact]
+    public async Task Sqlite_MailLogIndexes_ExistInTheMigratedSchema()
+    {
+        var (db, path) = NewSqliteDb();
+        try
+        {
+            var conn = db.Database.GetDbConnection();
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText =
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='ProcessedMails'";
+
+            var indexes = new List<string>();
+            await using (var reader = await cmd.ExecuteReaderAsync())
+                while (await reader.ReadAsync())
+                    indexes.Add(reader.GetString(0));
+
+            Assert.Contains("IX_ProcessedMails_ReceivedUtc", indexes);
+            Assert.Contains("IX_ProcessedMails_MailboxId_ReceivedUtc", indexes);
+        }
+        finally
+        {
+            await db.DisposeAsync();
+            SqliteCleanup(path);
+        }
+    }
+
+    /// <summary>
+    /// The same two indexes must be emitted for SQL Server, with SQL Server syntax.
+    /// </summary>
+    [Fact]
+    public void SqlServer_MigrationScript_CreatesTheMailLogIndexes()
+    {
+        var options = new DbContextOptionsBuilder<Mail2SnmpDbContext>()
+            .UseSqlServer("Server=localhost;Database=schema-check;Trusted_Connection=True;TrustServerCertificate=True")
+            .Options;
+        using var db = new Mail2SnmpDbContext(options);
+
+        var script = db.GetService<IMigrator>().GenerateScript();
+
+        Assert.Contains("[IX_ProcessedMails_ReceivedUtc] ON [ProcessedMails] ([ReceivedUtc])", script);
+        Assert.Contains("[IX_ProcessedMails_MailboxId_ReceivedUtc] ON [ProcessedMails] ([MailboxId], [ReceivedUtc])", script);
+    }
+
+    /// <summary>
     /// C-2: the migration set is applied to SQL Server too (the documented production
     /// provider), so it must not carry SQLite store types. Before the fix every column
     /// was hardcoded <c>TEXT</c>/<c>INTEGER</c>/<c>BLOB</c>: <c>BLOB</c> does not exist
