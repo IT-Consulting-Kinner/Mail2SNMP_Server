@@ -330,6 +330,15 @@ public class DeadLetterRetryService : BackgroundService
                 entry.Status = DeadLetterStatus.Pending;
                 entry.LockedUntilUtc = null;
                 entry.LockedByInstanceId = null;
+
+                // The batch bookkeeping accumulated so far MUST be persisted before the
+                // loop exits. It used to rely on the single SaveChanges after the loop,
+                // which the shutdown then skipped (CancellationToken already signalled):
+                // entries that had been delivered successfully were never removed, so the
+                // next start re-sent every one of them — duplicate traps and webhooks
+                // after each restart. Save without the cancelled token so the write
+                // actually completes.
+                await db.SaveChangesAsync(CancellationToken.None);
                 break;
             }
             catch (Exception ex)
@@ -359,8 +368,12 @@ public class DeadLetterRetryService : BackgroundService
                         entry.Id, entry.AttemptCount, _maxAttempts, entry.NextRetryUtc, ex.Message);
                 }
             }
+            // Persist each entry's outcome immediately rather than once per batch. A
+            // batch can run for minutes (BatchSize × HTTP timeout), and a crash or
+            // shutdown in the middle used to discard the bookkeeping for every entry
+            // processed so far — including the removals of successfully redelivered
+            // ones, which were then delivered again on the next cycle.
+            await db.SaveChangesAsync(CancellationToken.None);
         }
-
-        await db.SaveChangesAsync(ct);
     }
 }

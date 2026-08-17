@@ -347,6 +347,11 @@ else
                                 <div class="col">
                                     <label class="form-label">Dedup Window (min)</label>
                                     <InputNumber class="form-control" @bind-Value="_form.DedupWindowMinutes" />
+                                    <small class="text-muted">
+                                        Repeated alerts with the same subject and sender collapse into
+                                        one event (its hit count rises) for this many minutes.
+                                        <strong>0</strong> disables deduplication. A rule may override this.
+                                    </small>
                                 </div>
                             </div>
                         }

@@ -5,6 +5,7 @@
 @inject IJSRuntime JS
 @inject ConfirmService Confirm
 @inject IOptions<HelpSettings> Help
+@inject ILicenseProvider LicenseProvider
 
 <PageTitle>Dead Letters - Mail2SNMP</PageTitle>
 
@@ -17,6 +18,19 @@
 
 <AutoDismissAlert Type="danger"  @bind-Message="_error" />
 <AutoDismissAlert Type="success" @bind-Message="_success" AutoDismissSeconds="5" />
+
+@* Automatic retry is an Enterprise feature (DeadLetterRetryService exits at startup
+   under Community), but the page offered Retry buttons in every edition and reported
+   "queued for retry" — a queue nothing would ever drain. Say so plainly instead. *@
+@if (!LicenseProvider.IsEnterprise())
+{
+    <div class="alert alert-warning">
+        <strong>Automatic retry is an Enterprise feature.</strong>
+        Failed deliveries are recorded here so you can see what was lost, but the
+        retry worker does not run under the Community edition — re-queued entries
+        stay pending. Upgrade to Enterprise to have them delivered automatically.
+    </div>
+}
 
 @if (_loading)
 {
@@ -35,7 +49,8 @@ else
         <thead class="table-dark">
             <tr>
                 <th>ID</th>
-                <th>Webhook Target</th>
+                @* UC-3: the queue holds SNMP entries too — the column shows either kind. *@
+                <th>Target</th>
                 <th>Event ID</th>
                 <th>Status</th>
                 <th>Attempts</th>

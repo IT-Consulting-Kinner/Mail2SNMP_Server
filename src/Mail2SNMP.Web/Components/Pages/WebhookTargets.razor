@@ -75,6 +75,8 @@ else
                 <th>Name</th>
                 <th>URL</th>
                 <th>Max Req/Min</th>
+                @* Severity routing was configurable but invisible outside the edit modal. *@
+                <th>Min. Severity</th>
                 <th>Active</th>
                 <th>Created</th>
                 <th>Actions</th>
@@ -83,7 +85,7 @@ else
         <tbody>
             @if (filtered.Count == 0)
             {
-                <tr><td colspan="7" class="text-center text-muted py-3">No targets match the search term.</td></tr>
+                <tr><td colspan="8" class="text-center text-muted py-3">No targets match the search term.</td></tr>
             }
             @foreach (var t in filtered)
             {
@@ -94,6 +96,16 @@ else
                     <td>@t.Name</td>
                     <td><code class="small">@t.Url</code></td>
                     <td>@t.MaxRequestsPerMinute</td>
+                    <td>
+                        @if (t.MinSeverity == Severity.Information)
+                        {
+                            <span class="text-muted">All</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary" title="Events below @t.MinSeverity are not sent to this target">&ge; @t.MinSeverity</span>
+                        }
+                    </td>
                     <td><span class="badge @(t.IsActive ? "bg-success" : "bg-secondary")">@(t.IsActive ? "Active" : "Inactive")</span></td>
                     <td>@t.CreatedUtc.ToString("g")</td>
                     <td>

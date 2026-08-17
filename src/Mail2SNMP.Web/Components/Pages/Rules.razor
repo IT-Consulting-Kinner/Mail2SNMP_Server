@@ -174,8 +174,15 @@ else
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Dedup Window (minutes)</label>
-                            <InputNumber class="form-control" @bind-Value="_form.DedupWindowMinutes" placeholder="leave blank for default" />
-                            <small class="text-muted">G3: per-rule override. 0/empty = use the global Events:DefaultDedupWindowMinutes setting.</small>
+                            <InputNumber class="form-control" @bind-Value="_form.DedupWindowMinutes" placeholder="leave blank to use the job's window" />
+                            @* The old text ("0/empty = use the global default") is wrong on both
+                               counts since dedup was fixed: empty inherits the JOB's window, and
+                               0 switches deduplication off entirely. *@
+                            <small class="text-muted">
+                                Optional override of the job's dedup window, in minutes.
+                                <strong>Leave empty</strong> to inherit the job's setting;
+                                <strong>0</strong> disables deduplication for jobs using this rule.
+                            </small>
                             <ValidationMessage For="@(() => _form.DedupWindowMinutes)" class="text-danger small" />
                         </div>
                         <div class="form-check mb-3">
