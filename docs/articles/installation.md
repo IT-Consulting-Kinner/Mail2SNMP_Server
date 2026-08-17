@@ -32,6 +32,20 @@ Get-Service Mail2SNMP
 
 Logs are written to `C:\Program Files\Mail2SNMP\logs\mail2snmp-worker-*.log`.
 
+## Upgrading
+
+After installing a newer MSI over an existing deployment, apply any pending
+database migrations once before starting the services:
+
+```powershell
+mail2snmp db migrate
+```
+
+`db status` shows the connection state and applied migrations. Release 1.1.0
+ships four migrations (severity routing, mail-log disposition, SNMP
+dead-letter, events index); the upgrade is otherwise drop-in — no configuration
+changes are required.
+
 ## Uninstall
 
 Use Windows Settings > Apps or run the MSI installer again and choose Remove.

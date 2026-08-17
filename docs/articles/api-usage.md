@@ -149,11 +149,14 @@ through the browser either.
 
 ### Dead Letters (`/api/v1/dead-letters`)
 
+Since 1.1.0 the queue holds failed **webhook and SNMP** deliveries; each entry
+references exactly one target kind (`webhookTargetId` **or** `snmpTargetId`).
+
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
-| GET | `/` | Operator | List failed deliveries |
+| GET | `/` | Operator | List failed deliveries (both channels) |
 | POST | `/{id}/retry` | Operator | Retry single delivery |
-| POST | `/retry-all/{webhookTargetId}` | Admin | Retry all for target |
+| POST | `/retry-all/{webhookTargetId}` | Admin | Retry all for a webhook target (SNMP entries are re-queued per entry via `/{id}/retry`) |
 
 ### Dashboard (`/api/v1/dashboard`)
 
@@ -178,3 +181,9 @@ through the browser either.
 | 404 | Resource not found |
 | 409 | Dependency conflict (e.g., deleting a referenced entity) |
 | 429 | Rate limit exceeded |
+
+Since 1.1.0 the `401`/`403` semantics are identical on the standalone API host
+and in All-in-One mode: unauthenticated or unauthorized requests to `/api/*`
+always receive a machine-readable status code (previously the All-in-One host
+answered API clients with a `302` redirect to the HTML login page). The API
+surface is also identical in both deployment modes, including bulk export.

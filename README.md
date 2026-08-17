@@ -6,6 +6,10 @@ Mail2SNMP is a Windows service that monitors email mailboxes and converts matchi
 
 - **Mail-to-SNMP / Webhook**: regex/contains/equals rules on Subject, Body, Sender match incoming mail and emit SNMP v1/v2c/v3 traps and/or HTTP webhook notifications.
 - **Trap pairing**: every matched event sends an `EventCreated` trap (OID `1.3.6.1.4.1.61376.1.2.0.1`); on acknowledge a paired `EventConfirmed` trap (OID `…0.2`) carries the same event ID so monitoring systems can clear the alert.
+- **Severity-based routing** (1.1.0): each SNMP/webhook target has a *Minimum Severity* — "page the NOC only for Critical, log everything else to a webhook" works within a single job, applied consistently to event, replay and acknowledge traps.
+- **Delivery reliability**: failed webhook **and** SNMP deliveries are dead-lettered and retried with exponential backoff and cluster-safe row locking (retry is Enterprise-gated); an event is only marked *Notified* when a notification actually left the process.
+- **Mail Log** (1.1.0): every inbound mail records its outcome (no match / event created / deduplicated / maintenance-suppressed) so "why did/didn't I get notified for mail X?" is answerable from the UI.
+- **Pipeline test**: per-job *Test Send* pushes a synthetic event through the job's real templates and targets with a per-target delivery report — prove the assembled pipeline before the first live alert.
 - **IMAP IDLE**: optional real-time mail processing instead of polling (`Imap:UseIdle = true`).
 - **Auto-acknowledge**: events older than `Events:AutoAcknowledgeAfterMinutes` are auto-acknowledged and a paired clear-trap is sent.
 - **Recurring maintenance windows**: cron-driven (`RecurringCron`) maintenance windows suppress notifications during planned outages.

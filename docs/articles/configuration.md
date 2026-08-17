@@ -132,6 +132,25 @@ When enabled, Prometheus metrics are exposed at `/metrics`.
 
 These settings live in `appsettings.json` of each host (Worker / Web / Api).
 
+> **Startup validation (1.1.0):** the `Imap`, `Events`, `Retention` and
+> `Session` sections are validated at boot. An out-of-range value (e.g.
+> `Imap:ConsumerTasks = 0`) stops the host with a clear error naming the
+> offending option instead of failing deep at runtime.
+
+### Poll batch limit
+
+```json
+"Imap": {
+  "MaxMessagesPerPoll": 500
+}
+```
+
+Bounds how many unseen messages a single poll pass processes (oldest first);
+the remainder stays unseen and is picked up by the next cycle. This prevents a
+backlogged inbox (e.g. after an outage) from monopolizing a consumer task and
+an IMAP connection slot for the entire drain. `0` disables the cap. Default
+`500` (1.1.0).
+
 ### IMAP IDLE (real-time mode)
 
 ```json
@@ -199,6 +218,27 @@ Exports ASP.NET Core and HTTP-client traces via OTLP. Requires an OTLP-compatibl
 
 API keys are managed at runtime via the Web UI (Settings → API Keys). No `appsettings.json` configuration is needed. See [api-usage.md](api-usage.md#2-api-key-x-api-key-header) for header format and scope-to-role mapping.
 
+## Session (Web & Api)
+
+Governs the authentication-cookie lifetimes on both hosts (1.1.0 — previously
+these were hardcoded and differed between the hosts).
+
+```json
+"Session": {
+  "SlidingExpiryMinutes": 60,
+  "AbsoluteExpiryHours": 8
+}
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `SlidingExpiryMinutes` | `60` | Idle timeout: each authenticated request inside the window extends the session. Range 1–1440. |
+| `AbsoluteExpiryHours` | `8` | Hard ceiling measured from sign-in — an actively-used session is terminated after this many hours regardless of activity and requires a fresh login. Range 1–168. |
+
+Sessions are additionally revalidated on every request: a user who is
+deactivated or deleted (or whose password changed) loses any live session
+immediately on both hosts.
+
 ## CORS (API only)
 
 The Mail2SNMP.Api project allows browser clients from the configured origins to call its REST endpoints.
@@ -215,27 +255,34 @@ The Mail2SNMP.Api project allows browser clients from the configured origins to 
 
 ## Dead-Letter Queue (Worker)
 
-The dead-letter retry loop is responsible for re-trying failed webhook deliveries with exponential backoff.
+The dead-letter retry loop re-tries failed **webhook and SNMP** deliveries with
+exponential backoff (since 1.1.0 the queue covers both channels; for SNMP the
+retry covers *local* send failures — DNS, sockets, credentials — since v1/v2c
+traps are fire-and-forget UDP and receiver-side loss is protocol-invisible).
+Automatic retry is Enterprise-gated; entries are persisted in both editions.
 
 ```json
 "DeadLetter": {
-  "PollIntervalSeconds": 60,
-  "BatchSize": 50,
-  "MaxAttempts": 5,
-  "LockDurationMinutes": 5,
+  "PollIntervalSeconds": 900,
+  "BatchSize": 10,
+  "MaxAttempts": 10,
+  "LockDurationMinutes": 7,
   "BackoffBaseMinutes": 15,
-  "InitialDelaySeconds": 30
+  "InitialDelaySeconds": 15
 }
 ```
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `PollIntervalSeconds` | `60` | How often the worker scans for retryable entries. |
-| `BatchSize` | `50` | Max entries claimed per scan. |
-| `MaxAttempts` | `5` | After this many failures the entry is marked permanently failed. |
-| `LockDurationMinutes` | `5` | How long the worker holds an exclusive lease on each entry while retrying. |
+| `PollIntervalSeconds` | `900` | How often the worker scans for retryable entries. |
+| `BatchSize` | `10` | Max entries claimed per scan. |
+| `MaxAttempts` | `10` | After this many failures the entry is marked permanently failed (Abandoned). |
+| `LockDurationMinutes` | `7` | How long the worker holds an exclusive lease on the claimed batch. Values below the safe minimum (`BatchSize × 35 s + 60 s`) are raised automatically with a startup warning, so a lease can never expire while its batch is still being processed. |
 | `BackoffBaseMinutes` | `15` | Base for exponential delay (`BackoffBaseMinutes * 2^(attempt-1)`). |
-| `InitialDelaySeconds` | `30` | Delay before the first retry of a freshly-created dead-letter entry. |
+| `InitialDelaySeconds` | `15` | Delay before the retry loop starts after worker boot. |
+
+> **Note:** the defaults shown above match the code. Earlier versions of this
+> page listed different values.
 
 ## Hosting (Web)
 

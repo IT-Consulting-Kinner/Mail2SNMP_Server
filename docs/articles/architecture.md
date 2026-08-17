@@ -34,7 +34,7 @@ Windows Service hosting background tasks via Quartz.NET:
 
 - **ScheduleSyncService** -- synchronizes job schedules with Quartz
 - **MailPollingService** -- polls mailboxes, evaluates rules, sends notifications
-- **DeadLetterRetryService** -- retries failed webhook deliveries
+- **DeadLetterRetryService** -- retries failed webhook and SNMP deliveries (1.1.0: the dead-letter queue covers both channels)
 - **DataRetentionService** -- cleans up expired events and audit logs
 - **HeartbeatService** -- worker lease management (prevents split-brain)
 
