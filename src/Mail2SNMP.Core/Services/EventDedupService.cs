@@ -4,40 +4,70 @@ using System.Text;
 namespace Mail2SNMP.Core.Services;
 
 /// <summary>
-/// Generates deterministic SHA-256 hash keys for event deduplication.
-/// Keys are derived from message identifiers and mailbox context so that
-/// the same email processed more than once produces an identical key.
+/// Generates deterministic SHA-256 keys for event deduplication.
 /// </summary>
+/// <remarks>
+/// H-3: the key is derived from what makes two alerts <b>the same alert</b> — the
+/// subject and sender for a given job — and deliberately NOT from the Message-ID or
+/// the receive time.
+///
+/// The previous design keyed on the RFC 5322 Message-ID whenever one was present
+/// (nearly always), with a subject+sender+minute fallback otherwise. Both are unique
+/// per message: two successive "Disk full on srv01" mails from a monitoring system
+/// carry different Message-IDs and arrive at different times, so they produced
+/// different keys, a brand-new event each time and a HitCount that never left 1.
+/// That made <c>Job.DedupWindowMinutes</c> — the whole point of the feature — inert,
+/// and left the <c>Deduplicated</c> disposition and the <c>{{HitCount}}</c> template
+/// placeholder unreachable.
+///
+/// Exact re-ingestion of the very same message is a different concern and is already
+/// handled upstream by the <c>ProcessedMails</c> claim, so the dedup key does not need
+/// to cover it.
+/// </remarks>
 public static class EventDedupKeyGenerator
 {
     /// <summary>
-    /// Generates a deduplication key from the email Message-ID header and the mailbox identifier.
+    /// Generates the content-based deduplication key for an alert.
     /// </summary>
-    /// <param name="messageId">The RFC 2822 Message-ID of the email.</param>
-    /// <param name="mailboxId">The numeric identifier of the monitored mailbox.</param>
-    /// <returns>A lowercase hexadecimal SHA-256 hash string.</returns>
-    public static string Generate(string messageId, int mailboxId)
+    /// <remarks>
+    /// Subject and sender are normalized (trimmed, case-folded, inner whitespace
+    /// collapsed) so that cosmetic differences — a re-wrapped subject, a differently
+    /// cased sender — still collapse into one event.
+    /// </remarks>
+    /// <param name="subject">The email subject line, or <c>null</c> if absent.</param>
+    /// <param name="from">The sender address, or <c>null</c> if absent.</param>
+    /// <param name="jobId">The job the event belongs to; keys never collide across jobs.</param>
+    /// <returns>A lowercase hexadecimal SHA-256 hash string (64 characters).</returns>
+    public static string Generate(string? subject, string? from, int jobId)
     {
-        var input = $"{messageId}:{mailboxId}";
+        var input = $"{Normalize(subject)}:{Normalize(from)}:{jobId}";
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     /// <summary>
-    /// Generates a fallback deduplication key when the Message-ID is unavailable.
-    /// The key is built from the subject, sender, receive time (truncated to the minute), and mailbox identifier.
+    /// Collapses insignificant formatting differences so equivalent alerts hash alike:
+    /// trims, lowercases invariantly, and reduces every run of whitespace to one space.
     /// </summary>
-    /// <param name="subject">The email subject line, or <c>null</c> if absent.</param>
-    /// <param name="from">The sender address, or <c>null</c> if absent.</param>
-    /// <param name="receivedUtc">The UTC date and time the email was received (truncated to the minute internally).</param>
-    /// <param name="mailboxId">The numeric identifier of the monitored mailbox.</param>
-    /// <returns>A lowercase hexadecimal SHA-256 hash string.</returns>
-    public static string GenerateFallback(string? subject, string? from, DateTime receivedUtc, int mailboxId)
+    private static string Normalize(string? value)
     {
-        var truncatedTime = new DateTime(receivedUtc.Year, receivedUtc.Month, receivedUtc.Day,
-            receivedUtc.Hour, receivedUtc.Minute, 0, DateTimeKind.Utc);
-        var input = $"{subject}:{from}:{truncatedTime:O}:{mailboxId}";
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+
+        var sb = new StringBuilder(value.Length);
+        var lastWasSpace = false;
+        foreach (var ch in value.Trim())
+        {
+            if (char.IsWhiteSpace(ch))
+            {
+                if (!lastWasSpace) sb.Append(' ');
+                lastWasSpace = true;
+            }
+            else
+            {
+                sb.Append(char.ToLowerInvariant(ch));
+                lastWasSpace = false;
+            }
+        }
+        return sb.ToString();
     }
 }

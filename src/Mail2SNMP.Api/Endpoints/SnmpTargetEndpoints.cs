@@ -64,6 +64,21 @@ public static class SnmpTargetEndpoints
                 return Results.NotFound();
 
             target.Id = id;
+
+            // H-5: credentials are never returned by GET (the response DTO exposes only
+            // Has* presence flags), so a normal read-modify-write client cannot send them
+            // back. Because UpdateAsync performs a full-row update, an omitted field used
+            // to be persisted as blank — silently downgrading SNMPv3 targets the operator
+            // believed were authenticated and encrypted to cleartext noAuthNoPriv, with no
+            // error and no log entry. An absent credential now means "keep what is
+            // stored"; sending a new value still replaces it.
+            target.EncryptedCommunityString = string.IsNullOrEmpty(target.EncryptedCommunityString)
+                ? existing.EncryptedCommunityString : target.EncryptedCommunityString;
+            target.EncryptedAuthPassword = string.IsNullOrEmpty(target.EncryptedAuthPassword)
+                ? existing.EncryptedAuthPassword : target.EncryptedAuthPassword;
+            target.EncryptedPrivPassword = string.IsNullOrEmpty(target.EncryptedPrivPassword)
+                ? existing.EncryptedPrivPassword : target.EncryptedPrivPassword;
+
             var updated = await service.UpdateAsync(target, ct);
             return Results.Ok(updated.ToResponse());
         })

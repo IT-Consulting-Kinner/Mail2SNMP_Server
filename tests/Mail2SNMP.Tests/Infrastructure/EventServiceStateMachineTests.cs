@@ -118,6 +118,58 @@ public class EventServiceStateMachineTests : IDisposable
     }
 
     [Fact]
+    public async Task Create_RepeatedAlert_WithDifferentMessageIds_CollapsesIntoOneEvent()
+    {
+        // H-3 regression: two successive alert mails about the SAME condition carry
+        // different RFC 5322 Message-IDs. The old Message-ID-based dedup key made each
+        // one unique, so DedupWindowMinutes never collapsed anything and HitCount never
+        // left 1 — the documented behaviour was unreachable for essentially every real
+        // mail. The key is now content-based (subject + sender + job).
+        var job = await SeedJobAsync(); // Job.DedupWindowMinutes = 30
+        var svc = NewService();
+
+        var first = await svc.CreateAsync(new Event
+        {
+            JobId = job.Id, Severity = Severity.Critical,
+            Subject = "Disk full on srv01", MailFrom = "monitor@corp.com",
+            MessageId = "<alert-0001@monitor.corp.com>"
+        });
+        var repeat = await svc.CreateAsync(new Event
+        {
+            JobId = job.Id, Severity = Severity.Critical,
+            Subject = "Disk full on srv01", MailFrom = "monitor@corp.com",
+            MessageId = "<alert-0002@monitor.corp.com>"   // different message, same alert
+        });
+
+        Assert.Equal(first.Id, repeat.Id);
+        Assert.Equal(2, repeat.HitCount);
+        Assert.Equal(1, await _db.Events.CountAsync(e => e.JobId == job.Id));
+    }
+
+    [Fact]
+    public async Task Create_DifferentAlerts_AreNotCollapsed()
+    {
+        // Counterpart to the above: distinct conditions must stay distinct even though
+        // they arrive from the same sender within the same window.
+        var job = await SeedJobAsync();
+        var svc = NewService();
+
+        var a = await svc.CreateAsync(new Event
+        {
+            JobId = job.Id, Severity = Severity.Error,
+            Subject = "Disk full on srv01", MailFrom = "monitor@corp.com", MessageId = "m1"
+        });
+        var b = await svc.CreateAsync(new Event
+        {
+            JobId = job.Id, Severity = Severity.Error,
+            Subject = "Disk full on srv02", MailFrom = "monitor@corp.com", MessageId = "m2"
+        });
+
+        Assert.NotEqual(a.Id, b.Id);
+        Assert.Equal(2, await _db.Events.CountAsync(e => e.JobId == job.Id));
+    }
+
+    [Fact]
     public async Task Create_DuplicateMessageId_IncrementsHitCount_NotInsert()
     {
         var job = await SeedJobAsync();

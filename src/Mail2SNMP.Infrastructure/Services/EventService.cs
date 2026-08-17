@@ -105,19 +105,15 @@ public class EventService : IEventService
 
         var maxActive = job?.MaxActiveEvents ?? int.MaxValue;
 
-        // Event deduplication: if we have a MessageId, check the EventDedup table.
-        // If a dedup entry exists within the job's window, increment HitCount on the
-        // existing event instead. The dedup-check + increment must run inside a
-        // serializable transaction to avoid lost updates under concurrent ingestion.
-        if (!string.IsNullOrEmpty(evt.MessageId))
-        {
-            var dedupKey = EventDedupKeyGenerator.Generate(evt.MessageId, evt.JobId);
-            return await CreateOrIncrementAsync(evt, dedupKey, dedupWindowMinutes, maxActive, ct);
-        }
-
-        // No MessageId — use fallback dedup key based on subject + sender + time
-        var fallbackKey = EventDedupKeyGenerator.GenerateFallback(evt.Subject, evt.MailFrom, evt.CreatedUtc, evt.JobId);
-        return await CreateOrIncrementAsync(evt, fallbackKey, dedupWindowMinutes, maxActive, ct);
+        // H-3: the dedup key is CONTENT-based (subject + sender + job), so repeated
+        // alerts about the same condition collapse into one event with a rising
+        // HitCount — which is what DedupWindowMinutes has always promised. Keying on
+        // the Message-ID (as before) made every repeat unique and the window inert;
+        // exact re-ingestion of one message is already prevented by the ProcessedMails
+        // claim. The check + increment run inside a serializable transaction so
+        // concurrent producers cannot both create an event for the same key.
+        var dedupKey = EventDedupKeyGenerator.Generate(evt.Subject, evt.MailFrom, evt.JobId);
+        return await CreateOrIncrementAsync(evt, dedupKey, dedupWindowMinutes, maxActive, ct);
     }
 
     /// <summary>

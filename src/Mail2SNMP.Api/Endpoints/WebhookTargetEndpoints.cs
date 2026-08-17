@@ -64,6 +64,15 @@ public static class WebhookTargetEndpoints
                 return Results.NotFound();
 
             target.Id = id;
+
+            // H-5: the HMAC signing secret is never returned by GET (only a HasSecret
+            // flag), so a read-modify-write client cannot echo it back. With a full-row
+            // update an omitted secret was persisted as blank, and deliveries the
+            // receiver verifies started arriving unsigned — silently. Absent now means
+            // "keep the stored secret"; a supplied value still replaces it.
+            target.EncryptedSecret = string.IsNullOrEmpty(target.EncryptedSecret)
+                ? existing.EncryptedSecret : target.EncryptedSecret;
+
             var updated = await service.UpdateAsync(target, ct);
             return Results.Ok(updated.ToResponse());
         })

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Mail2SNMP.Models.DTOs;
 using Mail2SNMP.Models.Entities;
 using Mail2SNMP.Models.Enums;
 
@@ -50,6 +51,72 @@ public class ApiEndpointTests : IClassFixture<TestWebApplicationFactory>, IDispo
         // Delete
         var deleteResponse = await _client.DeleteAsync($"/api/v1/mailboxes/{created.Id}");
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task SnmpTarget_Update_WithoutCredentials_PreservesThem()
+    {
+        // H-5 regression: GET never returns the encrypted credentials (only Has* flags),
+        // so a normal read-modify-write client cannot echo them back. Because the update
+        // is a full-row write, an omitted credential used to be persisted as blank —
+        // silently downgrading an SNMPv3 target to unauthenticated cleartext.
+        var create = new
+        {
+            Name = "H5-Snmp", Host = "10.0.0.9", Port = 162, Version = SnmpVersion.V3,
+            SecurityName = "usm-user", EncryptedAuthPassword = "auth-secret",
+            EncryptedPrivPassword = "priv-secret", MaxTrapsPerMinute = 100, IsActive = true
+        };
+        var created = await (await _client.PostAsJsonAsync("/api/v1/snmp-targets", create))
+            .Content.ReadFromJsonAsync<SnmpTargetResponse>();
+        Assert.NotNull(created);
+        Assert.True(created!.HasAuthPassword);
+        Assert.True(created.HasPrivPassword);
+
+        // Read-modify-write exactly as a client would: change the name, send back what
+        // GET gave us — which contains no credential fields at all.
+        var update = new
+        {
+            created.Id, Name = "H5-Snmp-Renamed", Host = "10.0.0.9", Port = 162,
+            Version = SnmpVersion.V3, SecurityName = "usm-user",
+            MaxTrapsPerMinute = 100, IsActive = true
+        };
+        var updateResponse = await _client.PutAsJsonAsync($"/api/v1/snmp-targets/{created.Id}", update);
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+
+        var updated = await updateResponse.Content.ReadFromJsonAsync<SnmpTargetResponse>();
+        Assert.NotNull(updated);
+        Assert.Equal("H5-Snmp-Renamed", updated!.Name);
+        Assert.True(updated.HasAuthPassword, "auth password must survive an update that omits it");
+        Assert.True(updated.HasPrivPassword, "priv password must survive an update that omits it");
+
+        await _client.DeleteAsync($"/api/v1/snmp-targets/{created.Id}");
+    }
+
+    [Fact]
+    public async Task WebhookTarget_Update_WithoutSecret_PreservesIt()
+    {
+        // H-5 regression for the webhook HMAC signing secret: losing it silently turns
+        // signed deliveries into unsigned ones.
+        var create = new
+        {
+            Name = "H5-Hook", Url = "https://example.com/hook",
+            EncryptedSecret = "signing-secret", MaxRequestsPerMinute = 60, IsActive = true
+        };
+        var created = await (await _client.PostAsJsonAsync("/api/v1/webhook-targets", create))
+            .Content.ReadFromJsonAsync<WebhookTargetResponse>();
+        Assert.NotNull(created);
+        Assert.True(created!.HasSecret);
+
+        var update = new { created.Id, Name = "H5-Hook-Renamed", Url = "https://example.com/hook", MaxRequestsPerMinute = 60, IsActive = true };
+        var updateResponse = await _client.PutAsJsonAsync($"/api/v1/webhook-targets/{created.Id}", update);
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+
+        var updated = await updateResponse.Content.ReadFromJsonAsync<WebhookTargetResponse>();
+        Assert.NotNull(updated);
+        Assert.Equal("H5-Hook-Renamed", updated!.Name);
+        Assert.True(updated.HasSecret, "signing secret must survive an update that omits it");
+
+        await _client.DeleteAsync($"/api/v1/webhook-targets/{created.Id}");
     }
 
     [Fact]
