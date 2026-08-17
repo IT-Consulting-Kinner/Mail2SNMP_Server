@@ -154,7 +154,8 @@ mail2SNMPGroup OBJECT-GROUP
   mail2SNMPEventCreatedNotification,
   mail2SNMPEventConfirmedNotification,
   mail2SNMPKeepAliveNotification,
-  mail2SNMPUpdateNotification
+  mail2SNMPUpdateNotification,
+  mail2SNMPIngestionHealthNotification
  }
  STATUS current
  DESCRIPTION "The set of notifications provided by mail2SNMP."

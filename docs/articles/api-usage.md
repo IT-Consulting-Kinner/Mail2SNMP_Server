@@ -91,7 +91,25 @@ through the browser either.
 | POST | `/` | Admin | Create job with target assignments |
 | PUT | `/{id}` | Admin | Update job |
 | DELETE | `/{id}` | Admin | Delete job |
-| POST | `/{id}/dryrun` | Operator | Execute dry-run |
+| POST | `/{id}/dryrun` | Operator | Execute dry-run (evaluates the rule, sends nothing) |
+| POST | `/{id}/test-send` | Operator | Send a synthetic event through the job's **real** targets |
+| POST | `/bulk` | Admin | Activate, deactivate or delete several jobs in one call |
+
+**Test Send** (`POST /{id}/test-send`) pushes a synthetic event through the job's real
+templates and targets — unlike a dry run, the assigned SNMP receivers and webhooks *will*
+receive it. The optional `severity` parameter (`Information` by default) is what makes
+severity routing verifiable: a target configured for `Critical` only can otherwise never
+be anything but "skipped" in the report.
+
+```bash
+curl -X POST -H "X-API-Key: $KEY" \
+  "https://mail2snmp.example.com/api/v1/jobs/7/test-send?severity=Critical"
+```
+
+**Bulk** (`POST /bulk`) takes `{"ids":[1,2,3],"action":"Activate"|"Deactivate"|"Delete"}`.
+Each id is handled independently: the response lists `succeeded` and `failed` separately,
+so a job that cannot be deleted because a schedule still references it does not abort the
+rest of the batch.
 
 ### SNMP Targets (`/api/v1/snmp-targets`)
 
@@ -189,11 +207,80 @@ curl -X POST -H "X-API-Key: $KEY" \
   "https://mail2snmp.example.com/api/v1/dead-letters/retry-all?status=Abandoned&kind=Snmp"
 ```
 
+### Mail Log (`/api/v1/mail-log`)
+
+The per-mail processing trace: what arrived, what each job made of it, and whether anyone
+was actually told. This is the endpoint to reach for when the question is *"we emailed an
+alert at 03:14 and got no trap — why?"*.
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/` | ReadOnly | Filtered, paged trace of processed mails |
+
+All parameters are optional: `mailboxId`, `jobId`, `disposition`, `search` (matches sender
+or subject), `from` / `to` (UTC bounds on receipt time), `skip`, `take` (default 100, max
+500). The pre-paging total is returned in the **`X-Total-Count`** header.
+
+One mail on a shared mailbox produces **one row per active job**, each with its own
+outcome — that is the point of the per-job trace. Each row carries two independent fields:
+
+| `disposition` | What the job made of the mail |
+|---------------|-------------------------------|
+| `NoMatch` | The rule did not match; no event raised |
+| `EventCreated` | A new event was created |
+| `Deduplicated` | Collapsed into an existing event |
+| `MaintenanceSuppressed` | An event was raised but suppressed by a maintenance window |
+| `RateLimited` | The job's hourly event budget was exhausted |
+| `Unknown` | Claimed but not yet completed (in flight, or a crashed attempt) |
+
+| `delivery` | Whether anyone was told |
+|------------|-------------------------|
+| `none` | No event was raised, so there was nothing to deliver |
+| `delivered` | At least one channel reported a successful send |
+| `not-delivered` | The event exists but no channel reported success |
+| `suppressed` | A maintenance window was active |
+| `failed` | Delivery attempts are in the dead-letter queue (`openDeadLetters` has the count) |
+| `purged` | The event has been removed by retention, so its outcome is no longer knowable |
+
+```bash
+# Everything that matched but was never delivered, newest first
+curl -sD - -H "X-API-Key: $KEY" \
+  "https://mail2snmp.example.com/api/v1/mail-log?disposition=EventCreated&take=50"
+```
+
 ### Dashboard (`/api/v1/dashboard`)
 
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
 | GET | `/` | ReadOnly | Get dashboard metrics |
+
+### License (`/api/v1/license`)
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/` | ReadOnly | Current edition and limits |
+| POST | `/reload` | Admin | Re-read the license file without restarting |
+
+### Workers (`/api/v1/workers`)
+
+Active worker leases. In a multi-instance deployment the lease set is also what elects the
+primary, so this is where to look when a leader-gated task (keep-alive, IDLE, update check,
+ingestion-health alarm) is not running.
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/` | ReadOnly | List active worker leases |
+| DELETE | `/{instanceId}` | Admin | Release one lease (e.g. after a node was destroyed) |
+| DELETE | `/` | Admin | Release every lease |
+
+### Bulk Export (`/api/v1/bulk`)
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/export` | Operator | Download the full configuration as one JSON bundle |
+
+Encrypted credentials are intentionally omitted from the bundle, so an export is safe to
+attach to a ticket — and so a restore needs the credentials re-entered.
 
 ### Health Checks (anonymous)
 

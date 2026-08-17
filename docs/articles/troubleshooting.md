@@ -10,6 +10,70 @@ This guide lists the most common issues operators encounter and how to resolve t
 | `/health/ready` | Readiness — checks DB, master key, SQLite-in-prod |
 | `/metrics` | Prometheus metrics (if `Metrics:Enabled=true`) |
 | `/mib/Mail2SNMP-MIB.mib` | Download the MIB definition |
+| `/api/v1/mail-log` | Per-mail trace: what arrived, what each job made of it, whether it was delivered |
+
+## Metrics reference
+
+Everything exposed on `/metrics`. Names and help text are generated from the code, so this
+table is the authoritative list.
+
+### The three worth alerting on
+
+| Metric | Alert when | Why |
+|--------|-----------|-----|
+| `mail2snmp_mailboxes_in_error` | `> 0` | Ingestion is broken. This is the failure the product cannot report as an ordinary alert: a mailbox that stops polling produces no mail, therefore no events, so silence looks identical to a quiet night. The matching SNMP trap is `mail2SNMPIngestionHealthNotification`. |
+| `mail2snmp_notifications_failed_total` | `rate() > 0` | Events are being raised but not delivered — alerts are being generated and lost. |
+| `mail2snmp_channel_overflow_total` | `increase() > 0` | Work items were dropped because the internal queue was full: mail was fetched and then discarded. Raise `Imap:ChannelBoundedCapacity` or `Imap:ConsumerTasks`. |
+
+### Ingestion
+
+| Metric | Type | Labels | Meaning |
+|--------|------|--------|---------|
+| `mail2snmp_emails_processed_total` | Counter | `mailbox` | Emails processed |
+| `mail2snmp_emails_matched_total` | Counter | `mailbox`, `rule` | Emails that matched a rule |
+| `mail2snmp_emails_duplicate_total` | Counter | — | Emails skipped as already processed |
+| `mail2snmp_imap_active_connections` | Gauge | — | Open IMAP connections |
+| `mail2snmp_imap_connection_errors_total` | Counter | `mailbox` | IMAP connect/authenticate failures |
+| `mail2snmp_mailboxes_in_error` | Gauge | — | Active mailboxes currently failing to poll |
+| `mail2snmp_channel_overflow_total` | Counter | — | Work items dropped due to a full channel |
+
+### Events
+
+| Metric | Type | Labels | Meaning |
+|--------|------|--------|---------|
+| `mail2snmp_events_created_total` | Counter | `job_id`, `severity` | Events created |
+| `mail2snmp_events_notified_total` | Counter | — | Events for which at least one channel reported success |
+| `mail2snmp_events_active` | Gauge | — | Events in a non-terminal state |
+
+### Delivery
+
+| Metric | Type | Labels | Meaning |
+|--------|------|--------|---------|
+| `mail2snmp_notifications_sent_total` | Counter | `channel` | Notifications dispatched |
+| `mail2snmp_notifications_failed_total` | Counter | `channel` | Notification failures |
+| `mail2snmp_snmp_traps_sent_total` | Counter | `target`, `version` | SNMP traps sent |
+| `mail2snmp_webhook_requests_sent_total` | Counter | `target` | Webhook requests sent |
+| `mail2snmp_traps_rate_limited_total` | Counter | — | Traps dropped by a target's rate limit |
+| `mail2snmp_rate_limit_hits_total` | Counter | `type` | Rate-limit hits, by limit kind |
+
+### Dead-letter queue
+
+| Metric | Type | Labels | Meaning |
+|--------|------|--------|---------|
+| `mail2snmp_webhook_deadletter_total` | Counter | — | Webhook deliveries dead-lettered |
+| `mail2snmp_snmp_deadletter_total` | Counter | — | SNMP trap sends dead-lettered |
+| `mail2snmp_webhook_deadletter_pending` | Gauge | — | Pending entries (both kinds, despite the name) |
+| `mail2snmp_deadletter_retried_total` | Counter | — | Retry attempts |
+
+> Automatic dead-letter retry is an Enterprise feature. Under the Community edition
+> entries are recorded so you can see what was lost, but nothing drains the queue —
+> `mail2snmp_webhook_deadletter_pending` will only grow.
+
+### Housekeeping
+
+| Metric | Type | Labels | Meaning |
+|--------|------|--------|---------|
+| `mail2snmp_retention_deleted_total` | Counter | `entity` | Records removed by data retention |
 
 ## Logs
 
@@ -106,7 +170,7 @@ Set `Serilog:MinimumLevel:Default` to `Debug` in `appsettings.json` for verbose 
 **Checks:**
 1. **Polling too frequent?** UI → Schedules → consider increasing IntervalMinutes
 2. **Mailbox backlog?** Many unread mails on first poll — let it drain
-3. Review Prometheus metrics: `mail2snmp_channel_overflow`, `process_resident_memory_bytes`
+3. Review Prometheus metrics: `mail2snmp_channel_overflow_total`, `process_resident_memory_bytes`
 4. If metrics suggest GC pressure, increase Worker max threads in `appsettings.json`
 
 ### 10. Rate-limited at /account/login
