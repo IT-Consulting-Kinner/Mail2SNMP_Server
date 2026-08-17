@@ -2,6 +2,7 @@ using Mail2SNMP.Infrastructure.Data;
 using Mail2SNMP.Models.Configuration;
 using Mail2SNMP.Models.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Mail2SNMP.Worker.Services;
 
@@ -23,16 +24,19 @@ public class DataRetentionService : BackgroundService
     /// </summary>
     /// <param name="scopeFactory">Factory used to create a scope per cleanup cycle for resolving the database context.</param>
     /// <param name="logger">The logger for cleanup-cycle diagnostics.</param>
-    /// <param name="configuration">Application configuration; the <c>Events</c> and <c>Retention</c> sections supply the per-category retention thresholds.</param>
+    /// <param name="eventOptions">Validated <c>Events</c> options supplying the event auto-expiry and resolved-retention thresholds.</param>
+    /// <param name="retentionOptions">Validated <c>Retention</c> options supplying the per-category retention thresholds and audit cap.</param>
     public DataRetentionService(
         IServiceScopeFactory scopeFactory,
         ILogger<DataRetentionService> logger,
-        IConfiguration configuration)
+        IOptions<EventSettings> eventOptions,
+        IOptions<RetentionSettings> retentionOptions)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
-        _eventSettings = configuration.GetSection("Events").Get<EventSettings>() ?? new EventSettings();
-        _retentionSettings = configuration.GetSection("Retention").Get<RetentionSettings>() ?? new RetentionSettings();
+        // AR-6: validated options instead of an ad-hoc re-bind of the same section.
+        _eventSettings = eventOptions.Value;
+        _retentionSettings = retentionOptions.Value;
     }
 
     /// <summary>

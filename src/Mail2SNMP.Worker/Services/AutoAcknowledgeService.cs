@@ -3,6 +3,7 @@ using Mail2SNMP.Infrastructure.Data;
 using Mail2SNMP.Models.Configuration;
 using Mail2SNMP.Models.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Mail2SNMP.Worker.Services;
 
@@ -26,15 +27,16 @@ public class AutoAcknowledgeService : BackgroundService
     /// </summary>
     /// <param name="scopeFactory">Factory used to create a scope per scan for resolving scoped services.</param>
     /// <param name="logger">The logger for scan and acknowledge diagnostics.</param>
-    /// <param name="configuration">Application configuration; the <c>Events</c> section supplies <see cref="EventSettings.AutoAcknowledgeAfterMinutes"/>.</param>
+    /// <param name="eventOptions">Validated <c>Events</c> options supplying <see cref="EventSettings.AutoAcknowledgeAfterMinutes"/>.</param>
     public AutoAcknowledgeService(
         IServiceScopeFactory scopeFactory,
         ILogger<AutoAcknowledgeService> logger,
-        IConfiguration configuration)
+        IOptions<EventSettings> eventOptions)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
-        _eventSettings = configuration.GetSection("Events").Get<EventSettings>() ?? new EventSettings();
+        // AR-6: validated options instead of an ad-hoc re-bind of the same section.
+        _eventSettings = eventOptions.Value;
     }
 
     /// <summary>

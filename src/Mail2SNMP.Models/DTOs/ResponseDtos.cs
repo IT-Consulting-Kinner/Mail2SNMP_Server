@@ -411,14 +411,10 @@ public static class ResponseDtoMapper
     }
 
     /// <summary>
-    /// Projects a <see cref="Entities.WebhookTarget"/> entity onto a <see cref="WebhookTargetResponse"/>, omitting the
-    /// encrypted signing secret and exposing only whether one is set via <see cref="WebhookTargetResponse.HasSecret"/>.
-    /// </summary>
-    /// <param name="target">The source webhook target entity.</param>
-    /// <returns>A response DTO safe to serialize to API clients.</returns>
-    /// <summary>
     /// Projects a dead-letter entry onto its API response shape.
     /// </summary>
+    /// <param name="entry">The source dead-letter entity, optionally with its target navigation loaded.</param>
+    /// <returns>A response DTO safe to serialize to API clients — carries the target's identity but none of its credentials.</returns>
     /// <remarks>
     /// The endpoint used to serialize the entity graph directly, which dragged the
     /// fully-populated <c>WebhookTarget</c>/<c>SnmpTarget</c> navigations into the JSON —
@@ -444,6 +440,12 @@ public static class ResponseDtoMapper
         Status = entry.Status
     };
 
+    /// <summary>
+    /// Projects a <see cref="Entities.WebhookTarget"/> entity onto a <see cref="WebhookTargetResponse"/>, omitting the
+    /// encrypted signing secret and exposing only whether one is set via <see cref="WebhookTargetResponse.HasSecret"/>.
+    /// </summary>
+    /// <param name="target">The source webhook target entity.</param>
+    /// <returns>A response DTO safe to serialize to API clients.</returns>
     public static WebhookTargetResponse ToResponse(this Entities.WebhookTarget target)
     {
         return new WebhookTargetResponse

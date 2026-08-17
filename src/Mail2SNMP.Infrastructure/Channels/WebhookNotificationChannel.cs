@@ -5,12 +5,13 @@ using Mail2SNMP.Core.Interfaces;
 using Mail2SNMP.Core.Services;
 using Mail2SNMP.Infrastructure.Data;
 using Mail2SNMP.Infrastructure.Security;
+using Mail2SNMP.Models.Configuration;
 using Mail2SNMP.Models.DTOs;
 using Mail2SNMP.Models.Entities;
 using Mail2SNMP.Models.Enums;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Mail2SNMP.Infrastructure.Channels;
 
@@ -50,9 +51,10 @@ public class WebhookNotificationChannel : INotificationChannel
     /// <param name="floodProtection">Per-target rate limiter enforcing each target's maximum requests-per-minute.</param>
     /// <param name="dedupCache">Suppresses duplicate webhooks for the same target/event pair.</param>
     /// <param name="httpClientFactory">Supplies the named "WebhookSend" <see cref="System.Net.Http.HttpClient"/> with correctly managed handler lifetime.</param>
-    /// <param name="configuration">
-    /// Read for <c>Security:AllowPrivateWebhookTargets</c>. When false (the default), the SSRF guard blocks
-    /// delivery to loopback / link-local / RFC1918 / cloud-metadata addresses so cloud deployments are safe by default.
+    /// <param name="security">
+    /// Validated <c>Security</c> options. When <c>AllowPrivateWebhookTargets</c> is false (the default),
+    /// the SSRF guard blocks delivery to loopback / link-local / RFC1918 / cloud-metadata addresses so
+    /// cloud deployments are safe by default.
     /// </param>
     /// <param name="logger">Diagnostic logger for delivery failures, SSRF blocks, and malformed configuration.</param>
     public WebhookNotificationChannel(
@@ -64,7 +66,7 @@ public class WebhookNotificationChannel : INotificationChannel
         FloodProtectionService floodProtection,
         NotificationDedupCache dedupCache,
         IHttpClientFactory httpClientFactory,
-        IConfiguration configuration,
+        IOptions<SecuritySettings> security,
         ILogger<WebhookNotificationChannel> logger)
     {
         _db = db;
@@ -74,8 +76,9 @@ public class WebhookNotificationChannel : INotificationChannel
         _templateEngine = templateEngine;
         // R1: opt-in flag for operators who legitimately need internal webhook
         // targets (e.g. on-prem Splunk on 10.x). Defaults to false so cloud
-        // deployments are safe by default.
-        _allowPrivateTargets = configuration.GetValue<bool>("Security:AllowPrivateWebhookTargets");
+        // deployments are safe by default. AR-6: from validated options rather than
+        // an ad-hoc IConfiguration read.
+        _allowPrivateTargets = security.Value.AllowPrivateWebhookTargets;
         _floodProtection = floodProtection;
         _dedupCache = dedupCache;
         // T5: use the named "WebhookSend" client registered in DI instead of mutating

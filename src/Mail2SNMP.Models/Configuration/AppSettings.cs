@@ -243,6 +243,62 @@ public class EventSettings
 }
 
 /// <summary>
+/// AR-6: strongly-typed <c>DeadLetter</c> section. These values used to be read
+/// ad hoc from raw <c>IConfiguration</c> inside the retry service, which bypassed
+/// the startup validation pipeline every other section goes through.
+/// </summary>
+public class DeadLetterSettings
+{
+    /// <summary>How often the worker scans for retryable entries, in seconds. Default 900 (15 min).</summary>
+    [Range(1, 86400)]
+    public int PollIntervalSeconds { get; set; } = 900;
+
+    /// <summary>Maximum entries claimed per scan. Default 10.</summary>
+    [Range(1, 1000)]
+    public int BatchSize { get; set; } = 10;
+
+    /// <summary>After this many failed attempts an entry is marked Abandoned. Default 10.</summary>
+    [Range(1, 100)]
+    public int MaxAttempts { get; set; } = 10;
+
+    /// <summary>
+    /// How long a worker holds its exclusive lease on a claimed batch, in minutes.
+    /// Default 7. Values below the safe minimum (<c>BatchSize × 35 s + 60 s</c>) are
+    /// raised at startup with a warning so a lease cannot expire mid-batch.
+    /// </summary>
+    [Range(1, 1440)]
+    public int LockDurationMinutes { get; set; } = 7;
+
+    /// <summary>Base for the exponential retry delay (<c>base × 2^(attempt-1)</c>), in minutes. Default 15.</summary>
+    [Range(1, 1440)]
+    public int BackoffBaseMinutes { get; set; } = 15;
+
+    /// <summary>Delay before the retry loop starts after worker boot, in seconds. Default 15.</summary>
+    [Range(0, 3600)]
+    public int InitialDelaySeconds { get; set; } = 15;
+}
+
+/// <summary>
+/// AR-6: strongly-typed <c>Security</c> section.
+/// </summary>
+public class SecuritySettings
+{
+    /// <summary>
+    /// When <see langword="true"/>, outbound webhook deliveries may target loopback,
+    /// link-local, RFC 1918, CGNAT and IPv6 ULA addresses. Leave <see langword="false"/>
+    /// (the default) on any internet-facing or cloud deployment — the SSRF guard is what
+    /// stops a webhook target from being pointed at the cloud metadata endpoint.
+    /// </summary>
+    public bool AllowPrivateWebhookTargets { get; set; }
+
+    /// <summary>
+    /// Optional explicit path to the AES master key file. When empty the standard
+    /// locations are used (next to the executable, then ProgramData).
+    /// </summary>
+    public string? MasterKeyPath { get; set; }
+}
+
+/// <summary>
 /// Data retention periods for automatic cleanup.
 /// </summary>
 public class RetentionSettings

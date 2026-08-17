@@ -2,12 +2,13 @@ using Mail2SNMP.Core.Interfaces;
 using Mail2SNMP.Core.Services;
 using Mail2SNMP.Infrastructure.Channels;
 using Mail2SNMP.Infrastructure.Data;
+using Mail2SNMP.Models.Configuration;
 using Mail2SNMP.Models.DTOs;
 using Mail2SNMP.Models.Entities;
 using Mail2SNMP.Models.Enums;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
@@ -54,12 +55,7 @@ public class WebhookChannelDeliveryTests : IDisposable
 
         // WireMock binds to 127.0.0.1, so the SSRF guard would block it by default —
         // opt in to private targets for the test.
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Security:AllowPrivateWebhookTargets"] = "true"
-            })
-            .Build();
+        var config = Options.Create(new SecuritySettings { AllowPrivateWebhookTargets = true });
 
         return new WebhookNotificationChannel(
             _db,
@@ -128,7 +124,7 @@ public class WebhookChannelDeliveryTests : IDisposable
     {
         // Without the opt-in, the SSRF guard rejects the loopback URL and the
         // delivery is dead-lettered rather than sent.
-        var config = new ConfigurationBuilder().Build(); // AllowPrivateWebhookTargets = false
+        var config = Options.Create(new SecuritySettings()); // AllowPrivateWebhookTargets = false
         var license = Substitute.For<ILicenseProvider>();
         var factory = Substitute.For<IHttpClientFactory>();
         factory.CreateClient(Arg.Any<string>()).Returns(_ => new HttpClient());

@@ -1,6 +1,8 @@
 using Mail2SNMP.Infrastructure.Data;
+using Mail2SNMP.Models.Configuration;
 using Mail2SNMP.Models.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Text;
 
 namespace Mail2SNMP.Worker.Services;
@@ -28,24 +30,30 @@ public class DeadLetterRetryService : BackgroundService
     /// </summary>
     /// <param name="scopeFactory">Factory used to create a scope per batch for resolving scoped services.</param>
     /// <param name="logger">The logger for claim, retry, and abandonment diagnostics.</param>
-    /// <param name="configuration">Application configuration; the <c>DeadLetter</c> section supplies the poll interval, batch size, attempt limit, lock duration, and backoff, and <c>Security:AllowPrivateWebhookTargets</c> controls the SSRF guard.</param>
+    /// <param name="deadLetter">
+    /// AR-6: validated <c>DeadLetter</c> options (poll interval, batch size, attempt limit,
+    /// lock duration, backoff). Previously read ad hoc from raw <c>IConfiguration</c>, which
+    /// bypassed the startup validation every other section goes through.
+    /// </param>
+    /// <param name="security">Validated <c>Security</c> options; <c>AllowPrivateWebhookTargets</c> controls the SSRF guard.</param>
     public DeadLetterRetryService(
         IServiceScopeFactory scopeFactory,
         ILogger<DeadLetterRetryService> logger,
-        IConfiguration configuration)
+        IOptions<DeadLetterSettings> deadLetter,
+        IOptions<SecuritySettings> security)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _instanceId = $"{Environment.MachineName}-{Environment.ProcessId}";
 
-        // M11: every magic number that affects retry behaviour is now configurable.
-        var section = configuration.GetSection("DeadLetter");
-        _pollInterval = TimeSpan.FromSeconds(section.GetValue("PollIntervalSeconds", 900));
-        _batchSize = section.GetValue("BatchSize", 10);
-        _maxAttempts = section.GetValue("MaxAttempts", 10);
+        // M11: every magic number that affects retry behaviour is configurable.
+        var settings = deadLetter.Value;
+        _pollInterval = TimeSpan.FromSeconds(settings.PollIntervalSeconds);
+        _batchSize = settings.BatchSize;
+        _maxAttempts = settings.MaxAttempts;
         // Default raised 5 -> 7 minutes so the out-of-the-box lease clears the safe
         // minimum below (10 x 35s + 60s = 410s) without a startup warning.
-        _lockDuration = TimeSpan.FromMinutes(section.GetValue("LockDurationMinutes", 7));
+        _lockDuration = TimeSpan.FromMinutes(settings.LockDurationMinutes);
 
         // Verified fix (FN-1 follow-up): the lease must comfortably outlast the
         // worst-case batch (BatchSize x 30s HTTP timeout, plus SNMP DNS timeouts and
@@ -61,14 +69,14 @@ public class DeadLetterRetryService : BackgroundService
                 _lockDuration, _batchSize, minLease);
             _lockDuration = minLease;
         }
-        _backoffBaseMinutes = section.GetValue("BackoffBaseMinutes", 15);
-        _initialDelay = TimeSpan.FromSeconds(section.GetValue("InitialDelaySeconds", 15));
+        _backoffBaseMinutes = settings.BackoffBaseMinutes;
+        _initialDelay = TimeSpan.FromSeconds(settings.InitialDelaySeconds);
 
         // S1: dead-letter retries must apply the same SSRF guard as the live
         // delivery path. Without this an Operator could create a webhook with
         // a benign URL, let it fail (going to dead letter), then update the
         // URL to 169.254.169.254 — and the retry path would happily fetch it.
-        _allowPrivateTargets = configuration.GetValue<bool>("Security:AllowPrivateWebhookTargets");
+        _allowPrivateTargets = security.Value.AllowPrivateWebhookTargets;
     }
 
     /// <summary>

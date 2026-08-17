@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Mail2SNMP.Infrastructure;
 
@@ -36,6 +37,12 @@ public static class DependencyInjection
             .ValidateDataAnnotations().ValidateOnStart();
         services.AddOptions<SessionSettings>().Bind(configuration.GetSection("Session"))
             .ValidateDataAnnotations().ValidateOnStart();
+        // AR-6: the last two sections that were still read ad hoc from raw
+        // IConfiguration now go through the same validated options pipeline.
+        services.AddOptions<DeadLetterSettings>().Bind(configuration.GetSection("DeadLetter"))
+            .ValidateDataAnnotations().ValidateOnStart();
+        services.AddOptions<SecuritySettings>().Bind(configuration.GetSection("Security"))
+            .ValidateDataAnnotations().ValidateOnStart();
 
         // Named HttpClients for webhook calls — handler lifetime managed by
         // IHttpClientFactory so we never create raw HttpClient instances.
@@ -46,11 +53,19 @@ public static class DependencyInjection
         // ConnectCallback resolves the host once and connects to that validated
         // IP — closing the DNS-rebinding TOCTOU window where the pre-flight
         // SsrfGuard check and the HttpClient's own resolution could disagree.
-        var allowPrivateWebhook = configuration.GetValue<bool>("Security:AllowPrivateWebhookTargets");
+        //
+        // AR-6: the opt-in flag comes from the same validated SecuritySettings the
+        // channels consume, resolved per handler from the provider — a raw
+        // configuration.GetValue here would silently bypass ValidateOnStart and could
+        // disagree with what WebhookNotificationChannel believes is configured.
+        static HttpMessageHandler GuardedHandler(IServiceProvider sp) =>
+            Security.SsrfGuard.CreateGuardedHandler(
+                sp.GetRequiredService<IOptions<SecuritySettings>>().Value.AllowPrivateWebhookTargets);
+
         services.AddHttpClient("WebhookTest", c => c.Timeout = TimeSpan.FromSeconds(10))
-            .ConfigurePrimaryHttpMessageHandler(() => Security.SsrfGuard.CreateGuardedHandler(allowPrivateWebhook));
+            .ConfigurePrimaryHttpMessageHandler(GuardedHandler);
         services.AddHttpClient("WebhookSend", c => c.Timeout = TimeSpan.FromSeconds(30))
-            .ConfigurePrimaryHttpMessageHandler(() => Security.SsrfGuard.CreateGuardedHandler(allowPrivateWebhook));
+            .ConfigurePrimaryHttpMessageHandler(GuardedHandler);
 
         // Database with automatic CRUD audit interceptor (v5.8)
         var dbSettings = configuration.GetSection("Database").Get<DatabaseSettings>() ?? new DatabaseSettings();
@@ -72,7 +87,11 @@ public static class DependencyInjection
         services.AddSingleton<ICredentialEncryptor>(sp =>
         {
             var logger = sp.GetRequiredService<ILogger<AesGcmCredentialEncryptor>>();
-            var keyPath = configuration["Security:MasterKeyPath"] ?? MasterKeyProvider.GetDefaultKeyPath();
+            // AR-6: read through the validated options rather than the raw configuration.
+            var configuredKeyPath = sp.GetRequiredService<IOptions<SecuritySettings>>().Value.MasterKeyPath;
+            var keyPath = string.IsNullOrWhiteSpace(configuredKeyPath)
+                ? MasterKeyProvider.GetDefaultKeyPath()
+                : configuredKeyPath;
             var envKey = Environment.GetEnvironmentVariable("MAIL2SNMP_MASTER_KEY");
             byte[] key;
             if (!string.IsNullOrEmpty(envKey))
