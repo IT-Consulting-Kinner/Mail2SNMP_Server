@@ -35,6 +35,13 @@ public class SqlServerIntegrationTests : IAsyncLifetime
     private bool _serverAvailable;
     private string? _skipReason;
 
+    /// <summary>
+    /// The connection string in use, whichever way the server was obtained. Tests must read
+    /// this rather than the container: with MAIL2SNMP_TEST_SQLSERVER set there IS no
+    /// container, and reaching for one is a NullReferenceException at runtime.
+    /// </summary>
+    private string? _connectionString;
+
     public async Task InitializeAsync()
     {
         var connectionString = Environment.GetEnvironmentVariable(ConnectionStringVariable);
@@ -69,6 +76,8 @@ public class SqlServerIntegrationTests : IAsyncLifetime
                 return;
             }
         }
+
+        _connectionString = connectionString;
 
         // Deliberately outside the catch: a migration failure is a real test failure.
         var options = new DbContextOptionsBuilder<Mail2SnmpDbContext>()
@@ -233,7 +242,7 @@ public class SqlServerIntegrationTests : IAsyncLifetime
         {
             // Each task uses its own DbContext (separate connection)
             var options = new DbContextOptionsBuilder<Mail2SnmpDbContext>()
-                .UseSqlServer(_container!.GetConnectionString())
+                .UseSqlServer(_connectionString!)
                 .Options;
             await using var db = new Mail2SnmpDbContext(options);
 
