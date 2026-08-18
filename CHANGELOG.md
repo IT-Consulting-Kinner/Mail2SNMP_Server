@@ -40,6 +40,22 @@ All notable changes to Mail2SNMP Server. Entries are grouped by **release** and 
 
 ### Fixed
 
+- **`db migrate` could never create the schema on SQL Server.** The migration set
+  declared cascade deletes that make `EventDedups` reachable from `Jobs` by two
+  paths — directly and via `Events` — and SQL Server rejects the whole
+  `CREATE TABLE` for that (`may cause cycles or multiple cascade paths`). This
+  was true in 1.2.0 as well, the release that shipped as the SQL Server fix: C-2
+  corrected the column types, and this sat underneath it. The `Events` path keeps
+  its cascade and the direct `Jobs` path is now `NO ACTION`; deleting a job still
+  removes its dedup rows, because every dedup row has a required event.
+
+  SQLite is unaffected — it does not enforce the restriction, which is why the
+  default provider never showed a symptom. Nor did the DDL-generation test:
+  cascade paths are validated when a statement executes, not when it is
+  generated. The defect surfaced the first time a real SQL Server ran the
+  migrations, which is now part of CI.
+
+
 - **Worker metrics were unreachable in a split deployment.** `/metrics` is served only
   by the Api and Web hosts, but nearly every metric — mail processed and matched,
   events created, IMAP connection errors, dead-letter counters, retention deletions,
