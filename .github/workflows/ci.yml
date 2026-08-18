@@ -27,9 +27,74 @@ jobs:
       - name: Test
         run: dotnet test Mail2SNMP.sln --no-build --configuration Release --verbosity normal --filter "Category!=Docker"
 
+
+  # The Windows job above excludes Category=Docker, so until now the SQL Server tests ran
+  # nowhere at all -- and they are the only ones that exercise the documented production
+  # provider at runtime. A suite that reports green without ever reaching SQL Server is how
+  # the 1.1.0 schema defect (C-2) shipped. Service containers need a Linux runner, hence a
+  # separate job; every project targets plain net8.0, so they build there.
+  sqlserver-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          # Throwaway credential for an ephemeral container on an ephemeral runner.
+          # Not a secret, and deliberately not stored as one: a repository secret here
+          # would imply it guards something.
+          MSSQL_SA_PASSWORD: 'Ci-Only-Pa55w0rd!'
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Ci-Only-Pa55w0rd! -C -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+          --health-start-period 20s
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Mail2SNMP.sln
+
+      - name: Build
+        run: dotnet build Mail2SNMP.sln --no-restore --configuration Release
+
+      - name: Run SQL Server integration tests
+        env:
+          MAIL2SNMP_TEST_SQLSERVER: 'Server=localhost,1433;Database=mail2snmp_ci;User Id=sa;Password=Ci-Only-Pa55w0rd!;TrustServerCertificate=True;Encrypt=False'
+        run: |
+          set -o pipefail
+          dotnet test Mail2SNMP.sln --no-build --configuration Release \
+            --filter "Category=Docker" --verbosity normal | tee test-output.txt
+
+      - name: Fail if the tests skipped instead of running
+        run: |
+          # The whole point of this job is that these tests actually execute. Skipping is
+          # their failure mode, not a neutral outcome -- without this guard the job would
+          # go green while reaching SQL Server exactly as often as before: never.
+          if grep -qiE 'skipped: *[1-9]|Skipped! ' test-output.txt; then
+            echo "::error::SQL Server tests were SKIPPED. They must run in this job."
+            grep -iE 'skipped|No SQL Server available' test-output.txt || true
+            exit 1
+          fi
+          if ! grep -qiE 'Passed! .*Passed: *[1-9]' test-output.txt; then
+            echo "::error::No SQL Server test reported as passed."
+            exit 1
+          fi
+          echo "SQL Server integration tests ran against a real server."
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build-and-test
+    needs: [build-and-test, sqlserver-tests]
     runs-on: windows-latest
     # Gating the job on the "production" GitHub environment causes the
     # OIDC token issued by GitHub to carry the subject claim
