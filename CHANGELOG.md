@@ -40,6 +40,21 @@ All notable changes to Mail2SNMP Server. Entries are grouped by **release** and 
 
 ### Fixed
 
+- **Worker metrics were unreachable in a split deployment.** `/metrics` is served only
+  by the Api and Web hosts, but nearly every metric — mail processed and matched,
+  events created, IMAP connection errors, dead-letter counters, retention deletions,
+  and the `mail2snmp_mailboxes_in_error` gauge added above — is maintained by the
+  **Worker**, which had no HTTP listener at all. In All-in-One mode this was hidden,
+  because the Worker services share the Web process. In the split topology the
+  documentation recommends for clustered and HA setups, those values went into a
+  process nobody could scrape, so an alert on them could never fire. The Worker now
+  serves its own endpoint (`Metrics:Port`, default 9184, bound to `localhost` unless
+  `Metrics:Hostname` says otherwise). A failed bind is logged, not fatal.
+- Metric series are registered at startup rather than on first use, so a freshly
+  started Worker reports `mail2snmp_mailboxes_in_error 0` instead of omitting the
+  series — an alert rule against an absent series does not behave like one against a
+  zero.
+
 - **Audit trail names who made a change.** Every configuration mutation was recorded
   as `System` / `system`, so the log showed that a job was deleted but never by
   whom — the one question an audit trail exists to answer. Changes are now

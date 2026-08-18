@@ -17,6 +17,20 @@ This guide lists the most common issues operators encounter and how to resolve t
 Everything exposed on `/metrics`. Names and help text are generated from the code, so this
 table is the authoritative list.
 
+**Where to scrape.** Each process serves only the metrics it maintains, and most of them
+are maintained by the Worker:
+
+| Deployment | Scrape |
+|------------|--------|
+| Split (separate Worker / Api / Web) | The **Worker** on `Metrics:Port` (default `9184`) for ingestion, event, delivery, dead-letter and retention metrics. Api and Web serve only their own HTTP metrics on their own ports. |
+| All-in-One (`Hosting:AllInOne=true`) | The Web host's `/metrics`; the Worker services run in that same process and share its registry. |
+
+Set `Metrics:Enabled=true` — it is `false` by default in every host. The Worker binds
+`localhost` unless `Metrics:Hostname` says otherwise; a non-loopback prefix needs
+administrative rights or a URL ACL (`netsh http add urlacl url=http://+:9184/metrics/
+user=<account>`). If the bind fails the Worker logs an error and keeps polling mail — an
+observability endpoint is not worth refusing to start over.
+
 ### The three worth alerting on
 
 | Metric | Alert when | Why |
@@ -120,7 +134,7 @@ Set `Serilog:MinimumLevel:Default` to `Debug` in `appsettings.json` for verbose 
 2. **Target IsActive?** UI → SNMP Targets
 3. **Target reachable?** UI → SNMP Targets → Test (sends test trap)
 4. **Maintenance window active?** UI → Maintenance
-5. **Rate limit hit?** Check `Mail2SnmpMetrics.SnmpRateLimited` counter
+5. **Rate limit hit?** Check the `mail2snmp_traps_rate_limited_total` metric
 6. **Master key correct?** Credentials may not decrypt — see `/health/ready`
 7. **Firewall:** UDP 162 (default trap port) must be open
 

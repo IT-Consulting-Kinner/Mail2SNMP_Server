@@ -41,6 +41,8 @@ public static class DependencyInjection
         // IConfiguration now go through the same validated options pipeline.
         services.AddOptions<DeadLetterSettings>().Bind(configuration.GetSection("DeadLetter"))
             .ValidateDataAnnotations().ValidateOnStart();
+        services.AddOptions<MetricsSettings>().Bind(configuration.GetSection("Metrics"))
+            .ValidateDataAnnotations().ValidateOnStart();
         services.AddOptions<SecuritySettings>().Bind(configuration.GetSection("Security"))
             .ValidateDataAnnotations().ValidateOnStart();
 

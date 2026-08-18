@@ -205,4 +205,20 @@ public static class Mail2SnmpMetrics
         "mail2snmp_retention_deleted_total",
         "Total records deleted by data retention",
         new CounterConfiguration { LabelNames = new[] { "entity" } });
+
+    /// <summary>
+    /// Forces this class's static metric definitions to register with the default registry.
+    /// </summary>
+    /// <remarks>
+    /// Static fields initialize on first access to the type, so a host that has not yet
+    /// touched any metric would serve a scrape that omits these series entirely. An alert
+    /// rule evaluated against an absent series behaves differently from one against a zero,
+    /// so a freshly started Worker reporting "no mailboxes in error" is worth more than one
+    /// reporting nothing at all. Calling this at startup makes the distinction explicit.
+    /// </remarks>
+    public static void Touch()
+    {
+        // Reading one field is enough: the type initializer creates all of them.
+        _ = ActiveEvents;
+    }
 }

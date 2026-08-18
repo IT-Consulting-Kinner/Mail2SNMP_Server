@@ -60,12 +60,23 @@ The structured `Logging` section is bound to the `LoggingSettings` class and app
 ```json
 {
   "Metrics": {
-    "Enabled": false
+    "Enabled": false,
+    "Port": 9184,
+    "Hostname": "localhost"
   }
 }
 ```
 
-When enabled, Prometheus metrics are exposed at `/metrics`.
+| Key | Default | Description |
+|-----|---------|-------------|
+| `Enabled` | `false` | Exposes the Prometheus scrape endpoint. Off in every host by default. |
+| `Port` | `9184` | **Worker only.** The Api and Web hosts map `/metrics` onto the HTTP server they already run; the Worker has none, so it serves its own listener on this port. |
+| `Hostname` | `localhost` | **Worker only.** Set to `+` to accept scrapes from other machines. A non-loopback prefix needs administrative rights or a URL ACL (`netsh http add urlacl url=http://+:9184/metrics/ user=<account>`); if the bind fails the Worker logs an error and keeps polling mail rather than refusing to start. |
+
+Most metrics — mail processed, events created, IMAP errors, dead-letter counters, retention
+deletions, mailboxes in error — are maintained by the **Worker**, so in a split deployment
+that is the process to scrape. In All-in-One mode the Worker services run inside the Web
+process and share its registry, so the Web host's `/metrics` has everything.
 
 ## OIDC / SSO (Enterprise)
 

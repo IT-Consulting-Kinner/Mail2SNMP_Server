@@ -406,10 +406,36 @@ public class OidcSettings
 public class MetricsSettings
 {
     /// <summary>
-    /// When true, the Prometheus scrape endpoint (/metrics) is exposed. When false
+    /// When true, the Prometheus scrape endpoint (<c>/metrics</c>) is exposed. When false
     /// (the default), no metrics endpoint is mapped. Default false.
     /// </summary>
     public bool Enabled { get; set; }
+
+    /// <summary>
+    /// TCP port the Worker's standalone scrape endpoint listens on. Default 9184.
+    /// </summary>
+    /// <remarks>
+    /// Only the Worker uses this. The Api and Web hosts already serve HTTP, so they map
+    /// <c>/metrics</c> on their own port; the Worker is a plain background host with no web
+    /// server, and until it had a listener of its own the metrics it maintains -- which is
+    /// most of them: mail processed, events created, IMAP errors, retention deletions,
+    /// dead-letter counters, mailboxes in error -- were unreachable in any deployment that
+    /// runs the Worker as a separate process.
+    /// </remarks>
+    [Range(1, 65535)]
+    public int Port { get; set; } = 9184;
+
+    /// <summary>
+    /// Hostname the Worker's scrape endpoint binds to. Default <c>localhost</c>.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to loopback because binding a wildcard prefix with <c>HttpListener</c>
+    /// requires either administrative rights or a pre-registered URL ACL
+    /// (<c>netsh http add urlacl</c>), and a service that refuses to start because of a
+    /// metrics endpoint would be a poor trade. Set this to <c>+</c> to accept scrapes from
+    /// other hosts; as a Windows Service running under LocalSystem that works as-is.
+    /// </remarks>
+    public string Hostname { get; set; } = "localhost";
 }
 
 /// <summary>
