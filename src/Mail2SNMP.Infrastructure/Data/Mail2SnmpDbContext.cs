@@ -269,8 +269,16 @@ public class Mail2SnmpDbContext : IdentityDbContext<AppUser>
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.DedupKeyHash).HasMaxLength(64).IsFixedLength().IsRequired();
-            e.HasOne(x => x.Job).WithMany().HasForeignKey(x => x.JobId);
-            e.HasOne(x => x.Event).WithMany().HasForeignKey(x => x.EventId);
+            // SQL Server refuses a table reachable by two cascade paths, and EventDedups is
+            // reachable from Jobs twice: directly, and via Events. Deleting a job must still
+            // remove its dedup rows, so the Event path keeps the cascade and this one is
+            // demoted to NoAction -- every EventDedup has a required Event, so the rows are
+            // still collected. SQLite does not enforce the restriction, which is why the
+            // migration set could not create its schema on SQL Server at all until a real
+            // server finally ran it. Generating the DDL never caught it: cascade paths are
+            // validated on execution, not on generation.
+            e.HasOne(x => x.Job).WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(x => x.Event).WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.DedupKeyHash, x.JobId }).IsUnique();
             e.HasIndex(x => x.LastSeenUtc);
         });

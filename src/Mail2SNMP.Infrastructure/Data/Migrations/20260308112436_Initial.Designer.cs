@@ -722,7 +722,7 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                     b.HasOne("Mail2SNMP.Models.Entities.Job", "Job")
                         .WithMany("Events")
                         .HasForeignKey("JobId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.Navigation("Job");
@@ -739,7 +739,7 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                     b.HasOne("Mail2SNMP.Models.Entities.Job", "Job")
                         .WithMany()
                         .HasForeignKey("JobId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.Navigation("Event");

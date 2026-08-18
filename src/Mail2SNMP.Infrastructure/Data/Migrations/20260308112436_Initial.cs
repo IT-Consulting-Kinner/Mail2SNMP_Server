@@ -507,12 +507,19 @@ namespace Mail2SNMP.Infrastructure.Data.Migrations
                         principalTable: "Events",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
+                    // NoAction, not Cascade: EventDedups is reachable from Jobs by two paths
+                    // (directly, and via Events), and SQL Server rejects the whole CREATE
+                    // TABLE for that. The Events path keeps its cascade, so deleting a job
+                    // still removes the dedup rows. Edited in place rather than corrected by
+                    // a follow-up migration because this migration is the one that fails: no
+                    // later migration ever runs, and therefore no SQL Server deployment can
+                    // exist to be broken by the change.
                     table.ForeignKey(
                         name: "FK_EventDedups_Jobs_JobId",
                         column: x => x.JobId,
                         principalTable: "Jobs",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.NoAction);
                 });
 
             migrationBuilder.CreateIndex(
