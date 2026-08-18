@@ -18,13 +18,22 @@
   <ItemGroup>
     <PackageReference Include="Cronos" Version="0.10.0" />
     <PackageReference Include="Lextm.SharpSnmpLib" Version="12.5.2" />
-    <PackageReference Include="MailKit" Version="4.3.0" />
+    <PackageReference Include="MailKit" Version="4.17.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="$(EfCoreVersion)" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="$(EfCoreVersion)">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="$(EfCoreVersion)" />
+    <!--
+      Direct pin purely to lift a transitive dependency. EF Core 8.0.25 resolves the
+      SQLitePCLRaw family at 2.1.6, whose native e_sqlite3 carries a High-severity
+      advisory (GHSA-2m69-gcr7-jv3q); it is fixed from 2.1.10. Staying on EF Core 8 is
+      deliberate - the projects target net8.0, and EF 10 would be a framework jump - so
+      the bundle is referenced directly, which wins over the transitive resolution.
+      Remove this once the pinned EfCoreVersion resolves 2.1.10 or later on its own.
+    -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.13" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="$(EfCoreVersion)" />
     <PackageReference Include="Polly" Version="8.3.0" />
     <PackageReference Include="prometheus-net" Version="8.2.1" />
