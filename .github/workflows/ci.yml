@@ -81,17 +81,24 @@ jobs:
           # The whole point of this job is that these tests actually execute. Skipping is
           # their failure mode, not a neutral outcome -- without this guard the job would
           # go green while reaching SQL Server exactly as often as before: never.
-          if grep -qiE 'skipped: *[1-9]|Skipped! ' test-output.txt; then
+          #
+          # Matched loosely on purpose: `dotnet test` prints a one-line summary at minimal
+          # verbosity ("Passed! - Failed: 0, Passed: 6, Skipped: 0") and a multi-line one at
+          # normal verbosity ("Total tests: 6" / "Passed: 6"). Keying on the counts alone
+          # works for both; keying on the one-line form does not, which is how this guard
+          # first failed a run whose tests had all passed.
+          if grep -qiE 'Skipped: *[1-9]' test-output.txt; then
             echo "::error::SQL Server tests were SKIPPED. They must run in this job."
             grep -iE 'skipped|No SQL Server available' test-output.txt || true
             exit 1
           fi
-          if ! grep -qiE 'Passed! .*Passed: *[1-9]' test-output.txt; then
+          if ! grep -qiE 'Passed: *[1-9]' test-output.txt; then
             echo "::error::No SQL Server test reported as passed."
+            tail -30 test-output.txt || true
             exit 1
           fi
+          grep -iE 'Total tests|Passed:' test-output.txt | tail -3
           echo "SQL Server integration tests ran against a real server."
-
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [build-and-test, sqlserver-tests]
