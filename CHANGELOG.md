@@ -2,7 +2,33 @@
 
 All notable changes to Mail2SNMP Server. Entries are grouped by **release** and by the development **waves** that made up each release. Each wave fixes the findings of a multi-agent comprehensive code review of the previous wave; the wave pattern is documented in the repo's development history.
 
-## Unreleased
+## 1.3.0 — 2026-08-18 (SQL Server, self-monitoring, dependency security)
+
+> **If you run SQL Server, upgrade.** 1.2.0 — and every release before it — could
+> not create its schema on SQL Server at all. 1.2.0 shipped as the release that
+> fixed SQL Server, and it did fix the column types (C-2); a second defect sat
+> underneath and only surfaced once a real server ran the migrations. See below.
+>
+> **SQLite deployments of 1.2.0 are unaffected** and can upgrade at their own pace.
+
+**Upgrading:** run `mail2snmp db migrate` once; this release adds one schema
+migration (Mail Log indexes). Coming from SQL Server, you are starting from an
+empty database by definition — no schema could ever be created before.
+
+### Security
+
+- **Every known advisory in the shipped dependency graph is cleared**, including
+  two rated High that reached production and were invisible in the build — `NU1902`
+  only warns for *direct* package references, and both arrived transitively:
+  - MimeKit 4.3.0 → High ([GHSA-gmc6-fwg3-75m5](https://github.com/advisories/GHSA-gmc6-fwg3-75m5))
+  - SQLitePCLRaw 2.1.6 → High ([GHSA-2m69-gcr7-jv3q](https://github.com/advisories/GHSA-2m69-gcr7-jv3q))
+  - MailKit 4.3.0, BouncyCastle 2.2.1, OpenTelemetry 1.9.0 → Moderate
+
+  MailKit and MimeKit sit on the untrusted-input path — they parse mail arriving
+  from outside — which is the worst place to carry a known High. MailKit moves to
+  4.17.0 (pulling MimeKit and BouncyCastle with it), OpenTelemetry to 1.17.0, and
+  SQLitePCLRaw is pinned directly at 2.1.13 to lift what EF Core 8.0.25 resolves.
+  EF Core stays on 8 deliberately: the projects target net8.0.
 
 ### Added
 
@@ -87,6 +113,17 @@ All notable changes to Mail2SNMP Server. Entries are grouped by **release** and 
   "Critical only" could only ever be reported as skipped, so the setting most
   likely to be misconfigured was the one thing Test Send could not verify. The
   severity is now chosen per test; Information remains the default.
+
+### Testing
+
+- **The SQL Server integration tests now actually run.** They were excluded from CI
+  by `--filter "Category!=Docker"` and had never executed anywhere — which is how
+  the schema defect above survived. A Linux CI job supplies a real SQL Server, and
+  the job fails if the tests report themselves as skipped: for these, skipping is
+  the failure mode, not a neutral outcome. `release` gates on this job, so a broken
+  production provider stops a release.
+- The tests also accept an existing server via `MAIL2SNMP_TEST_SQLSERVER`, so they
+  are runnable on a machine where Docker is unavailable.
 
 ### Changed
 
