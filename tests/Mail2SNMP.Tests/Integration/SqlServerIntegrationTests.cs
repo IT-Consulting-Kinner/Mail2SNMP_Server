@@ -7,42 +7,72 @@ using Testcontainers.MsSql;
 namespace Mail2SNMP.Tests.Integration;
 
 /// <summary>
-/// Integration tests that run against a real SQL Server instance in a Docker container via Testcontainers.
-/// These tests verify EF Core migrations, SQL-specific behavior, and data persistence.
-/// Tests are skipped automatically when Docker is not available (CI/CD without Docker, no Docker Desktop).
+/// Integration tests that run against a real SQL Server instance — the documented
+/// production provider. They verify EF Core migrations, SQL-specific behaviour and data
+/// persistence against the actual engine rather than a substitute.
 /// </summary>
+/// <remarks>
+/// Two ways to get a server, tried in order:
+/// <list type="number">
+/// <item>The <c>MAIL2SNMP_TEST_SQLSERVER</c> environment variable, if set, is used as the
+/// connection string. This lets the suite run against any reachable instance — a developer's
+/// local SQL Server, a CI service container, a shared test server — on a machine where Docker
+/// is unavailable or broken.</item>
+/// <item>Otherwise a throwaway container via Testcontainers.</item>
+/// </list>
+/// If neither is available the tests report as SKIPPED, not passed: the distinction matters,
+/// because a suite that silently reports green without ever touching SQL Server is exactly how
+/// the 1.1.0 schema defect (C-2) reached a release.
+/// </remarks>
 [Trait("Category", "Docker")]
 public class SqlServerIntegrationTests : IAsyncLifetime
 {
+    /// <summary>Environment variable holding a connection string to an existing SQL Server.</summary>
+    private const string ConnectionStringVariable = "MAIL2SNMP_TEST_SQLSERVER";
+
     private MsSqlContainer? _container;
     private Mail2SnmpDbContext? _db;
-    private bool _dockerAvailable;
+    private bool _serverAvailable;
+    private string? _skipReason;
 
     public async Task InitializeAsync()
     {
-        // H-8: ONLY container startup may be swallowed into "skip". The previous
-        // version wrapped the migration in the same catch, so a broken schema
-        // (e.g. the SQLite-typed migration set that made SQL Server unusable in
-        // 1.1.0) reported itself as "Docker not available" and the suite went
-        // green. Everything after the container is up must be allowed to throw.
-        try
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionStringVariable);
+
+        if (!string.IsNullOrWhiteSpace(connectionString))
         {
-            _container = new MsSqlBuilder()
-                .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
-                .Build();
-            await _container.StartAsync();
-            _dockerAvailable = true;
+            _serverAvailable = true;
         }
-        catch (Exception)
+        else
         {
-            // Docker not available — tests will be skipped via Skip.IfNot
-            _dockerAvailable = false;
-            return;
+            // H-8: ONLY acquiring the server may be swallowed into "skip". The migration
+            // below must be allowed to throw — an earlier version wrapped it in the same
+            // catch, so a broken schema (the SQLite-typed migration set that made SQL
+            // Server unusable in 1.1.0) reported itself as "Docker not available" and the
+            // suite went green.
+            try
+            {
+                _container = new MsSqlBuilder()
+                    .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
+                    .Build();
+                await _container.StartAsync();
+                connectionString = _container.GetConnectionString();
+                _serverAvailable = true;
+            }
+            catch (Exception ex)
+            {
+                _serverAvailable = false;
+                _skipReason =
+                    $"No SQL Server available. Docker could not provide one ({ex.GetType().Name}), " +
+                    $"and {ConnectionStringVariable} is not set. Set that variable to a connection " +
+                    "string to run these against an existing instance.";
+                return;
+            }
         }
 
-        // Deliberately OUTSIDE the catch: a migration failure is a real test failure.
+        // Deliberately outside the catch: a migration failure is a real test failure.
         var options = new DbContextOptionsBuilder<Mail2SnmpDbContext>()
-            .UseSqlServer(_container!.GetConnectionString())
+            .UseSqlServer(connectionString)
             .Options;
         _db = new Mail2SnmpDbContext(options);
         await _db.Database.MigrateAsync();
@@ -54,20 +84,17 @@ public class SqlServerIntegrationTests : IAsyncLifetime
         if (_container is not null) await _container.DisposeAsync();
     }
 
-    private void SkipIfNoDocker()
+    private void SkipIfNoSqlServer()
     {
-        // Peer-review: use Xunit.SkippableFact's Skip.IfNot so the test is reported
-        // as SKIPPED (not FAILED) when Docker is unavailable. The previous custom
-        // SkipException was a plain Exception with no xUnit integration, so these
-        // tests actually FAILED on machines without Docker (the suite showed
-        // "Fehler: 6, übersprungen: 0" — i.e. 6 failures, 0 skips).
-        Skip.IfNot(_dockerAvailable, "Docker is not available. Skipping SQL Server integration test.");
+        // Skip.IfNot reports the test as SKIPPED rather than FAILED. A plain exception here
+        // would show up as six failures on every machine without a server.
+        Skip.IfNot(_serverAvailable, _skipReason ?? "No SQL Server available.");
     }
 
     [SkippableFact]
     public async Task Migrations_ApplySuccessfully()
     {
-        SkipIfNoDocker();
+        SkipIfNoSqlServer();
         var applied = await _db!.Database.GetAppliedMigrationsAsync();
         Assert.NotEmpty(applied);
     }
@@ -75,7 +102,7 @@ public class SqlServerIntegrationTests : IAsyncLifetime
     [SkippableFact]
     public async Task Mailbox_CRUD_SqlServer()
     {
-        SkipIfNoDocker();
+        SkipIfNoSqlServer();
 
         // Create
         var mailbox = new Mailbox
@@ -116,7 +143,7 @@ public class SqlServerIntegrationTests : IAsyncLifetime
     [SkippableFact]
     public async Task Rule_WithEnums_PersistsCorrectly()
     {
-        SkipIfNoDocker();
+        SkipIfNoSqlServer();
 
         var rule = new Rule
         {
@@ -141,7 +168,7 @@ public class SqlServerIntegrationTests : IAsyncLifetime
     [SkippableFact]
     public async Task Job_WithRelationships_PersistsCorrectly()
     {
-        SkipIfNoDocker();
+        SkipIfNoSqlServer();
 
         var mailbox = new Mailbox { Name = "Job-MB", Host = "h", Username = "u", EncryptedPassword = "p", Folder = "INBOX" };
         var rule = new Rule { Name = "Job-Rule", Field = RuleFieldType.Subject, MatchType = RuleMatchType.Contains, Criteria = "x" };
@@ -177,7 +204,7 @@ public class SqlServerIntegrationTests : IAsyncLifetime
     [SkippableFact]
     public async Task AuditEvent_CanBeStored()
     {
-        SkipIfNoDocker();
+        SkipIfNoSqlServer();
 
         var audit = new AuditEvent
         {
@@ -199,7 +226,7 @@ public class SqlServerIntegrationTests : IAsyncLifetime
     [SkippableFact]
     public async Task ConcurrentAccess_NoDeadlocks()
     {
-        SkipIfNoDocker();
+        SkipIfNoSqlServer();
 
         // Simulate concurrent writes to verify SQL Server handles them correctly
         var tasks = Enumerable.Range(0, 10).Select(async i =>
